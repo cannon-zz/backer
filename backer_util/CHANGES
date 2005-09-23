@@ -1,3 +1,11 @@
+0.10 ()
+	bkrencode now catches SIGINT and generates an EOR mark before
+	exiting.
+
+	Changed the '$' glyph in bkrfont.xpm.
+
+	Code clean ups in bkrlog (but don't use it yet) and new messages.
+
 0.9 (2000/11/16)
 	Cleaned up some code in bkrmonitor and bkrencode.
 

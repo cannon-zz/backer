@@ -636,7 +636,7 @@ static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 		sector.block = sector.aux + device.bytes_per_line;
 
 	location = --sector.block;
-	for(count = block.size; count;)
+	for(count = block.size; count; )
 		block.buffer[--count] = *(location -= device.bytes_per_line);
 
 	return(0);
@@ -749,7 +749,7 @@ static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
 	while((anti_corr > CORR_THRESHOLD(KEY_LENGTH)) && (jiffies < bailout));
 
 	device.tail -= SECTOR_KEY_OFFSET;
-	if(device.tail >= device.size)
+	if((int) device.tail < 0)
 		device.tail += device.size;
 
 	if(result < 0)
@@ -764,13 +764,11 @@ static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
 		i = device.size - device.tail;
 		memcpy(sector.buffer, device.buffer + device.tail, i);
 		memcpy(sector.buffer + i, device.buffer, sector.footer_offset - i);
-		device.tail += sector.footer_offset - device.size;
+		device.tail -= device.size;
 		}
 	else
-		{
 		memcpy(sector.buffer, device.buffer + device.tail, sector.footer_offset);
-		device.tail += sector.footer_offset;
-		}
+	device.tail += sector.footer_offset;
 
 	if(skipped > sector.footer_length+device.bytes_per_line)
 		errors.sector++;

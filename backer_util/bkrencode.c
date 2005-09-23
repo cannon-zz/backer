@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <malloc.h>
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -36,6 +37,23 @@
 #define  PROGRAM_NAME    "bkrencode"
 #define  DEFAULT_DEVICE  "/dev/backer"
 
+/*
+ * Function prototypes
+ */
+
+void interrupt_handler(int);
+
+
+/*
+ * Global data
+ */
+
+unsigned int  got_interrupt;
+
+
+/*
+ * Entry point
+ */
 
 int main(int argc, char *argv[])
 {
@@ -51,7 +69,7 @@ int main(int argc, char *argv[])
 	sector.aux = NULL;
 	device.direction = O_WRONLY;
 
-	config.mode = (DEFAULT_MODE & ~BKR_FORMAT(-1)) | BKR_FMT;
+	config.mode = DEFAULT_MODE;
 	config.timeout = DEFAULT_TIMEOUT;
 
 	if((device.buffer = (unsigned char *) malloc(DEFAULT_BUFFER_SIZE)) == NULL)
@@ -168,15 +186,10 @@ int main(int argc, char *argv[])
 		close(tmp);
 		}
 
-	config.mode &= ~BKR_FORMAT(-1);
-	config.mode |= BKR_FMT;
+	config.mode = (config.mode & ~BKR_FORMAT(-1)) | BKR_FMT;
 
-	fputs(PROGRAM_NAME ": ", stderr);
-	if(device.direction == O_RDONLY)
-		fputs("DECODING", stderr);
-	else
-		fputs("ENCODING", stderr);
-	fputs(" tape format selected:\n", stderr);
+	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
+	        (device.direction == O_RDONLY) ? "DECODING" : "ENCODING");
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
 
 	if(bkr_set_parms(config.mode, DEFAULT_BUFFER_SIZE) < 0)
@@ -187,6 +200,13 @@ int main(int argc, char *argv[])
 
 	bkr_format_reset();
 	device.tail = 0;
+
+	/*
+	 * Grab interrupt signal so we can write a nice EOR before exiting.
+	 */
+
+	signal(SIGINT, interrupt_handler);
+	got_interrupt = 0;
 
 	/*
 	 * Transfer data one block at a time until EOF is reached.
@@ -201,24 +221,28 @@ int main(int argc, char *argv[])
 			if(tmp == EOR_BLOCK)
 				break;
 			if(tmp < 0)
-				{
 				errno = -tmp;
+			while(block.offset < block.end)
+				block.offset += fwrite(block.offset, 1, block.end - block.offset, stdout);
+			if(errno)
+				{
 				perror(PROGRAM_NAME);
 				exit(-1);
 				}
-			fwrite(block.offset, 1, block.end - block.offset, stdout);
 			}
 		break;
 
 		case O_WRONLY:
 		bkr_write_bor(1);
-		while(!feof(stdin))
+		while(!feof(stdin) & !got_interrupt)
 			{
-			block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
+			while(block.offset < block.end)
+				block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
 			tmp = block.write(0, 1);
 			if(tmp < 0)
-				{
 				errno = -tmp;
+			if(errno)
+				{
 				perror(PROGRAM_NAME);
 				exit(-1);
 				}
@@ -233,12 +257,29 @@ int main(int argc, char *argv[])
 
 
 /*
- * "Device" I/O functions --- read stdin or write stdout.  The read function
- * must ensure that at least length bytes are available starting at
- * device.tail.  The write function must ensure that at least length bytes
- * of free space is available starting at device.head.  The flush function
- * function must ensure the buffer has been completely commited to the
- * output stream.
+ * interrupt_handler()
+ *
+ * Interrupt handler for cleanly terminating a recording.
+ */
+
+void interrupt_handler(int num)
+{
+	got_interrupt = 1;
+}
+
+
+/*
+ * ============================================================================
+ *
+ *         "Device" I/O functions --- read stdin and write stdout.
+ *
+ * ============================================================================
+ *
+ * The read function must ensure that at least length bytes are available
+ * starting at device.tail.  The write function must ensure that at least
+ * length bytes of free space is available starting at device.head.  The
+ * flush function function must ensure the buffer has been completely
+ * commited to the output stream.
  *
  * These functions always return success.
  */

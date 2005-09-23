@@ -20,6 +20,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,8 +32,14 @@
 #include "backer.h"
 #include "bkr_aux_puts.h"
 
+#define  PROGRAM_NAME     "bkrlog"
 #define  LABEL_SIZE       6     /* characters */
 #define  UPDATE_INTERVAL  250   /* milliseconds */
+
+
+/*
+ * Entry point
+ */
 
 int main(int argc, char *argv[])
 {
@@ -43,8 +50,8 @@ int main(int argc, char *argv[])
 	int  opt;                       /* for command line processing */
 	char  *device = "/dev/backer";  /* device name */
 	char  label[LABEL_SIZE+1];      /* archive label */
-	char  *intext;                  /* log file input buffer */
-	char  *aux;                     /* data for aux buffer */
+	char  *intext = NULL;           /* log file input buffer */
+	char  *aux = NULL;              /* data for aux buffer */
 	char  auxtext[17];              /* text for aux buffer */
 	struct timeb last_time, this_time;
 
@@ -68,8 +75,9 @@ int main(int argc, char *argv[])
 			default:
 			fputs(
 	"Log file generator for Backer tape device.\n" \
-	"Usage:  <tar -v ...> | bkrlog [options] > logfile\n" \
-	"the following options are recognized:\n" \
+	"Usage:  " PROGRAM_NAME " [options] -t text\n" \
+	"        tar -v <other parameters> | " PROGRAM_NAME " [options] > logfile\n" \
+	"The following options are recognized:\n" \
 	"     -f devname     Use device devname (default /dev/backer)\n" \
 	"     -h             Display usage\n" \
 	"     -t text        Write text to auxiliary area and quit\n", stderr);
@@ -77,29 +85,25 @@ int main(int argc, char *argv[])
 			}
 
 	/*
-	 * Open backer device
+	 * Open backer device, retrieve format and create buffers.
 	 */
 
 	if((tapefile = open(device, O_RDWR)) < 0)
 		{
-		fprintf(stderr, "bkrlog: unable to open device %s\n", device);
-		exit(-1);
 		}
-	if(ioctl(tapefile, BKRIOCGETFORMAT, &format) < 0)
+	else if(ioctl(tapefile, BKRIOCGETFORMAT, &format) < 0)
 		{
-		fprintf(stderr, "bkrlog: unable to get format from %s\n", device);
-		exit(-1);
 		}
-
-	/*
-	 * Create buffers
-	 */
-
-	intext = (char *) malloc(insize);
-	aux = (char *) malloc(format.aux_length);
-	if((intext == NULL) || (aux == NULL))
+	else
 		{
-		fprintf(stderr, "bkrlog: out of memory\n");
+		intext = (char *) malloc(insize);
+		aux = (char *) malloc(format.aux_length);
+		if((intext == NULL) || (aux == NULL))
+			errno = ENOMEM;
+		}
+	if(errno)
+		{
+		perror(PROGRAM_NAME);
 		exit(-1);
 		}
 
@@ -131,6 +135,7 @@ int main(int argc, char *argv[])
 		/*
 		 * Get current file name, expanding input buffer if needed
 		 */
+
 		fgets(intext, insize, stdin);
 		if(feof(stdin))
 			break;
@@ -149,11 +154,13 @@ int main(int argc, char *argv[])
 		/*
 		 * Write text to log file
 		 */
+
 		fprintf(stdout, "%08lu %s", entry, intext);
 
 		/*
 		 * Write text to tape and increment entry number
 		 */
+
 		switch(format.bytes_per_line)
 			{
 			case BYTES_PER_LINE_HIGH:

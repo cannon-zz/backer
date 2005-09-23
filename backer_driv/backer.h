@@ -56,7 +56,7 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.9"
+#define  BKR_VERSION           "0.10(beta)"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
@@ -91,8 +91,7 @@ struct bkrerrors                            /* Error counts */
 
 struct bkrstatus                            /* Status structure (read only) */
 	{
-	unsigned int  bytes;                /* available in buffer */
-	unsigned int  space;                /* available in buffer */
+	unsigned int  bytes;                /* in DMA buffer */
 	struct bkrerrors errors;
 	unsigned int  worst_match;
 	unsigned int  best_nonmatch;

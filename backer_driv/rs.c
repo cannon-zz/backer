@@ -195,77 +195,58 @@ static void generate_poly(struct rs_format_t *rs_format)
  * data but also the parity symbols.
  *
  * The encoding algorithm is the long division algorithm but where we only
- * care about the remainder.  A shift register is used to keep track of the
- * remainder at each step and the algorithm is as follows (recall that all
- * operations are performed over GF(2^MM) so addition is the same as
- * subtraction):
- *	1.  Initialise shift register to 0.
+ * care about the remainder.  The remainder is computed in place and the
+ * algorithm is as follows (recall that all operations are performed over
+ * GF(2^MM) so addition is the same as subtraction):
+ *	1.  Initialise the remainder to 0.
  *	2.  Starting from the highest order data symbol...
- *	3.  Add the highest element of the shift register to the current
- *	    data symbol to compute a feed-back multiplier.
- *	4.  Shift the register one to the left so 0 -> b0, b0 -> b1, etc.
+ *	3.  Add the highest element of the remainder to the current data
+ *	    symbol to compute a feed-back multiplier.
+ *	4.  Shift the remainder one to the left so 0 -> b0, b0 -> b1, etc.
  *	5.  Multiply each co-efficient of the generator polynomial by the
- *	    feedback and add the resulting polynomial to the shift
- *	    register.
+ *	    feedback and add the resulting polynomial to the remainder.
  *	6.  Get the next data symbol and goto step 3 until all data symbols
  *	    have been processed.
- *	7.  The contents of the shift register are the parity symbols.
+ *	7.  The remainder forms the parity symbols.
  */
 
 void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
 {
-	int    i, j;                    /* general purpose counters */
-	int    b;                       /* feed-back index */
+	int  i;                         /* current data symbol index */
+	data_t  *b;                     /* current remainder symbol */
+	gf  *g;                         /* current gen. poly. symbol */
 	gf   feedback;                  /* feed-back multiplier */
+
+	if(rs_format->parity == 0)
+		return;
 
 	memset(block, 0, rs_format->parity * sizeof(data_t));
 
 	/*
-	 * At the start of each iteration of the loop, b is the index of
-	 * the shift register used to form the feed-back.
+	 * At the start of each iteration, b points to the most significant
+	 * symbol in the remainder for that iteration.
 	 */
 
-	b = (rs_format->n - 1) % rs_format->parity;
+	b = &block[rs_format->remainder_start];
 
-	for(i = rs_format->n-1; i >= rs_format->parity; i--)
+	for(i = rs_format->n - 1; i >= rs_format->parity; i--)
 		{
-		feedback = Log_alpha[block[i] ^ block[rs_format->parity-1]];
+		feedback = Log_alpha[block[i] ^ *b];
 		if(feedback != INFINITY)
 			{
-			for(j = rs_format->parity-1; j > 0; j--)
-				if(rs_format->g[j] != INFINITY)
-					block[j] = block[j-1] ^ Alpha_exp[modNN(feedback + rs_format->g[j])];
-			block[0] = Alpha_exp[modNN(feedback + rs_format->g[0])];
+			b--;
+			for(g = &rs_format->g[rs_format->parity - 1]; b >= block; g--, b--)
+				if(*g != INFINITY)
+					*b ^= Alpha_exp[modNN(feedback + *g)];
+			for(b = &block[rs_format->parity - 1]; g > rs_format->g; b--, g--)
+				if(*g != INFINITY)
+					*b ^= Alpha_exp[modNN(feedback + *g)];
+			*b = Alpha_exp[modNN(feedback + *g)];
 			}
 		else
-			{
-			for(j = rs_format->parity-1; j > 0; j--)
-				block[j] = block[j-1];
-			block[0] = 0;
-			}
-
-		/*
-		 * Argh:  by all rights the following should be faster than
-		 * the preceding but time trials show it to be 5% slower on
-		 * my PII-400.  I must be missing some sort of hardware
-		 * exploit...
-		 *
-		feedback = Log_alpha[block[i] ^ block[b]];
-		if(feedback != INFINITY)
-			{
-			block[b--] = Alpha_exp[modNN(feedback + rs_format->g[0])];
-			for(j = rs_format->parity-1; b >= 0; j--, b--)
-				if(rs_format->g[j] != INFINITY)
-					block[b] ^= Alpha_exp[modNN(feedback + rs_format->g[j])];
-			for(b = rs_format->parity-1; j > 0; b--, j--)
-				if(rs_format->g[j] != INFINITY)
-					block[b] ^= Alpha_exp[modNN(feedback + rs_format->g[j])];
-			}
-		else
-			block[b] = 0;
-		if(--b < 0)
-			b = rs_format->parity - 1;
-		*/
+			*b = 0;
+		if(--b < block)
+			b = &block[rs_format->parity - 1];
 		}
 }
 
@@ -285,6 +266,7 @@ void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
 int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
 {
 	int  i, j, k;                   /* general purpose loop indecies */
+	gf  *x, *y;                     /* general purpose loop pointers */
 	int  deg_lambda, deg_omega;     /* degrees of lambda(x) and omega(x) */
 	gf  tmp;                        /* temporary storage */
 	gf  discr;                      /* discrepancy in Berlekamp-Massey algo. */
@@ -298,6 +280,9 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	static gf loc[MAX_PARITY];      /* error locations (reciprocals of root[]) */
 	int  count = 0;                 /* number of roots of lambda */
 
+	if(rs_format->parity == 0)
+		return(0);
+
 	/*
 	 * Compute the syndromes by evaluating block(x) at the roots of
 	 * g(x), namely beta^(J0+i), i = 0, ... ,(n-k-1).  When finished,
@@ -306,15 +291,15 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	 * errors to correct.
 	 */
 
-	for(i = rs_format->parity; i; s[--i] = block[0]);
+	for(x = &s[rs_format->parity]; x > s; *(--x) = block[0]);
 
 	for(j = 1; j < rs_format->n; j++)
 		if(block[j] != 0)
 			{
 			tmp = modNN(Log_alpha[block[j]] + LOG_BETA*J0*j);
-			for(i = 0; i < rs_format->parity; i++)
+			for(x = s; x < &s[rs_format->parity]; x++)
 				{
-				s[i] ^= Alpha_exp[tmp];
+				*x ^= Alpha_exp[tmp];
 				#if (LOG_BETA==1)
 				if((tmp += j) >= NN)
 					tmp -= NN;
@@ -323,14 +308,14 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 				#endif /* LOG_BETA */
 				}
 			}
-	for(i = rs_format->parity-1; !s[i]; )
+	for(x = &s[rs_format->parity-1]; *x == 0; x--)
 		{
-		s[i] = INFINITY;
-		if(--i < 0)
+		if(x == s)
 			return(0);
+		*x = INFINITY;
 		}
-	for(; i >= 0; i--)
-		s[i] = Log_alpha[s[i]];
+	for(; x >= s; x--)
+		*x = Log_alpha[*x];
 
 	/*
 	 * Init lambda to be the erasure locator polynomial
@@ -345,9 +330,9 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		for(i = 1; i < no_eras; i++)
 			{
 			tmp = modNN(LOG_BETA*erasure[i]);
-			for(j = i+1; j > 0; j--)
-				if(lambda[j-1] != 0)
-					lambda[j] ^= Alpha_exp[modNN(tmp + Log_alpha[lambda[j-1]])];
+			for(x = &lambda[i+1]; x > lambda; x--)
+				if(*(x-1) != 0)
+					*x ^= Alpha_exp[modNN(tmp + Log_alpha[*(x-1)])];
 			}
 		}
 	deg_lambda = no_eras;
@@ -376,7 +361,7 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		if(discr == INFINITY)
 			{
 			/* b(x) <-- x*b(x) */
-			memmove(&b[1], b, rs_format->parity * sizeof(gf));
+			memmove(&b[1], &b[0], rs_format->parity * sizeof(gf));
 			b[0] = INFINITY;
 			continue;
 			}
@@ -406,7 +391,7 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		else
 			{
 			/* b(x) <-- x*b(x) */
-			memmove(&b[1], b, rs_format->parity * sizeof(gf));
+			memmove(&b[1], &b[0], rs_format->parity * sizeof(gf));
 			b[0] = INFINITY;
 			}
 
@@ -434,11 +419,11 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	for(i = 1, k = NN-Ldec; i <= NN; i++, k = modNN(NN - Ldec + k))
 		{
 		tmp = 1;
-		for(j = deg_lambda; j > 0; j--)
-			if(temp[j] != INFINITY)
+		for(j = deg_lambda, x = &temp[deg_lambda]; j > 0; x--, j--)
+			if(*x != INFINITY)
 				{
-				temp[j] = modNN(temp[j] + j);
-				tmp ^= Alpha_exp[temp[j]];
+				*x = modNN(*x + j);
+				tmp ^= Alpha_exp[*x];
 				}
 
 		if(tmp != 0)
@@ -470,16 +455,24 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	 * (modulo x^(n-k)) in alpha rep.  Also find deg(omega).
 	 */
 
-	for(i = deg_omega = 0; i < rs_format->parity; i++)
+	for(i = deg_omega = rs_format->parity - 1; i >= deg_lambda; i--)
 		{
 		omega[i] = 0;
-		for(j = min(deg_lambda, i); j >= 0; j--)
-			if((s[i - j] != INFINITY) && (lambda[j] != INFINITY))
-				omega[i] ^= Alpha_exp[modNN(s[i - j] + lambda[j])];
-		if(omega[i] != 0)
-			deg_omega = i;
+		for(j = deg_lambda; j >= 0; j--)
+			if((lambda[j] != INFINITY) && (s[i-j] != INFINITY))
+				omega[i] ^= Alpha_exp[modNN(lambda[j] + s[i-j])];
 		omega[i] = Log_alpha[omega[i]];
 		}
+	for(; i >= 0; i--)
+		{
+		omega[i] = 0;
+		for(j = i; j >= 0; j--)
+			if((lambda[j] != INFINITY) && (s[i-j] != INFINITY))
+				omega[i] ^= Alpha_exp[modNN(lambda[j] + s[i-j])];
+		omega[i] = Log_alpha[omega[i]];
+		}
+	while(omega[deg_omega] == INFINITY)
+		deg_omega--;
   
 	/*
 	 * Forney algorithm for computing error magnitudes.  If X_l^-1 is
@@ -499,26 +492,26 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	/* this is now the degree of lambda'(x) */
 	deg_lambda = min(deg_lambda, rs_format->parity-1) & ~1;
 
-	for(j = count-1; j >= 0; j--)
+	for(y = &root[count - 1]; y >= root; y--)
 		{
 		/* lambda[i+1] for i even is the formal derivative lambda' of lambda[i] */
 		den = 0;
-		for(i = deg_lambda + 1, tmp = deg_lambda * root[j]; i >= 0; i -= 2, tmp -= root[j] << 1)
-			if(lambda[i] != INFINITY)
-				den ^= Alpha_exp[modNN(lambda[i] + tmp)];
+		for(x = &lambda[deg_lambda + 1], tmp = deg_lambda * *y; x >= lambda; tmp -= *y << 1, x -= 2)
+			if(*x != INFINITY)
+				den ^= Alpha_exp[modNN(*x + tmp)];
 		if(den == 0)
 			return(-1);
     
 		num = 0;
-		for(i = deg_omega, tmp = deg_omega * root[j]; i >= 0; i--, tmp -= root[j])
-			if(omega[i] != INFINITY)
-				num ^= Alpha_exp[modNN(omega[i] + tmp)];
+		for(x = &omega[deg_omega], tmp = deg_omega * *y; x >= omega; tmp -= *y, x--)
+			if(*x != INFINITY)
+				num ^= Alpha_exp[modNN(*x + tmp)];
 		if(num == 0)
 			continue;
-		num = Log_alpha[num] + (J0-1) * root[j];
+		num = Log_alpha[num] + (J0-1) * *y;
 
 		/* Apply error to block */
-		block[loc[j]] ^= Alpha_exp[modNN(num + NN - Log_alpha[den])];
+		block[loc[y - root]] ^= Alpha_exp[modNN(num + NN - Log_alpha[den])];
 		}
 
 	if(erasure != NULL)
@@ -578,6 +571,7 @@ int reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_for
 	rs_format->n = n;
 	rs_format->k = k;
 	rs_format->parity = n - k;
+	rs_format->remainder_start = (rs_format->n - 1) % rs_format->parity;
 
 	generate_GF(p);
 	generate_poly(rs_format);

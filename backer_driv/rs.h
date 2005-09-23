@@ -23,7 +23,7 @@
  * applications can specify a limit so this shouldn't be a problem.
  */
 
-#define MAX_PARITY  30
+#define MAX_PARITY  32
 
 /*
  * Set LOG_BETA to the power of alpha used to generate the roots of the
@@ -66,7 +66,7 @@ typedef unsigned short data_t;
  * used by the code.
  */
 
-typedef unsigned int gf;
+typedef int gf;
 
 
 /*
@@ -78,7 +78,8 @@ struct  rs_format_t
 	unsigned int  n;                /* code word size in symbols */
 	unsigned int  k;                /* data symbols used in code */
 	unsigned int  parity;           /* parity symbols used in code */
-	gf            g[MAX_PARITY+1];  /* generator polynomial g(x) in alpha rep */
+	int  remainder_start;           /* initializer for encoder's remainder index */
+	gf  g[MAX_PARITY+1];            /* generator polynomial g(x) in alpha rep */
 	};
 
 /*

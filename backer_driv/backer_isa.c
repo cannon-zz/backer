@@ -25,7 +25,6 @@
 
 #include <linux/module.h>
 
-#include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ioport.h>
@@ -237,7 +236,7 @@ int open(struct inode *inode, struct file *filp)
 	if((sector.buffer == NULL) || (block.buffer == NULL))
 		{
 		result = -ENXIO;
-		goto no_mode_set;
+		goto mode_not_set;
 		}
 
 	if(request_dma(dma, BKR_NAME) < 0)
@@ -268,7 +267,7 @@ int open(struct inode *inode, struct file *filp)
 	cant_start:
 		free_dma(dma);
 	cant_get_dma:
-	no_mode_set:
+	mode_not_set:
 		MOD_DEC_USE_COUNT;
 		return(result);
 }
@@ -339,10 +338,14 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 	if(_IOC_SIZE(op) == 0)
 		{
 		if((op == BKRIOCGETAUX) || (op == BKRIOCSETAUX))
+			{
 			if((result = verify_area((_IOC_DIR(op) == _IOC_READ) ?
 			             VERIFY_WRITE : VERIFY_READ, (void *) argument,
 			             sector.aux_length)) < 0)
 				return(result);
+			if(sector.buffer == NULL)
+				return(-ENXIO);
+			}
 		}
 	else if((result = verify_area((_IOC_DIR(op) == _IOC_READ) ?
 	                  VERIFY_WRITE : VERIFY_READ, (void *) argument, _IOC_SIZE(op))) < 0)
@@ -381,8 +384,24 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		return(0);
 
 		case BKRIOCGETSTATUS:
+		/*
+		 * ADDME
+		if(jiffies - device.last_update >= HZ/MIN_UPDATE_FREQ)
+			switch(device.direction)
+				{
+				case O_WRONLY:
+				update_dma_offset(&device.tail);
+				break;
+
+				case O_RDONLY:
+				update_dma_offset(&device.head);
+				break;
+
+				case O_RDWR:
+				break;
+				}
+		 */
 		arg.bkrstatus.bytes = bytes_in_buffer();
-		arg.bkrstatus.space = space_in_buffer();
 		arg.bkrstatus.errors = errors;
 		arg.bkrstatus.worst_match = worst_match;
 		arg.bkrstatus.best_nonmatch = best_nonmatch;
@@ -695,12 +714,12 @@ static int start_transfer(void)
 
 	outb(device.control | BIT_DMA_REQUEST, ioport);
 
-	udelay(1000000 / MIN_SYNC_FREQ);
-	if(get_dreq_status(dma) == 0)
-		{
-		stop_transfer();
-		return(-ENXIO);
-		}
+	if(device.direction == O_WRONLY)
+		if(get_dreq_status(dma) == 0)
+			{
+			stop_transfer();
+			return(-ENXIO);
+			}
 
 	enable_dma(dma);
 

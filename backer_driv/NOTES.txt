@@ -198,7 +198,7 @@ long to know that there's no signal there).
 
 (ii)  During playback, the card will (sometimes) skip over lines containing
 all 0's.  I do not yet know if there is a pattern to this behaviour.  For a
-while I though that it required a minimum of two blank lines in a row
+while I thought that it required a minimum of two blank lines in a row
 before the card started skipping lines but I have since discovered that it
 will skip data even if this condition is met.  The card might require that
 there be a minimum number of bit transitions distributed throughout the
@@ -225,10 +225,7 @@ by the windows software.
 
 (i)  Unused lines are filled with 0x33.  The exeption is the human-readable
 file number graphic at the bottom of each field which has single lines of
-0's separating it from the data above and 0x33's below.  These lines of 0's
-are not skipped over by the card during playback and so corroborate the
-assertion that _single_ lines of 0's can be safely inserted into the byte
-stream.
+0's separating it from the data above and 0x33's below.
 
 (ii)  Each field begins with 24 lines filled with 0xE2.  The function of
 this block is not known and its presence does not seem to have any effect

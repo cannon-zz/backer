@@ -8,19 +8,8 @@ This is the quick install guide.  Full details are in the real
 documentation (the user guide included with this package).  The
 instructions here will only be helpful if (i) you know what you are doing
 or (ii) you don't know what you're doing but the instructions just happen
-to work anyway.
-
-
-Hardware:
----------
-
-Presumably your Backer was/is working under Windows in which case you
-already have it installed and know there are no hardware conflicts.  If you
-are installing the hardware for the first time then you should first check
-to see which I/O ports and DMA channels are being used by taking a look at
-the two files /proc/ioports and /proc/dma.  Set your Backer to a free I/O
-port and DMA channel then just follow the installation instructions that
-came with the card.
+to work anyway.  This document assumes you have the hardware installed and
+properly configured.
 
 
 Software:
@@ -77,7 +66,7 @@ where the following options can be set:
 	dma=num
 		Set the dma channel to num (default = DEFAULT_DMA_CHANNEL)
 	buffer=num
-		Set the buffer size to num (default = 65000)
+		Set the buffer size to num (default = 65500)
 	timeout=num
 		Set the timeout to num seconds (default = DEFAULT_TIMEOUT)
 

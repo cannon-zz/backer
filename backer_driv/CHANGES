@@ -1,11 +1,26 @@
-1.1 (in progress)
+1.1 (in progress --- not released)
 	*** THIS VERSION INCLUDES A TAPE FORMAT CHANGE ***
-
 	New random number generator.
-
 	Fewer parity symbols in each data block.
 
-0.9 (2000/11/16)
+	If needed, BKRIOCGETSTATUS will now update the DMA offset before
+	computing the number of bytes in the buffer.
+
+0.10(beta) ()
+	Performance improvements to the Reed-Solomon encoder and decoder
+	but increased footprint.
+
+	Hardware probe is now only done on write transfers because during
+	reads the driver can't tell the difference between missing hardware
+	and a mere missing video signal.
+
+	Changed the bkrstatus structure.  Any applications retrieving this
+	structure via an ioctl must be updated.
+
+	Bug fix: BKRIOCGETAUX and BKRIOCSETAUX now return -ENXIO when the
+	sector buffer is not properly allocated.
+
+0.9(beta) (2000/11/16)
 	Some documentation updates.
 
 	Serious bug fix:  the auxiliary buffer was not pointing to a safe
@@ -18,9 +33,6 @@
 	or write to the device then bad things would happen.  This is
 	fixed.
 
-	Lots of code clean ups including low-level device I/O, raw mode
-	format layer, data randomizer.
-
 	Modified access control.  Superusers can still access the device
 	regardless of whether or not it is in use but they are now only
 	allowed access to ioctl() if a transfer is in progress.  This
@@ -28,12 +40,15 @@
 	another user's transfer (probably leading to problems when that
 	user themself's subsequently tried to stop it).
 
+	Lots of code clean ups including low-level device I/O, raw mode
+	format layer, data randomizer.
+
 	Added check for presence of hardware at the start of a transfer.  I
 	know I said the driver was in a "feature freeze" but after the
 	clean ups to the low-level I/O code this was so easy to add I just
 	had to do it.
 
-0.8 (2000/11/06)
+0.8(beta) (2000/11/06)
 	First beta release.
 
 	Fixed a bug in the read code which was introduced in the last
@@ -58,7 +73,7 @@
 	the block from the data stream and returns -ENODATA rather than
 	silently pretending that nothing's wrong.
 
-	If an error occurs in the data stream while reading the block
+	If an error occurs in the data stream while reading then the block
 	sequence counter is now reset.  This keeps the quantity of lost
 	data to a minimum.
 

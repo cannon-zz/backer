@@ -436,13 +436,15 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 		if((block.offset += chunk_size) == block.end)
 			{
 			result = block.read(filp->f_flags, bailout);
-			if((result < 0) || (result == EOR_BLOCK))
+			if(result < 0)
+				return(moved ? moved : result);
+			if(result == EOR_BLOCK)
 				break;
 			}
 		moved += chunk_size;
 		}
 
-	return(moved ? moved : result);
+	return(moved);
 }
 
 int write(struct inode *inode, struct file *filp, const char *buff, int count)

@@ -31,8 +31,8 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 
-#define malloc(x)  kmalloc((x), GFP_KERNEL)
-#define free(x)    kfree(x)
+#define  malloc(x)  kmalloc((x), GFP_KERNEL)
+#define  free(x)    kfree(x)
 
 #else
 
@@ -41,7 +41,7 @@
 #include <malloc.h>
 #include <string.h>
 
-#define jiffies  0
+#define  jiffies  0
 
 #endif /* __KERNEL__ */
 
@@ -336,6 +336,7 @@ int bkr_write_eor(jiffies_t bailout)
 static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
+	char  underflow_detect = 0;
 	static char  need_sequence_reset = 0;
 
 	while(1)
@@ -385,6 +386,12 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 			block.sequence = BLOCK_SEQ(*block.header);
 			need_sequence_reset = 0;
 			break;
+			}
+
+		if(!underflow_detect)
+			{
+			errors.underflow++;
+			underflow_detect = 1;
 			}
 		}
 

@@ -88,46 +88,24 @@ static void gen_ldec(void)
  * Constructs look-up tables for performing arithmetic over the Galois
  * Field GF(2^MM) from the irreducible polynomial p(x) stored in p.
  *
- * We can intuitively define the addition and multiplication operations for
- * the field using the "polynomial" representation for the elements of
- * GF(2^MM).  In this representation, each element is taken to be an MM-
- * component vector whose components are elements from GF(2) (i.e. 0 and
- * 1).  We interpret the components of our vectors as coefficients of an
- * MM-1 order polynomial.  Addition and multiplication are then performed
- * using the standard rules for adding and multiplying polynomials but with
- * the operations being those from GF(2) and with the result of
- * multiplication being taken modulo an irreducible polynomial of order MM
- * over GF(2) to ensure the order of the result does not exceed MM-1.
- *
- * Using this definition for the arithmetic operations and using MM-bit
- * words to store the components of our vectors, addition is simply an XOR
- * operation (making it identical to its inverse operation, subtraction).
- *
- * Multiplication, however, has no such trivial representation using
- * machine operations and must be performed using look-up tables.  We do
- * this by translating to "alpha" representation.  Alpha is the name
- * commonly given to the element of the field that is the root of the
- * polynomial used to construct the field --- it's the only root since p(x)
- * is irreducible.  It can be shown that all elements (except, of course,
- * 0) can be represented as powers of alpha.  We can perform
- * multiplication, then, by taking the log (base alpha) of two elements,
- * adding the result modulo 2^MM-1, then looking up the polynomial
- * representation of that power of alpha to get the answer.
- *
- * This function constructs the necessary look-up tables called Log_alpha[]
- * and Alpha_exp[] from p.  Since 0 cannot be represented as a power of
- * alpha, special elements are added to the look-up tables to represent
- * this case and all multiplications must first check for this.  We call
- * this special element INFINITY since it is the result of taking the log
- * (base alpha) of zero.
+ * This function constructs the look-up tables called Log_alpha[] and
+ * Alpha_exp[] from p.  Since 0 cannot be represented as a power of alpha,
+ * special elements are added to the look-up tables to represent this case
+ * and all multiplications must first check for this.  We call this special
+ * element INFINITY since it is the result of taking the log (base alpha)
+ * of zero.
  *
  * The bits of the parameter p specify the generator polynomial with the
  * LSB being the co-efficient of x^0 and the MSB being the coefficient of
- * x^MM.
+ * x^MM.  For example, if
  *
- *          p(x) = p_MM * x^MM + ... + p_1 * x^1 + p_0 * x^0
+ *          p = 013
  *
- * where p_i means the i-th bit in p and p_MM must = 1.
+ * (i.e. 13 octal) then
+ *
+ *          p(x) = x^3 + x + 1
+ *
+ * Note that the coefficient of x^MM must = 1.
  *
  * For field generator polynomials, see Lin & Costello, Appendix A, and Lee
  * and Messerschmitt, pg. 453.  Field generator polynomials for symbol
@@ -169,25 +147,6 @@ static void generate_GF(int p)
  * NN (=2^MM-1) with the number of parity symbols being given by
  * rs_format->parity.
  *
- * The generator polynomial, g(x), has coefficients taken from GF(2^MM) and
- * is given by the product
- *
- *  g(x) = (x - beta^J0) * (x - beta^(J0+1)) * ... * (x - beta^(J0+2t-1))
- *
- * where beta = alpha^LOG_BETA and 2t = rs_format->parity.  Normally beta =
- * alpha and J0 = 1 so the product is more simply written as
- *
- *     g(x) = (x - alpha) * (x - alpha^2) * ... * (x - alpha^(2t))
- *
- * but some codes use different choices.  For instance the Reed-Solomon
- * code suggested for use on spacecraft telemetry channels by the
- * Consultative Committe for Space Data Systems (CCSDS) uses beta=alpha^11
- * and uses beta^112 through beta^143 as the roots of the generator
- * polynomial so LOG_BETA=11, J0=112.  (with n-k=32, these choices produce
- * a g(x) which is symmetric under a lowest order to highest order mirror
- * of its coefficients and presumably one can use this fact to reduce the
- * computations needed to encode data).
- *
  * The co-efficients of the generator polynomial are left in exponent form
  * for better encoder performance but note that it is still faster to
  * compute them in polynomial form and convert them afterwards.
@@ -220,23 +179,6 @@ static void generate_poly(struct rs_format_t *rs_format)
 /*
  * reed_solomon_encode()
  *
- * A reed solomon code consists of the set of polynomials which are all
- * multiples of a given polynomial called the generator polynomial, g(x).
- * The generator polynomial is chosen so as to maximize the distance
- * between code polynomials.  There are many ways to map data polynomials
- * to the set of code polynomials and the "systematic" method is used here.
- * In this method, the code polynomial is given by
- *
- *                   c(x) = d(x)*x^(n-k) + b(x)
- *
- * where d(x) are the data symbols (as the co-efficients of a k-th degree
- * polynomial) and b(x) are the parity symbols.  The data appears as the
- * high order terms of the code polynomial so no processing is needed to
- * extract the data in the decoder (beyond checking and correcting).  The
- * parity polynomial is simply the remainder d(x)*x^(n-k) mod g(x) so that
- * when added to d(x)*x^(n-k) the result is an exact multiple of g(x) and
- * thus a code polynomial.
- *
  * The code symbols that are returned from this encoder are given with the
  * lowest order term at offset 0 in the array so we have
  *
@@ -246,35 +188,28 @@ static void generate_poly(struct rs_format_t *rs_format)
  *
  *             block[] = { c_0, ..., c_NN }
  *
- * so the parity symbols appear at the bottom of the array.  One must leave
- * enough room for them by having the data start at offset (n-k) in the
- * array.  A side benefit of this is that it reminds the programmer that
- * the array must be allocated large enough to hold not only their data but
- * also the parity symbols.
- *
- * A reduced Reed-Solomon code word is generated by setting the correct
- * number of high order symbols to zero.  This reduces the operations
- * needed to compute the remainder thus increasing the speed at which
- * reduced block sizes are handled.  These zeroes are implicit in the
- * encoder and decoder so the data array need only be large enough to
- * contain the desired data and parity symbols.
+ * and the parity symbols appear at the bottom of the array.  One must
+ * leave enough room for them by having the data start at offset (n-k) in
+ * the array.  A side benefit of this is that it reminds the programmer
+ * that the array must be allocated large enough to hold not only their
+ * data but also the parity symbols.
  *
  * The encoding algorithm is the long division algorithm but where we only
  * care about the remainder.  A shift register is used to keep track of the
  * remainder at each step and the algorithm is as follows (recall that all
  * operations are performed over GF(2^MM) so addition is the same as
  * subtraction):
- *   1.  Initialise shift register to 0.
- *   2.  Starting from the highest order data symbol...
- *   3.  Add the highest element of the shift register to the current
- *       data symbol to compute a feed-back multiplier.
- *   4.  Shift the register one to the left so 0 -> b0, b0 -> b1, etc.
- *   5.  Multiply each co-efficient of the generator polynomial by
- *       the feedback and add the resulting polynomial to the shift
- *       register.
- *   6.  Get the next data symbol and goto step 3 until all data symbols
- *       have been processed.
- *   7.  The contents of the shift register are the parity symbols.
+ *	1.  Initialise shift register to 0.
+ *	2.  Starting from the highest order data symbol...
+ *	3.  Add the highest element of the shift register to the current
+ *	    data symbol to compute a feed-back multiplier.
+ *	4.  Shift the register one to the left so 0 -> b0, b0 -> b1, etc.
+ *	5.  Multiply each co-efficient of the generator polynomial by the
+ *	    feedback and add the resulting polynomial to the shift
+ *	    register.
+ *	6.  Get the next data symbol and goto step 3 until all data symbols
+ *	    have been processed.
+ *	7.  The contents of the shift register are the parity symbols.
  */
 
 void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
@@ -337,28 +272,6 @@ void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
 
 /*
  * reed_solomon_decode()
- *
- * Decodes the received vector.  If decoding is successful then the
- * corrected code word is written to block[] otherwise the received vector
- * is left unmodified.  The number of symbols corrected is returned or -1
- * if the code word cannot be corrected.
- *
- * There are two types of corrupted symbol.  An incorrect symbol in the
- * vector is called an "error".  If, for some reason, the location of the
- * incorrect symbol is known then it is instead called an "erasure".  A
- * Reed-Solomon code with n-k parity symbols can correct up to and
- * including n-k erasures or (n-k)/2 errors or any combination thereof with
- * each error counting as two erasures.  The number of corrupt bits within
- * a corrupt symbol is irrelevant:  the symbol is either bad or good.
- *
- * If erasures are known, then their locations are passed to the decoder in
- * the erasure[] array and the number of them is passed in the no_eras
- * parameter.  NOTE:  there must not be duplicates in this array.  If none
- * are known then simply pass NULL for erasure[] and 0 for no_eras.
- *
- * Whether erasures are known or not, if erasure[] is not equal to NULL
- * then the locations of all bad symbols will be written to this array so
- * it must be large enough to store them.
  *
  * The bulk of this code has been taken from Phil Karn's decoder
  * implementation but with many minor modifications to things like the

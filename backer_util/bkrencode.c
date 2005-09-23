@@ -156,12 +156,12 @@ int main(int argc, char *argv[])
 		{
 		if((tmp = open(devname, O_RDWR)) < 0)
 			{
-			perror(sys_errlist[errno]);
+			perror("bkrencode");
 			exit(-1);
 			}
 		if(ioctl(tmp, BKRIOCGETMODE, &config) < 0)
 			{
-			perror(sys_errlist[errno]);
+			perror("bkrencode");
 			exit(-1);
 			}
 		close(tmp);
@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
 
 	if(bkr_set_parms(config.mode, DEFAULT_BUFFER_SIZE) < 0)
 		{
-		fputs("bkrencode: cannot allocate memory\n", stderr);
+		perror("bkrencode");
 		exit(-1);
 		}
 
@@ -196,8 +196,9 @@ int main(int argc, char *argv[])
 				break;
 			if(tmp < 0)
 				{
-				fprintf(stderr, sys_errlist[tmp]);
-				exit(tmp);
+				errno = -tmp;
+				perror("bkrencode");
+				exit(-1);
 				}
 			fwrite(block.offset, 1, block.end - block.offset, stdout);
 			}
@@ -208,7 +209,13 @@ int main(int argc, char *argv[])
 		while(!feof(stdin))
 			{
 			block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
-			block.write(0, 1);
+			tmp = block.write(0, 1);
+			if(tmp < 0)
+				{
+				errno = -tmp;
+				perror("bkrencode");
+				exit(-1);
+				}
 			}
 		bkr_write_eor(1);
 		break;

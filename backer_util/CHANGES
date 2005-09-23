@@ -1,3 +1,15 @@
+0.8 (2000/11/06)
+	Fixed error message strings in bkrencode and bkrtest.
+
+	Introduced new utility bkrmonitor.  This is a gtk+ application for
+	monitoring the status of the driver and hardware during a transfer.
+
+	Added underflow field to error structure.  This indicates the
+	number of underflows detected in the data stream.  These are most
+	likely present due to buffer underflows occuring when the data was
+	recorded but might also indicate an overflow condition if must time
+	as elapsed since the last read.
+
 0.7 (2000/11/03)
 	Minor modifications to the I/O code in bkrencode to work with new
 	error reporting scheme.  Also made bkrencode abort on any error.

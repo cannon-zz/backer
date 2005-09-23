@@ -56,7 +56,7 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.7"
+#define  BKR_VERSION           "0.8"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
@@ -80,9 +80,10 @@ struct bkrerrors                            /* Error counts */
 	unsigned int  block;                /* uncorrectable blocks since BOR */
 	unsigned int  sector;               /* framing errors since BOR */
 	unsigned int  overrun;              /* buffer overruns since BOR */
+	unsigned int  underflow;            /* underflow warnings since BOR */
 	};
 
-#define  ERRORS_INITIALIZER  ((struct bkrerrors) {0, 0, 0, 0})
+#define  ERRORS_INITIALIZER  ((struct bkrerrors) {0, 0, 0, 0, 0})
 
 /*
  * IOCTL stuff
@@ -155,7 +156,7 @@ struct bkrconfig                            /* Config structure (read/write) */
  *
  * UPCOMING TAPE FORMAT CHANGES
  * -reduce the number of parity symbols (12 & 16 rather than 16 & 20)
- * -reduce the number of bits in the block sequence number
+ * -move sector key to better location
  */
 
 #define  TAPE_FORMAT           0            /* tape format version (not yet used!) */

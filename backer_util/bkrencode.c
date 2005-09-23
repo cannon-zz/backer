@@ -39,6 +39,7 @@
 #define  PROGRAM_NAME    "bkrencode"
 #define  DEFAULT_MODE    (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BUFFER_SIZE     16384
+#define  BAILOUT         1
 
 /*
  * Function prototypes
@@ -212,46 +213,59 @@ int main(int argc, char *argv[])
 	setbuf(stderr, NULL);
 	bkr_device_reset(mtget.mt_dsreg);
 	bkr_format_reset(mtget.mt_dsreg, direction);
-	bkr_device_start_transfer(direction);
+	bkr_device_start_transfer(direction, BAILOUT);
 	switch(direction)
 		{
 		case READING:
 		while(1)
 			{
 			errno = 0;
-			result = sector.read(0, 1);
+			result = sector.read(0, BAILOUT);
 			if(result == 0)
 				break;
 			if(result < 0)
-				errno = -result;
-			while((sector.offset < sector.end) && !errno)
-				sector.offset += fwrite(sector.offset, 1, sector.end - sector.offset, stdout);
-			if(errno)
 				{
+				errno = -result;
 				perror(PROGRAM_NAME);
 				exit(-1);
+				}
+			while(sector.offset < sector.end)
+				{
+				sector.offset += fwrite(sector.offset, 1, sector.end - sector.offset, stdout);
+				if(ferror(stdout))
+					{
+					perror(PROGRAM_NAME);
+					exit(-1);
+					}
 				}
 			}
 		fflush(stdout);
 		break;
 
 		case WRITING:
-		bkr_write_bor(1);
+		bkr_write_bor(BAILOUT);
 		while(!feof(stdin) & !got_sigint)
 			{
+			errno = 0;
 			while((sector.offset < sector.end) && !feof(stdin))
-				sector.offset += fread(sector.offset, 1, sector.end - sector.offset, stdin);
-			result = sector.write(0, 1);
-			if(result < 0)
-				errno = -result;
-			if(errno)
 				{
+				sector.offset += fread(sector.offset, 1, sector.end - sector.offset, stdin);
+				if(ferror(stdin))
+					{
+					perror(PROGRAM_NAME);
+					exit(-1);
+					}
+				}
+			result = sector.write(0, BAILOUT);
+			if(result < 0)
+				{
+				errno = -result;
 				perror(PROGRAM_NAME);
 				exit(-1);
 				}
 			}
-		bkr_write_eor(1);
-		bkr_device_flush(1);
+		bkr_write_eor(BAILOUT);
+		bkr_device_flush(BAILOUT);
 		break;
 
 		default:

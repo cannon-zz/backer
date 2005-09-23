@@ -1,3 +1,46 @@
+1.105 (2001/3/9)
+	*** INCOMPATIBLE FORMAT CHANGE ***
+
+	Added devfs support.
+
+	Added a loop when a read is started to allow the driver to wait as
+	long as timeout for a valid sector to appear.  This means that you
+	can start reading from the device before the BOR mark is visible on
+	your television without getting an I/O error.  The error codes now
+	occur as follows:  if no DMA activity is seen before the timeout
+	then an I/O error is reported which could mean that you've got the
+	driver configured for the wrong DMA channel or that there was no
+	video signal on the tape;  if DMA activity is detected but no valid
+	data sectors are found before the timeout then a timeout error is
+	reported which probably means you've got the right DMA channel but
+	the video signal didn't contain anything.
+
+	With the above change in place, I increased the default timeout
+	from 10 seconds to 15 seconds to make the driver a little more
+	user-friendly.
+
+	Realized that grouping the parity symbols at the end of the sector
+	as introduced in 1.104 partially "undid" the interleaving,
+	effectively doubling the peak aparent symbol error rate.  The tape
+	format has been modified to get the on-tape interleaving back the
+	way it used to be.  This is probably the last structural format
+	change before 2.0 (but not last parameter change).
+
+	Adjusted the bit allocations in the sector header.
+
+	Rather than falling back to a default mode, open() now fails if the
+	minor number is not recognized.
+
+	In raw mode, the transfer unit size is now a full video frame.
+	This should improve the throughput since external applications will
+	most likely be reading/writing data in quantities commensurate with
+	this size.
+
+	Added a fix for a bug in non-comensurate interleaving but it's
+	disabled by default to save CPU cycles.
+
+	The usual tweaks here and there.
+
 1.104 (2001/3/4)
 	*** INCOMPATIBLE FORMAT CHANGE ***
 

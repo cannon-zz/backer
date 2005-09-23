@@ -2,7 +2,7 @@
 # Set this to the directory containing the driver sources and
 # be sure to leave off the trailing slash
 #
-DRIVER_DIR = ../backer-driv-1.104
+DRIVER_DIR = ../backer-driv-1.105
 
 #
 # Set this to your prefered device
@@ -14,7 +14,7 @@ DEVICE_NAME = /dev/tape
 #
 
 CC = gcc
-CFLAGS = -O2 -Wall -Wstrict-prototypes -I$(DRIVER_DIR) -DDEFAULT_DEVICE=\"$(DEVICE_NAME)\"
+CFLAGS = -O3 -fstrict-aliasing -Wall -Wstrict-prototypes -I$(DRIVER_DIR) -DDEFAULT_DEVICE=\"$(DEVICE_NAME)\"
 
 all : bkrcheck bkrencode bkrmonitor
 

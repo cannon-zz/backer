@@ -74,7 +74,7 @@ int  bkr_device_reset(int mode)
 }
 
 
-int  bkr_device_start_transfer(direction_t direction)
+int  bkr_device_start_transfer(direction_t direction, jiffies_t bailout)
 {
 	device.direction = direction;
 	device.head = 0;

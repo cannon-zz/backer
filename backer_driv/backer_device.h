@@ -1,7 +1,7 @@
 /*
  * backer_device.h
  *
- * Linux 2.0.xx driver for Danmere's Backer 16/32 video tape backup cards.
+ * Driver for Danmere's Backer 16/32 video tape backup cards.
  *
  * See backer_fmt.h for a description of how to use the formating and
  * device layers together.
@@ -44,7 +44,7 @@ typedef enum
  */
 
 int   bkr_device_reset(int);
-int   bkr_device_start_transfer(direction_t);
+int   bkr_device_start_transfer(direction_t, jiffies_t);
 void  bkr_device_stop_transfer(void);
 int   bkr_device_read(unsigned int, f_flags_t, jiffies_t);
 int   bkr_device_write(unsigned int, f_flags_t, jiffies_t);
@@ -52,7 +52,7 @@ int   bkr_device_flush(jiffies_t);
 
 
 /*
- * Data shared with formating and kernel layer.
+ * Data shared with formating and I/O layer.
  */
 
 struct

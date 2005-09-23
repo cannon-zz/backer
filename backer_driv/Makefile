@@ -13,7 +13,7 @@ BKR_MAJOR = 60
 INSMODFLAGS = dma=1
 INCLUDEDIR = /usr/include
 CC = gcc
-CFLAGS = -D__KERNEL__ -DMODULE -DBKR_MAJOR=$(BKR_MAJOR) -O2 -Wall -Wstrict-prototypes -I$(INCLUDEDIR)
+CFLAGS = -D__KERNEL__ -DMODULE -DBKR_MAJOR=$(BKR_MAJOR) -O3 -fstrict-aliasing -Wall -Wstrict-prototypes -I$(INCLUDEDIR)
 LDFLAGS = -r
 
 VER = $(shell awk -F\" '/REL/ {print $$2}' $(INCLUDEDIR)/linux/version.h)

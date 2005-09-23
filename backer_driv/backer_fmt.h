@@ -1,7 +1,9 @@
 /*
- * backer_fmt
+ * backer_fmt.h
  *
- * Linux 2.0.xx driver for Danmere's Backer 16/32 video tape backup cards.
+ * Driver for Backer 16/32 video tape backup devices.
+ *
+ * Header for data formatting layer.
  *
  * The device and formating layers, while separate, do expect each other to
  * perform certain tasks so their use is inter-twined.  Here's the order in
@@ -85,7 +87,7 @@
  *    |            |             |   v
  *    |        --  +-------------+  --
  *    v  trailer   |   trailer   |
- *    --       --  +-------------+  <-- one extra line in NTSC & PAL modes
+ *    --       --  +-------------+  <-- one extra line in NTSC
  *                 |   leader    |
  *                 +-------------+
  *                 |     A       |
@@ -99,8 +101,14 @@
  *                 |             |
  *                 +-------------+
  *                 |   trailer   |
- *                 +-------------+  <-- one extra line in PAL mode
+ *                 +-------------+
  *
+ * The "extra line" is a consequence of the interleaving of the image and
+ * is a 1/2 width line occuring in the odd video field of the card's NTSC
+ * signal.  The formating code handles this by inserting a dummy line.  PAL
+ * also has a 1/2 width line but in this case its presence makes both video
+ * fields have the same number of lines so it's just absorbed into the
+ * trailer.
  *
  * Zoomed in on the active area of a single sector, the meaning of a few more
  * variables is shown below.  offset always points to the next byte to be
@@ -140,10 +148,10 @@
  *             |   +- - - - - - -+
  *             v   |   capacity  |
  *             --  +-------------+  <--- end (pointer)
- *                 |             |
- *                 |    Parity   |
- *                 |             |
- *                 +-------------+
+ *             ^   |             |
+ *   parity_size   |    Parity   |
+ *             v   |             |
+ *             --  +-------------+
  */
 
 
@@ -167,22 +175,25 @@
 
 /*
  * Header structure
+ *
+ * NOTE:  assumes unsigned int is 32 bits.
  */
 
-typedef struct
+typedef union
 	{
-	unsigned char key[KEY_LENGTH];  /* key sequence */
-	union
+	struct
 		{
-		struct
-			{
-			unsigned int  number : 24;      /* sector number */
-			unsigned int  hi_used : 4;      /* high 4 bits of usage */
-			unsigned int  type : 3;         /* sector type */
-			unsigned int  truncate : 1 ;    /* sector is truncated */
-			} parts;
-		unsigned int  all;
-		} state;
+		unsigned char key[KEY_LENGTH];  /* key sequence */
+		unsigned int  number : 22;      /* sector number */
+		unsigned int  hi_used : 4;      /* high 4 bits of usage */
+		unsigned int  type : 5;         /* sector type */
+		unsigned int  truncate : 1 ;    /* sector is truncated */
+		} parts;
+	struct
+		{
+		unsigned char key[KEY_LENGTH];  /* key sequence */
+		unsigned int  state;            /* merged flags */
+		} all;
 	} sector_header_t;
 
 #define KEY_SEQUENCE                                         \
@@ -195,7 +206,7 @@ typedef struct
 #define  EOR_SECTOR   1                 /* sector is an EOR marker */
 #define  DATA_SECTOR  2                 /* sector contains data */
 
-#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) { KEY_SEQUENCE, {{ 0, 0, DATA_SECTOR, 0 }} })
+#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) {{ KEY_SEQUENCE, 0, 0, DATA_SECTOR, 0 }})
 
 
 /*
@@ -215,11 +226,12 @@ struct
 	unsigned int  video_size;       /* see diagram above */
 	unsigned int  buffer_size;      /* see diagram above */
 	unsigned int  data_size;        /* see diagram above */
+	unsigned int  parity_size;      /* see diagram above */
 	unsigned int  leader;           /* see diagram above */
 	unsigned int  trailer;          /* see diagram above */
 	int  oddfield;                  /* current video field is odd */
 	int  need_sequence_reset;       /* sector number needs to be reset */
-	int  mode;                      /* as in bkrconfig.mode */
+	int  mode;                      /* current mode (see backer.h) */
 	sector_header_t  header;        /* sector header copy */
 	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
 	int  (*read)(f_flags_t, jiffies_t);     /* sector read function */

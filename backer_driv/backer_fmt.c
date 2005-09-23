@@ -336,7 +336,7 @@ static int bkr_block_read_fmt(unsigned long bailout)
 {
 	unsigned int  tmp;
 
-	do
+	while(1)
 		{
 		bkr_sector_read(bailout);
 
@@ -348,10 +348,12 @@ static int bkr_block_read_fmt(unsigned long bailout)
 			}
 
 		tmp = reed_solomon_decode(block.buffer, NULL, 0, &block.rs_format);
+
 		if((int) tmp < 0)
 			errors.block++;
 		else if(tmp > errors.symbol)
 			errors.symbol = tmp;
+
 		if(BLOCK_TYPE(*block.header) == BOR_BLOCK)
 			{
 			block.sequence = BLOCK_SEQ(*block.header);
@@ -364,13 +366,22 @@ static int bkr_block_read_fmt(unsigned long bailout)
 			least_skipped = 1000000;
 			most_skipped = 0;
 			}
-		else if(BLOCK_SEQ(*block.header - block.sequence) == 1)
+		else
 			{
-			block.sequence = BLOCK_SEQ(*block.header);
-			break;
+			tmp = BLOCK_SEQ(*block.header);
+			if(BLOCK_SEQ(tmp - block.sequence) == 1)
+				{
+				block.sequence = tmp;
+				break;
+				}
+			else if(tmp - block.sequence > 1)
+				{
+				errors.overrun++;
+				block.sequence = tmp;
+				break;
+				}
 			}
 		}
-	while(1);
 
 	bkr_block_randomize(block.sequence);
 
@@ -556,21 +567,6 @@ static void bkr_sector_read(unsigned long bailout)
 	if(sector.block == sector.aux)
 		{
 		bkr_get_sector(bailout);
-
-		bkr_device_read(sector.footer_offset, bailout);
-		if(device.tail + sector.footer_offset >= device.size)
-			{
-			count = device.size - device.tail;
-			memcpy(sector.buffer, device.buffer + device.tail, count);
-			memcpy(sector.buffer + count, device.buffer, sector.footer_offset - count);
-			device.tail += sector.footer_offset - device.size;
-			}
-		else
-			{
-			memcpy(sector.buffer, device.buffer + device.tail, sector.footer_offset);
-			device.tail += sector.footer_offset;
-			}
-
 		sector.block = sector.footer + device.bytes_per_line;
 		}
 	else if(sector.block == sector.footer)
@@ -684,6 +680,20 @@ static unsigned int bkr_get_sector(unsigned long bailout)
 	device.tail -= SECTOR_KEY_OFFSET;
 	if(device.tail >= device.size)
 		device.tail += device.size;
+
+	bkr_device_read(sector.footer_offset, bailout);
+	if(device.tail + sector.footer_offset >= device.size)
+		{
+		i = device.size - device.tail;
+		memcpy(sector.buffer, device.buffer + device.tail, i);
+		memcpy(sector.buffer + i, device.buffer, sector.footer_offset - i);
+		device.tail += sector.footer_offset - device.size;
+		}
+	else
+		{
+		memcpy(sector.buffer, device.buffer + device.tail, sector.footer_offset);
+		device.tail += sector.footer_offset;
+		}
 
 	if(skipped > sector.footer_length+device.bytes_per_line)
 		errors.sector++;

@@ -52,6 +52,7 @@ int   ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 int   lseek(struct inode *, struct file *, off_t, int);
 static void  bkr_device_reset(void);
 static void  update_device_offset(unsigned int *, unsigned long bailout);
+static int   video_present(void);
 static void  start_transfer(void);
 static void  stop_transfer(void);
 static void  bkr_reset_dma(void);
@@ -242,6 +243,13 @@ int open(struct inode *inode, struct file *filp)
 	bkr_reset_dma();
 	bkr_format_reset();
 	start_transfer();
+
+	if(!video_present())
+		{
+		stop_transfer();
+		MOD_DEC_USE_COUNT;
+		return(-EIO);
+		}
 
 	if((device.direction == O_WRONLY) && (BKR_FORMAT(device.mode) == BKR_FMT))
 		{
@@ -510,19 +518,23 @@ void bkr_device_read(unsigned int length, unsigned long  bailout)
 		return;
 
 	update_device_offset(&device.head, bailout);
-	device.last_update = jiffies;
 
-	if((bytes_in_buffer() >= length) && (space_in_buffer() > DMA_HOLD_OFF))
-		return;
+	while(((bytes_in_buffer() < length) || (space_in_buffer() <= DMA_HOLD_OFF))
+	      && (jiffies < bailout))
+		{
+		current->timeout = jiffies + HZ/MAX_UPDATE_FREQ;
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+		if(jiffies < current->timeout)
+			{
+			current->timeout = 0;
+			break;
+			}
+		current->timeout = 0;
 
-	current->timeout = jiffies + HZ/50;
-	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	current->timeout = 0;
-
-	do
 		update_device_offset(&device.head, bailout);
-	while((bytes_in_buffer() < length) && (jiffies < bailout));
+		}
+
 	device.last_update = jiffies;
 
 	return;
@@ -544,19 +556,18 @@ void bkr_device_write(unsigned int length, unsigned long bailout)
 		return;
 
 	update_device_offset(&device.tail, bailout);
-	device.last_update = jiffies;
 
-	if((space_in_buffer() >= length) && (bytes_in_buffer() > DMA_HOLD_OFF))
-		return;
+	while(((space_in_buffer() < length) || (bytes_in_buffer() <= DMA_HOLD_OFF))
+	      && (jiffies < bailout))
+		{
+		current->timeout = jiffies + HZ/MAX_UPDATE_FREQ;
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+		current->timeout = 0;
 
-	current->timeout = jiffies + HZ/50;
-	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	current->timeout = 0;
-
-	do
 		update_device_offset(&device.tail, bailout);
-	while((space_in_buffer() < length) && (jiffies < bailout));
+		}
+
 	device.last_update = jiffies;
 
 	return;
@@ -570,8 +581,12 @@ void bkr_device_write(unsigned int length, unsigned long bailout)
 
 void bkr_device_flush(unsigned long bailout)
 {
-	if((device.head += INTERNAL_BUFFER) >= device.size)
+	device.head += INTERNAL_BUFFER;
+	if(device.head >= device.size)
 		device.head -= device.size;
+
+	bkr_device_write(device.size - 2*sector.size, bailout);
+
 	while(bytes_in_buffer() && (jiffies < bailout))
 		update_device_offset(&device.tail, bailout);
 }
@@ -592,9 +607,26 @@ static void update_device_offset(unsigned int *offset, unsigned long bailout)
 
 	clear_dma_ff(dma);
 	*offset = device.size - get_dma_residue(dma);
+}
 
-	if(need_resched)
-		schedule();
+
+/*
+ * device_video_present()
+ *
+ * Checks to see if a video signal is present by watching for the sync bit
+ * to toggle.  Returns 1 if a signal is present, 0 if not.
+ */
+
+static int video_present(void)
+{
+	unsigned long  bailout;
+
+	bailout = jiffies + HZ/MIN_SYNC_FREQ;
+
+	while(!(inb(ioport) & BIT_SYNC) && (jiffies < bailout));
+	while((inb(ioport) & BIT_SYNC) && (jiffies < bailout));
+
+	return(jiffies < bailout);
 }
 
 

@@ -1,3 +1,18 @@
+0.6 (2000/10/30)
+	The driver now checks to see if a video signal is present before
+	attempting to proceed with a transfer.  This avoids getting the
+	system stuck in a busy loop until the driver times out.
+
+	The device level I/O code will now always go to sleep for a 50th of
+	a second between buffer updates rather than switching to a busy
+	loop after the first two updates fail.  This keeps the driver from
+	plugging up the system before actual tape data starts during a read
+	and while flushing the buffer after writing.
+
+	Driver now counts buffer overruns on read.
+
+	Minor performance improvements to the Reed-Solomon decoder.
+
 0.5 (2000/10/25)
 	Implemented an internal sector buffer.  Previously sectors were
 	processed in place in the DMA buffer.  I had believed this was
@@ -13,7 +28,7 @@
 	gracefully.  Preliminary tests look great!  I can force horrible
 	buffer underflows during writing by using tar to write directly to
 	the device while using bzip2 for compression.  By selecting a small
-	block size I can generate many frequent underflows and so far I've
+	record size I can generate many frequent underflows and so far I've
 	been able to recover the data without any problems (knock on wood).
 
 	Changed the bkrstatus structure.  Any applications retrieving this

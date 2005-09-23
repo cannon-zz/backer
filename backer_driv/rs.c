@@ -364,12 +364,9 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
  * implementation but with many minor modifications to things like the
  * directions of for loops, their bounds, etc. all with an eye to
  * performance.  The fundamental algorithm itself, however, has not been
- * changed.  For performance reasons the algorithm is fairly complicated.
- * In principle it is nothing more than the inversion of an (n-k) x (n-k)
- * matrix but that is an order n^3 operation and one can avoid much of the
- * computations by exploiting symmetries in the matrix.  The algorithms
- * used here are the Berlekamp-Massey algorithm for finding the error
- * locations and the Forney algorithm for finding the error magnitudes.
+ * changed.  The algorithms used here are the Berlekamp-Massey algorithm
+ * for finding the error locations and the Forney algorithm for finding the
+ * error magnitudes.
  */
 
 int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
@@ -548,7 +545,8 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 		}
 
 	/*
-	 * deg(lambda) != number of roots --> uncorrectable error detected
+	 * deg(lambda) != number of roots then there are degenerate roots
+	 * which means we've detected an uncorrectable error.
 	 */
 
 	if(deg_lambda != count)
@@ -585,13 +583,16 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 	 * den = lambda'(X(l)^-1).
 	 */
 
+	/* this is now the degree of lambda'(x) */
+	deg_lambda = min(deg_lambda, rs_format->parity-1) & ~1;
+
 	for(j = count-1; j >= 0; j--)
 		{
 		/* lambda[i+1] for i even is the formal derivative lambda' of lambda[i] */
 		den = 0;
-		for(i = min(deg_lambda, rs_format->parity-1) & ~1; i >= 0; i -= 2)
-			if(lambda[i+1] != INFINITY)
-				den ^= Alpha_exp[modNN(lambda[i+1] + i * root[j])];
+		for(i = deg_lambda + 1, tmp = deg_lambda * root[j]; i >= 0; i -= 2, tmp -= root[j] << 1)
+			if(lambda[i] != INFINITY)
+				den ^= Alpha_exp[modNN(lambda[i] + tmp)];
 		if(den == 0)
 			return(-1);
     

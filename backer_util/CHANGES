@@ -1,3 +1,6 @@
+0.6 (2000/10/30)
+	Re-release to keep version number in step with driver.
+
 0.5 (2000/10/25)
 	bkrlog will now only send an update of the auxiliary region to the
 	device if more than 250 milliseconds have elapsed.

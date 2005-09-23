@@ -49,13 +49,13 @@
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.5"
+#define  BKR_VERSION           "0.6"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
 #define  DEFAULT_DMA_CHANNEL   3            /* adjust this for your system */
 #define  DEFAULT_BUFFER_SIZE   65000        /* bytes */
-#define  DEFAULT_TIMEOUT       30           /* seconds (must be > BOR_LENGTH) */
+#define  DEFAULT_TIMEOUT       10           /* seconds (must be > BOR_LENGTH) */
 #define  DEFAULT_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BKR_MAX_TIMEOUT       120          /* seconds */
 
@@ -64,6 +64,8 @@
 #define  DMA_HOLD_OFF          512          /* stay this far back from transfer point */
 
 #define  MIN_UPDATE_FREQ       3            /* minimum rate for DMA status updates in Hz */
+#define  MAX_UPDATE_FREQ       50           /* maximum rate for DMA status updates in Hz */
+#define  MIN_SYNC_FREQ         10           /* minimum sync frequency in Hz if video OK */
 
 struct bkrerrors                            /* Error counts */
 	{

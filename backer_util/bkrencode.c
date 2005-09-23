@@ -21,6 +21,7 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -155,12 +156,12 @@ int main(int argc, char *argv[])
 		{
 		if((tmp = open(devname, O_RDWR)) < 0)
 			{
-			fprintf(stderr, "bkrencode: can't open %s\n", devname);
+			perror(sys_errlist[errno]);
 			exit(-1);
 			}
 		if(ioctl(tmp, BKRIOCGETMODE, &config) < 0)
 			{
-			fprintf(stderr, "bkrencode: can't perform operation on device\n");
+			perror(sys_errlist[errno]);
 			exit(-1);
 			}
 		close(tmp);

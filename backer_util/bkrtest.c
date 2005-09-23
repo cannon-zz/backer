@@ -20,6 +20,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -95,7 +96,10 @@ int main(int argc, char *argv[])
 	 */
 
 	if((term = open("/dev/tty", O_RDWR)) < 0)
+		{
+		perror(sys_errlist[errno]);
 		exit(0);
+		}
 	ioctl(term, TCGETS, &oldterm);
 	newterm = oldterm;
 	newterm.c_lflag &= ~(ICANON | ECHO);
@@ -109,6 +113,7 @@ int main(int argc, char *argv[])
 	if((outfile = open(device, O_WRONLY)) < 0)
 		{
 		ioctl(term, TCSETS, &oldterm);
+		perror(sys_errlist[errno]);
 		exit(0);
 		}
 	ioctl(outfile, BKRIOCGETMODE, &config);

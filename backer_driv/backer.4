@@ -20,13 +20,13 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH Backer 4 "April 14, 2001" "Linux" "Special Files"
+.TH Backer 4 "June 2, 2001" "Linux" "Special Files"
 .SH NAME
-backer \- The Backer video tape based storage device.
+backer \- Backer video tape based storage device.
 .SH INTRODUCTION
-The Backer device, manufactured by Danmere Ltd., allows data to be stored on
-video tape using a standard video cassette recorder in either NTSC or PAL
-video formats.
+The Backer device, manufactured by Danmere Technologies Ltd., allows data
+to be stored on video tape using a standard video cassette recorder in
+either NTSC or PAL video formats.
 .SH CONFIGURATION
 Under Linux, the Backer hardware is represented by character device files.
 By default they are owned by root:root with mode 0666.  They do not have a
@@ -62,11 +62,11 @@ so this is always 0.  The three letter file name identifies the video mode
 or raw) selected by accessing that particular file.
 .PP
 Depending on how the driver was compiled, some mode combinations might not
-be available.  To adjust mode availability, see the \fBminor_to_mode[]\fP
-array in the sources.
+be available.  To adjust mode availability, see the \fBbkr_modes[]\fP array
+in the sources.
 .PP
 If the backer device is to be used as the default tape device then it is
-helpful to create a symbolic link \fB/dev/tape\fP that points to the
+helpful to create a symbolic link named \fB/dev/tape\fP that points to the
 preferred mode.
 .SH DESCRIPTION
 .SS GENERAL
@@ -74,9 +74,10 @@ The driver presents the Backer device as a set of character device special
 files, one for each available format, that try to behave somewhat like tape
 devices.  It is not possible to provide a fully functional tape interface
 because the tape transport itself (your VCR) is not under computer control.
-This means that every task requires operator assistance to complete.  Apart
-from the lack of automation, however, the driver should be able to
-inter-operate with any software designed for use with tapes such as
+This means that every task requires operator assistance to complete in that
+somebody must manually press Play, Record, Rewind, etc..  Apart from the
+lack of automation, however, the driver should be able to inter-operate
+with any software designed for use with tape devices such as
 .IR mt (1)
 and
 .IR tar (1).
@@ -85,30 +86,31 @@ The Backer hardware is compatible with both NTSC and PAL video equipment
 and it can modulate the data stream into the video signal at two bit
 densities, ``high'' and ``low''.  In addition to the hardware settings, one
 can also switch the driver software between two tape data formats and a
-pass-through mode.  One of the formats is intended for short play (SP)
-recordings and the other for extended play (EP) recordings while the
-pass-through mode disables all data processing within the driver allowing
-the raw tape data stream to be read and written.  The desired settings are
-selected by accessing the appropriate device file.  One can,
-simultaneously, open any combination of the device files any number of
-times but once a particular file is open only the original user (or a super
-user) is allowed to open it again.
+pass-through mode.  One of the formats is intended for short and long play
+(SP/LP) recordings and the other for extended play (EP) recordings while
+the pass-through mode by-passes all data processing within the driver
+allowing the raw tape data stream to be read and written.  The desired
+settings are selected by accessing the appropriate device file but see below
+for important information on EP recordings.
 .PP
 A data transfer is started by making a call to
 .IR read (2)
 or
-.IR write (2).
-For obvious practical reasons, only one transfer is allowed at a time so
-once a transfer has been started on one of the open file descriptors, all
-other reads and writes on all other descriptors will fail.  Since the
-hardware is not full duplex, if a device is opened with mode \fBO_RDWR\fP
-the first read or write call selects the transfer direction and any
-subsequent calls in the other direction fail.
+.IR write (2)
+and stopped by
+.IR close (2).
+For obvious practical reasons, only one transfer can occur at a time so
+once a transfer has been started on a file descriptor, all other reads and
+writes on all other descriptors will fail.  Since the hardware is not full
+duplex, if a device is opened with mode \fBO_RDWR\fP the first read or
+write call selects the transfer direction and any subsequent calls in the
+other direction fail.
 .PP
 Data written to and read from the non-raw files is clean, synchronous and
-commensurate:  it will be retrieved error-free;  the, say, 2000th byte
-written will be the 2000th byte read back;  and exactly as many bytes as
-were written will be played back (the data is not padded to a multiple of
+commensurate:  it will be retrieved error-free (within limits);  the, say,
+2000th byte written will be the 2000th byte read back;  and exactly as many
+bytes as were written will be played back (the data is not padded to a
+multiple of
 some size).
 .SS "RAW INTERFACE"
 The raw device files provide access to the actual tape data.  When writing,
@@ -123,59 +125,59 @@ higher bandwidth modes.  See
 .IR bkrencode (8)
 for more information on using this feature.
 .SS "STATUS INFORMATION"
-Status information is provided through the \fB/proc\fP file system by the
-file \fB /proc/driver/backer\fP.  The information provided by this
-interface is invalid until at least one data transfer has taken place.  The
-Worst Key, Closest Non-Key, Least Skipped and Most Skipped fields are
-invalid unless the current or most recent operation was a read.  Between
-transfers, all fields will retain their values from the end of the last
-transfer.  The information is displayed in unsigned decimal format and the
-meaning of the fields is as follows.
+Hardware and driver status information is provided through the \fB/proc\fP
+file system by the file \fB /proc/driver/backer\fP.  The meaning of each
+field in this file is given below and indicated after each field heading is
+the transfer direction in which the field is meaningful.  For example, a
+field marked ``reading'' does not have meaning during write operations.
+Between transfers, all fields will retain their values from the end of the
+last transfer.  The information is displayed in unsigned decimal format and
+the meaning of the fields is as follows.
 .TP
-\fBOperating Mode\fP
-A 16 bit number indicating the video mode, bit density and data format of
-the current transfer.  The masks and flags used to interpret this number
-can be found in the header file, \fBbacker.h\fP.
+\fBOperating Mode\fP (reading/writing)
+A number indicating the video mode, bit density and data format of the
+current transfer.  The masks and flags used to interpret this number can be
+found in the header file, \fBbacker.h\fP.
 .TP
-\fBSector Number\fP
+\fBSector Number\fP (reading/writing)
 The current sector number being transfered to/from user space.  The DMA
 buffer introduces a delay between this and the sector being transfered
 to/from the tape.
 .TP
-\fBTotal Errors Corrected\fP
+\fBTotal Errors Corrected\fP (reading)
 Shows the total number of bad symbols that have been successfully corrected
 since the current read operation started.
 .TP
-\fBErrors in Worst Block\fP
+\fBErrors in Worst Block\fP (reading)
 The first field shows the largest number of bad symbols that have been
 detected in any one block of data since the current read operation started.
 The second field is the number of Reed-Solomon parity symbols in each
 block.  If the number of errors in a block exceeds 1/2 the number of parity
 symbols then the block cannot be corrected.
 .TP
-\fBRecent Errors\fP
+\fBRecent Errors\fP (reading)
 Shows the largest number of bad symbols that have been detected in any one
 block of data since the last time the \fB/proc\fP file was read.
 .TP
-\fBUncorrectable Blocks\fP
+\fBUncorrectable Blocks\fP (reading)
 The number of blocks which the Reed-Solomon decoder detected could not be
 corrected.  Not all uncorrectable blocks can be detected (imagine errors
 occurring in such a way that they make the block look like another valid or
 correctable block).
 .TP
-\fBFraming Errors\fP
+\fBFraming Errors\fP (reading)
 An upper bound can be placed on the number of bytes which need to be
 searched before a sector key is found and this displays the number of times
 this bound was exceeded since the current read operation started.  Framing
 errors do not necessarily represent lost data but are symptomatic of a poor
 quality recording.
 .TP
-\fBOverrun Errors\fP
+\fBOverrun Errors\fP (reading)
 The number of times the sector sequence number skipped in the positive
 direction indicating that the incoming video data filled the DMA buffer and
 the computer could not keep up.
 .TP
-\fBUnderflows Detected\fP
+\fBUnderflows Detected\fP (reading)
 The number of times the sector sequence number skipped in the negative
 direction indicating repeated sectors on the tape.  This indicates that
 when the data was written, the computer could not generate it as fast as it
@@ -183,22 +185,22 @@ was being sent to tape causing the DMA buffer to empty (and then loop).
 Apart from wasting several tens of kilobytes of tape, underflows are
 non-destructive.
 .TP
-\fBWorst Key\fP
+\fBWorst Key\fP (reading)
 The lowest correlation value assigned to a string of bytes identified as
 a sector key.
 .TP
-\fBClosest Non-Key\fP
+\fBClosest Non-Key\fP (reading)
 The highest correlation value assigned to a string of bytes identified as
 not being a sector key.
 .TP
-\fBLeast Skipped\fP
+\fBLeast Skipped\fP (reading)
 The least number of bytes which were skipped before locating a sector
 key.
 .TP
-\fBMost Skipped\fP
+\fBMost Skipped\fP (reading)
 The most number of bytes which were skipped before locating a sector key.
 .TP
-\fBDMA Buffer\fP
+\fBDMA Buffer\fP (reading/writing)
 The first field shows the number of bytes in the DMA buffer.  The second
 field shows the size of the DMA buffer.  Ideally the buffer will be kept
 completely full whilst writing and completely empty whilst reading.
@@ -299,7 +301,8 @@ calls are understood.
 .IP \fBMTIOCTOP\fP
 Accepts a pointer to an \fBmtop\fP structure which is used to access
 several sub-commands.  The following sub-commands are understood:
-.RS +0.5i
+.\".RS +0.5i
+.RS
 .TP
 \fBMTNOP\fP
 Does nothing.
@@ -314,7 +317,8 @@ the operation timeout is set to \fItimeout\fP seconds.
 .IP \fBMTIOCGET\fP
 Accepts a pointer to an \fBmtget\fP structure which is filled with the tape
 drive and driver status.  The structure's fields are filled as follows:
-.RS +0.5i
+.\".RS +0.5i
+.RS
 .TP
 \fBmt_type\fP (drive type)
 Set to \fBMT_ISUNKNOWN\fP.
@@ -324,7 +328,7 @@ Set to the current mode.  See \fBbacker.h\fP for information on the flags
 used for this.  The ``current mode'' is the mode in which the current
 transfer is being performed.  This may or may not match the mode
 represented by the file on which this ioctl is performed and is not
-guaranteed to be valid unless a transfer is actually taking place.
+meaningful unless a transfer is actually taking place.
 .TP
 \fBmt_gstat\fP (device independent status bits)
 The \fBGMT_ONLINE\fP bit is set.
@@ -456,11 +460,14 @@ The current operation timed out.
 .PD 1
 .SH NOTES
 .SS "EP RECORDINGS"
-Although the driver supports modes that are meant for EP recordings,
-\fBRECORDING DATA IN EP MODE IS NOT RELIABLE!\fP  These modes should only
-be available in experimental versions of the driver.  Work is being done on
-supporting EP recordings but there are some data conditioning issues that
-remain unresolved.
+Since version 3.0 of the driver, the data conditioning and processing
+algorithms used by the driver have been capable of storing and recovering
+data from tapes recorded in EP (extended play) mode.  This is very
+experimental work, however, and generally speaking \fBRECORDING DATA IN EP
+MODE IS NOT RELIABLE!\fP  Feel free to try it out and see what sort of
+performance you get.  I, personally, have been able to store and retrieve
+files this way but I would not (yet) use an EP recording for anything
+important and it might not work at all on different equipment.
 .SS "TAPE CARE"
 VCRs are not as gentle with their tapes as data grade transports are
 designed to be.  In particular, VCRs have a tendency to stretch tapes when
@@ -468,15 +475,6 @@ starting and stopping them.  To improve the reliability of backups, try to
 avoid as many start/stop cycles for each tape as reasonably possible.
 Especially avoid using the visual search functions of the VCR with any tape
 that will be used to store data.
-.PP
-If you find you have a particularly bad VCR that can't help itself, try
-enabling the driver's EP tape formats by uncommenting them from the
-\fBminor_to_mode[]\fP array in \fBbacker_isa.c\fP and using those to record
-data (but still only in SP, though!).  The storage efficiency will drop
-considerably but those formats are much better at handling stretch-induced
-errors in the byte stream.  Modifications to the data format that are
-planned for version 3 will generally improve the driver's performance in
-this regard but the best defense is to not abuse your tapes.
 .SH FILES
 .IP /dev/backer/*/*
 The device file names.
@@ -513,4 +511,6 @@ _
 2000/10/10	First public release	0.2
 2001/01/13	First stable release	1.0
 2001/04/12	Second stable release	2.0
+2001/04/29	Third stable release	2.1
+2001/06/02	Fourth stable release	3.0
 .TE

@@ -20,7 +20,6 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
  */
 
 
@@ -29,131 +28,104 @@
 #include <linux/errno.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
-#define  malloc(x)  kmalloc((x), GFP_KERNEL)
-#define  free(x)    kfree(x)
+#include <linux/types.h>
+#define  malloc(x)    kmalloc((x), GFP_KERNEL)
+#define  free(x)      kfree(x)
 
 #else
 
 #include <errno.h>
 #include <malloc.h>
 #include <string.h>
+#include <sys/types.h>
 
 #endif /* __KERNEL__ */
+
+#undef NEED_LINUX_COMPAT   /* define if Linux headers aren't available */
+#ifndef NEED_LINUX_COMPAT
+#include <asm/byteorder.h>
+#include <asm/unaligned.h>
+#else
+#include "linux_compat.h"
+#endif
 
 #include "rs.h"
 #include "backer.h"
 #include "backer_device.h"
 #include "backer_fmt.h"
 
-#undef GCR_STUFF
-
 
 /*
  * Parameters
  */
 
-#define  CORRELATION_THRESHOLD  204             /* 255 == 100% */
+#define  MIN_MATCH_LENGTH  6                    /* 6 bytes == 10^14 against */
 
 
 /*
  * Global Data
  */
 
-/* Read the docs for important info before adjusting these! */
-/* FIXME:  make sure EP modes have active_size == multiple of 9 */
 static struct
         {
         unsigned int  leader;
         unsigned int  trailer;
+	unsigned int  key_interval;
+	modulation_t  modulation;
 	unsigned int  interleave;
         unsigned int  parity;
-        } format[] =                            /* format information */
-	{ {  32,  28,  8,  8 },                 /* LOW  NTSC SP  */
-	  {  40,  32, 20,  8 },                 /* LOW  NTSC EP  */
-	  {  40,  36,  8,  8 },                 /* LOW  PAL  SP  */
-	  {  48,  48,  8,  8 },                 /* LOW  PAL  EP  */
-	  {  80,  70, 20,  8 },                 /* HIGH NTSC SP  */
-	  { 100,  70, 59,  6 },                 /* HIGH NTSC EP  */
-	  { 100,  90, 20,  8 },                 /* HIGH PAL  SP  */
-	  { 120, 120, 20,  8 },                 /* HIGH PAL  EP  */
-	  {   0,   0,  1,  0 } };               /* RAW           */
+        } format_info[] =
+	{ {  32,  28,  45, NRZ,  7,  8 },       /* LOW  NTSC SP */
+	  {  40,  32,  42, GCR, 12,  8 },       /* LOW  NTSC EP */
+	  {  40,  36,  47, NRZ,  8,  8 },       /* LOW  PAL  SP */
+	  {  48,  36,  39, GCR, 12,  8 },       /* LOW  PAL  EP */
+	  {  80,  70, 119, NRZ, 20,  8 },       /* HIGH NTSC SP */
+	  { 100,  70,  81, GCR, 28, 16 },       /* HIGH NTSC EP */
+	  { 100,  90, 130, NRZ, 22,  8 },       /* HIGH PAL  SP */
+	  { 120,  90,  88, GCR, 26, 16 },       /* HIGH PAL  EP */
+	  {   0,   0,  -1, NRZ,  1,  0 } };     /* RAW          */
 
-unsigned char  weight[] =                       /* correlation weights */
-	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
-	  0x25, 0x09, 0x09, 0x01, 0x09, 0x01, 0x01, 0x00 };
+static unsigned char  key[] =                   /* sector key sequence */
+	{ 0xd4, 0x7c, 0xb1, 0x93, 0x66, 0x65, 0x6a, 0xb5,
+	  0x63, 0xe4, 0x56, 0x59, 0x6c, 0xbe, 0xc5, 0xca,
+	  0xf4, 0x9c, 0xa3, 0xac, 0x6d, 0xb3, 0xd2, 0x7e,
+	  0x74, 0xa6, 0xe1, 0xa9, 0x5c, 0x9a, 0x4b, 0x5d };
 
-#ifdef GCR_STUFF
-static unsigned short gcr_encode[] =            /* 8/9 (0,4/4) GCR modulation */
-	{ 124, 125, 120, 121, 123, 113, 115, 114,
-	  119, 118, 116,  97,  99,  98, 103, 102,
-	  100, 110, 108, 109, 104, 105, 107,  65,
-	   67,  66,  71,  70,  68,  78,  76,  77,
-	   72,  73,  75,  94,  92,  93,  88,  89,
-	   91,  81,  83,  82, 248, 249, 251, 241,
-	  243, 242, 247, 246, 244, 225, 227, 226,
-	  231, 230, 228, 238, 236, 237, 232, 233,
-	  235, 193, 195, 194, 199, 198, 196, 206,
-	  204, 205, 200, 201, 203, 222, 220, 221,
-	  216, 217, 219, 209, 211, 210, 215, 214,
-	  131, 130, 135, 134, 132, 142, 140, 141,
-	  136, 137, 139, 158, 156, 157, 152, 153,
-	  155, 145, 147, 146, 151, 150, 148, 190,
-	  188, 189, 184, 185, 187, 177, 179, 178,
-	  183, 182, 180, 161, 163, 162, 167, 166,
-	  164, 497, 499, 498, 503, 502, 500, 481,
-	  483, 482, 487, 486, 484, 494, 492, 493,
-	  488, 489, 491, 449, 451, 450, 455, 454,
-	  452, 462, 460, 461, 456, 457, 459, 478,
-	  476, 477, 472, 473, 475, 465, 467, 466,
-	  471, 470, 387, 386, 391, 390, 388, 398,
-	  396, 397, 392, 393, 395, 414, 412, 413,
-	  408, 409, 411, 401, 403, 402, 407, 406,
-	  404, 446, 444, 445, 440, 441, 443, 433,
-	  435, 434, 439, 438, 436, 417, 419, 418,
-	  423, 422, 420, 430, 428, 429, 263, 262,
-	  260, 270, 268, 269, 264, 265, 267, 286,
-	  284, 285, 280, 281, 283, 273, 275, 274,
-	  279, 278, 276, 318, 316, 317, 312, 313,
-	  315, 305, 307, 306, 311, 310, 308, 289,
-	  291, 290, 295, 294, 292, 302, 300, 301 };
-#endif /* GCR_STUFF */
+static u_int16_t  gcr_encode[] =                /* 8/9 (0,4/4) GCR modulation */
+	{ 0x089, 0x08a, 0x08b, 0x08c, 0x08d, 0x08e, 0x091, 0x092,
+	  0x093, 0x094, 0x095, 0x096, 0x099, 0x09a, 0x09b, 0x09c,
+	  0x09d, 0x09e, 0x0a2, 0x0a3, 0x0a4, 0x0a5, 0x0a6, 0x0a9,
+	  0x0aa, 0x0ab, 0x0ac, 0x0ad, 0x0ae, 0x0b1, 0x0b2, 0x0b3,
+	  0x0b4, 0x0b5, 0x0b6, 0x0b9, 0x0ba, 0x0bb, 0x0bc, 0x0bd,
+	  0x0be, 0x0c2, 0x0c3, 0x0c4, 0x0c5, 0x0c6, 0x0c9, 0x0ca,
+	  0x0cb, 0x0cc, 0x0cd, 0x0ce, 0x0d1, 0x0d2, 0x0d3, 0x0d4,
+	  0x0d5, 0x0d6, 0x0d9, 0x0da, 0x0db, 0x0dc, 0x0dd, 0x0de,
+	  0x0e1, 0x0e2, 0x0e3, 0x0e4, 0x0e5, 0x0e6, 0x0e9, 0x0ea,
+	  0x0eb, 0x0ec, 0x0ed, 0x0ee, 0x0f1, 0x0f2, 0x0f3, 0x0f4,
+	  0x0f5, 0x0f6, 0x0f9, 0x0fa, 0x0fb, 0x0fc, 0x0fd, 0x109,
+	  0x10a, 0x10b, 0x10c, 0x10d, 0x10e, 0x111, 0x112, 0x113,
+	  0x114, 0x115, 0x116, 0x119, 0x11a, 0x11b, 0x11c, 0x11d,
+	  0x11e, 0x121, 0x122, 0x123, 0x124, 0x125, 0x126, 0x129,
+	  0x12a, 0x12b, 0x12c, 0x12d, 0x12e, 0x131, 0x132, 0x133,
+	  0x134, 0x135, 0x136, 0x139, 0x13a, 0x13b, 0x13c, 0x13d,
+	  0x13e, 0x142, 0x143, 0x144, 0x145, 0x146, 0x149, 0x14a,
+	  0x14b, 0x14c, 0x14d, 0x14e, 0x151, 0x152, 0x153, 0x154,
+	  0x155, 0x156, 0x159, 0x15a, 0x15b, 0x15c, 0x15d, 0x15e,
+	  0x161, 0x162, 0x163, 0x164, 0x165, 0x166, 0x169, 0x16a,
+	  0x16b, 0x16c, 0x16d, 0x16e, 0x171, 0x172, 0x173, 0x174,
+	  0x175, 0x176, 0x179, 0x17a, 0x17b, 0x17c, 0x17d, 0x17e,
+	  0x184, 0x185, 0x186, 0x189, 0x18a, 0x18b, 0x18c, 0x18d,
+	  0x18e, 0x191, 0x192, 0x193, 0x194, 0x195, 0x196, 0x199,
+	  0x19a, 0x19b, 0x19c, 0x19d, 0x19e, 0x1a1, 0x1a2, 0x1a3,
+	  0x1a4, 0x1a5, 0x1a6, 0x1a9, 0x1aa, 0x1ab, 0x1ac, 0x1ad,
+	  0x1ae, 0x1b1, 0x1b2, 0x1b3, 0x1b4, 0x1b5, 0x1b6, 0x1b9,
+	  0x1ba, 0x1bb, 0x1bc, 0x1bd, 0x1be, 0x1c2, 0x1c3, 0x1c4,
+	  0x1c5, 0x1c6, 0x1c9, 0x1ca, 0x1cb, 0x1cc, 0x1cd, 0x1ce,
+	  0x1d1, 0x1d2, 0x1d3, 0x1d4, 0x1d5, 0x1d6, 0x1d9, 0x1da,
+	  0x1db, 0x1dc, 0x1dd, 0x1de, 0x1e1, 0x1e2, 0x1e3, 0x1e4,
+	  0x1e5, 0x1e6, 0x1e9, 0x1ea, 0x1eb, 0x1ec, 0x1ed, 0x1ee };
 
-static struct
-	{
-	unsigned int  size;
-	unsigned int  data;
-	unsigned int  parity;
-	} block;                                /* R-S block info */
+static unsigned char gcr_decode[512];           /* GCR demodulation table */
 
 
 /*
@@ -175,21 +147,40 @@ static inline int sectors_per_second(void)
 	return(BKR_VIDEOMODE(sector.mode) == BKR_PAL ? 50 : 60);
 }
 
-#define  HEADER_PTR  ((sector_header_t *) sector.buffer)
-#define  GCR_MASK    ((unsigned short) 0x01ff)
-#define  ROL(x, n)   asm("rolw %2, %0" : "=r" (x) : "0" (x), "c" (n))
+static inline bkr_sector_header_t get_sector_header(void)
+{
+	u_int32_t  tmp;
+
+	tmp = __le32_to_cpu(get_unaligned((u_int32_t *) (sector.buffer + sector.data_size - sizeof(bkr_sector_header_t))));
+
+	return(*(bkr_sector_header_t *) &tmp);
+}
+
+static inline void put_sector_header(bkr_sector_header_t header)
+{
+	u_int32_t tmp;
+
+	tmp = *(u_int32_t *) &header;
+
+	put_unaligned(__cpu_to_le32(tmp), (u_int32_t *) (sector.buffer + sector.data_size - sizeof(bkr_sector_header_t)));
+}
+
+#define  HIGH_USED   sector.buffer[sector.data_size - sizeof(bkr_sector_header_t) - 1]
+#define  GCR_MASK    ((u_int16_t) 0x01ff)
+#define  rolw(x, n)  asm("rolw %2, %0" : "=r" (x) : "0" (x), "c" (n))
 
 
 /*
  * Function prototypes.
  */
 
-static void  bkr_sector_randomize(__u32 *, int, __u32);
+static void  bkr_sector_randomize(u_int32_t *, int, u_int32_t);
 static int   bkr_sector_write_bor(void);
 static int   bkr_sector_read_data(void);
 static int   bkr_sector_write_data(void);
 static int   bkr_sector_read_raw(void);
 static int   bkr_sector_write_raw(void);
+static int   bkr_find_key(void);
 static int   bkr_get_sector(void);
 static int   bkr_put_sector(void);
 
@@ -210,72 +201,80 @@ static int   bkr_put_sector(void);
  * can be used to check for failures after the fact.
  */
 
-int bkr_format_reset(int mode, direction_t direction)
+int bkr_format_reset(int mode, bkr_state_t direction)
 {
+	int  i;
 	int  fmt;
 
 	sector.mode = 0;
+	free(sector.buffer);
 
-	if(BKR_FORMAT(mode) == BKR_RAW)
-		sector.video_size = device.frame_size;
-	else if(BKR_VIDEOMODE(mode) == BKR_NTSC)
-		sector.video_size = device.bytes_per_line * LINES_PER_FIELD_NTSC;
-	else
-		sector.video_size = device.bytes_per_line * LINES_PER_FIELD_PAL;
+	memset(gcr_decode, (signed char) -1, 512);
+	for(i = 0; i < 256; i++)
+		gcr_decode[gcr_encode[i]] = i;
 
 	fmt = mode_to_format(mode);
-	sector.leader     = format[fmt].leader;
-	sector.trailer    = format[fmt].trailer;
-	sector.interleave = format[fmt].interleave;
-	block.parity      = format[fmt].parity;
-
-	sector.active_size = sector.video_size - sector.leader - sector.trailer;
-#ifdef GCR_STUFF
-	sector.modulation_padding = FIXME;
-	block.size = (sector.active_size - sector.modulation_padding) / sector.interleave;
-#else
-	block.size = sector.active_size / sector.interleave;
-#endif
-	block.data = block.size - block.parity;
-	sector.data_size = block.data * sector.interleave;
-	sector.parity_size = block.parity * sector.interleave;
-
-	sector.header = SECTOR_HEADER_INITIALIZER;
-	sector.oddfield = 1;
-	sector.need_sequence_reset = 1;
-	sector.found_data = 0;
-	sector.op_count = 0;
-
-	free(sector.buffer);
-	sector.buffer = (unsigned char *) malloc(sector.active_size);
-	if(sector.buffer == NULL)
-		return(-ENOMEM);
-	memset(sector.buffer, BKR_FILLER, sector.active_size);
+	sector.leader           = format_info[fmt].leader;
+	sector.trailer          = format_info[fmt].trailer;
+	sector.key_interval     = format_info[fmt].key_interval;
+	sector.modulation       = format_info[fmt].modulation;
+	sector.interleave       = format_info[fmt].interleave;
+	sector.rs_format.parity = format_info[fmt].parity;
 
 	if(BKR_FORMAT(mode) == BKR_RAW)
 		{
+		sector.buffer_size = device.frame_size;
+
+		sector.buffer = (unsigned char *) malloc(sector.buffer_size);
+		if(sector.buffer == NULL)
+			return(-ENOMEM);
+
 		sector.read = bkr_sector_read_raw;
 		sector.write = bkr_sector_write_raw;
-		sector.start = sector.buffer;
+		sector.end = sector.buffer + sector.buffer_size;
+		if(direction == WRITING)
+			sector.offset = sector.buffer;
+		else
+			sector.offset = sector.end;
 		}
 	else
 		{
+		if(BKR_VIDEOMODE(mode) == BKR_NTSC)
+			sector.video_size = device.bytes_per_line * LINES_PER_FIELD_NTSC;
+		else
+			sector.video_size = device.bytes_per_line * LINES_PER_FIELD_PAL;
+
+		sector.active_size = sector.video_size - sector.leader - sector.trailer;
+		sector.key_length = sector.active_size / sector.key_interval;
+
+		sector.modulation_pad = sector.key_length;
+		if(sector.modulation == GCR)
+			sector.modulation_pad += (sector.active_size - sector.key_length)/9;
+
+		sector.buffer_size = sector.active_size - sector.modulation_pad;
+		sector.rs_format.n = sector.buffer_size / sector.interleave;
+		sector.rs_format.k = sector.rs_format.n - sector.rs_format.parity;
+		sector.data_size = sector.rs_format.k * sector.interleave;
+		sector.parity_size = sector.rs_format.parity * sector.interleave;
+
+		sector.oddfield = 1;
+		sector.need_sequence_reset = 1;
+		sector.found_data = 0;
+		sector.op_count = 0;
+
+		sector.buffer = (unsigned char *) malloc(sector.buffer_size);
+		if(sector.buffer == NULL)
+			return(-ENOMEM);
+
 		sector.read = bkr_sector_read_data;
 		sector.write = bkr_sector_write_bor;
-		sector.start = sector.buffer + sizeof(sector_header_t);
-		if(direction == WRITING)
-			sector.op_count = sectors_per_second() * BOR_LENGTH;
-		}
-
-	sector.end = sector.buffer + sector.data_size;
-
-	if((BKR_FORMAT(mode) == BKR_RAW) && (direction == WRITING))
-		sector.offset = sector.start;
-	else
+		sector.end = sector.buffer + sector.data_size - sizeof(bkr_sector_header_t);
 		sector.offset = sector.end;
 
-	reed_solomon_init(block.size, block.data, &sector.rs_format);
+		reed_solomon_init(sector.rs_format.n, sector.rs_format.k, &sector.rs_format);
+		}
 
+	sector.header = SECTOR_HEADER_INITIALIZER;
 	errors = ERRORS_INITIALIZER;
 	health = HEALTH_INITIALIZER;
 
@@ -324,22 +323,24 @@ unsigned int bytes_in_buffer(void)
 
 static int bkr_sector_write_bor(void)
 {
-	int  result = 0;
+	int  result;
 
-	memset(sector.start, BKR_FILLER, sector.end - sector.start);
+	if(sector.op_count == 0)
+		sector.op_count = sectors_per_second() * BOR_LENGTH;
+
+	memset(sector.buffer, BKR_FILLER, sector.end - sector.buffer);
 	for(; sector.op_count; sector.op_count--)
 		{
-		result = bkr_sector_write_data();
 		sector.offset = sector.end;
+		result = bkr_sector_write_data();
 		if(result < 0)
 			return(result);
 		}
 
-	sector.offset = sector.start;
-	sector.header.parts.type = DATA_SECTOR;
+	sector.header.type = DATA_SECTOR;
 	sector.write = bkr_sector_write_data;
 
-	return(result);
+	return(0);
 }
 
 
@@ -352,31 +353,30 @@ static int bkr_sector_write_bor(void)
 
 int bkr_sector_write_eor(void)
 {
-	int  result = 0;
+	int  result;
 
 	if(sector.op_count == 0)
 		{
-		if(sector.offset != sector.start)
+		if(sector.offset != sector.buffer)
 			{
 			result = bkr_sector_write_data();
 			if(result < 0)
 				return(result);
 			}
-
-		sector.header.parts.type = EOR_SECTOR;
+		sector.header.type = EOR_SECTOR;
 		sector.op_count = sectors_per_second() * EOR_LENGTH;
 		}
 
-	memset(sector.start, BKR_FILLER, sector.end - sector.start);
+	memset(sector.buffer, BKR_FILLER, sector.end - sector.buffer);
 	for(; sector.op_count; sector.op_count--)
 		{
 		sector.offset = sector.end;
 		result = bkr_sector_write_data();
 		if(result < 0)
-			break;
+			return(result);
 		}
 
-	return(result);
+	return(0);
 }
 
 
@@ -392,10 +392,10 @@ int bkr_sector_write_eor(void)
  * Programing.
  */
 
-static void bkr_sector_randomize(__u32 *location, int count, __u32 seed)
+static void bkr_sector_randomize(u_int32_t *location, int count, u_int32_t seed)
 {
 	unsigned int  index;
-	__u32  history[4];
+	u_int32_t  history[4];
 
 	for(index = 0; index < 4; index++)
 		{
@@ -407,7 +407,7 @@ static void bkr_sector_randomize(__u32 *location, int count, __u32 seed)
 		{
 		seed = 1664525 * seed + 1013904223;
 		index = seed >> 30;
-		location[count] ^= history[index];
+		location[count] ^= __cpu_to_le32(history[index]);
 		history[index] = seed;
 		}
 }
@@ -419,24 +419,24 @@ static void bkr_sector_randomize(__u32 *location, int count, __u32 seed)
  * Retrieves the next sector from the DMA buffer.  The algorithm is to loop
  * until we either find an acceptable sector (it's a type we understand and
  * is in the correct order) or we encounter an error or EOR.  If we find a
- * sector we like, we set it up for a read out and return 1.  Otherwise we
- * return < 0 on error or 0 on EOR.  On error, a retry can be attempted by
- * simply re-calling this function.
+ * sector we like, we set it up for a read out and return 0;  otherwise we
+ * return < 0 on error or > 0 on EOR.  On error, a retry can be attempted
+ * by simply re-calling this function.
  *
  * We tolerate junk sectors for the first little while in order to skip
  * over the noise found at the beginning of recordings.  This is done by
- * silently skipping over all errors (except -EWOULDBLOCKS) until we find
- * the first DATA sector or until we time out.
+ * silently skipping over all errors (except -EAGAIN) until we find a valid
+ * DATA sector after which full error reporting is restored.
  */
 
 static int bkr_sector_read_data(void)
 {
 	int  result;
 	unsigned int  i;
-	char  underflow_detect = 1;
 	unsigned char  *data, *parity;
+	static int  underflow_detect;
 
-	sector.offset = sector.end = sector.start;
+	sector.offset = sector.end = sector.buffer;
 
 	while(1)
 		{
@@ -444,6 +444,7 @@ static int bkr_sector_read_data(void)
 		 * Get the next sector.
 		 */
 
+		next:
 		result = bkr_get_sector();
 		if(result < 0)
 			return(result);
@@ -454,19 +455,23 @@ static int bkr_sector_read_data(void)
 
 		data = sector.buffer;
 		parity = sector.buffer + sector.data_size;
-		for(i = 0; i < sector.interleave; data += block.data, parity += block.parity, i++)
+		for(i = 0; i < sector.interleave; data += sector.rs_format.k, parity += sector.rs_format.parity, i++)
 			{
 			result = reed_solomon_decode(parity, data, NULL, 0, &sector.rs_format);
 			if(result < 0)
 				{
 				sector.need_sequence_reset = 1;
-				if(sector.found_data)
+				if(!sector.found_data)
 					{
-					errors.block++;
-					return(-ENODATA);
+					/* FIXME: potential infinite loop:
+					 * if only corrupt sectors are
+					 * found and the device buffer
+					 * never empties then we get stuck.
+					 */
+					goto next;
 					}
-				HEADER_PTR->parts.type = BOR_SECTOR;
-				break;
+				errors.block++;
+				return(-ENODATA);
 				}
 			health.total_errors += result;
 			if((unsigned int) result > errors.symbol)
@@ -479,54 +484,54 @@ static int bkr_sector_read_data(void)
 		 * Check sector order.
 		 */
 
-		result = HEADER_PTR->parts.number - sector.header.parts.number;
-		if((result == 1) || sector.need_sequence_reset)
+		result = get_sector_header().number - sector.header.number - 1;
+		if((result == 0) || sector.need_sequence_reset)
 			sector.need_sequence_reset = 0;
-		else if(result > 1)
+		else if(result > 0)
+			{
 			errors.overrun++;
+			/* FIXME: make it so that we generate one -ENODATA
+			 * for each sector that got overrun.
+			sector.op_count = result;
+			 */
+			}
 		else
 			{
 			errors.underflow += underflow_detect;
 			underflow_detect = 0;
 			continue;
 			}
-		sector.header.parts.number = HEADER_PTR->parts.number;
+		underflow_detect = 1;
 
 		/*
-		 * Process the sector type.
+		 * Retrieve header and process the sector type.
 		 */
 
-		sector.header.all.state = HEADER_PTR->all.state;
-
-		if(sector.header.parts.type == DATA_SECTOR)
+		sector.header = get_sector_header();
+		switch((bkr_sector_type_t) sector.header.type)
 			{
+			case DATA_SECTOR:
 			sector.found_data = 1;
-			break;
-			}
-
-		if(sector.header.parts.type == EOR_SECTOR)
+			bkr_sector_randomize((unsigned int *) sector.buffer, sector.data_size - sizeof(bkr_sector_header_t), sector.header.number);
+			sector.offset = sector.buffer;
+			if(sector.header.low_used)
+				{
+				i = ((unsigned int) HIGH_USED << 4) + sector.header.low_used;
+				sector.end = sector.buffer + i - (i >> 4) - 1;
+				}
+			else
+				sector.end = sector.buffer + sector.data_size - sizeof(bkr_sector_header_t);
 			return(0);
 
-		if(sector.header.parts.type == BOR_SECTOR)
-			{
+			case EOR_SECTOR:
+			return(1);
+
+			case BOR_SECTOR:
 			errors = ERRORS_INITIALIZER;
 			health = HEALTH_INITIALIZER;
+			break;
 			}
 		}
-
-	/*
-	 * De-randomize the data and set the start and end pointers.
-	 */
-
-	bkr_sector_randomize((unsigned int *) sector.buffer, sector.data_size, sector.header.parts.number);
-
-	if(sector.header.parts.truncate)
-		sector.end = sector.start + sector.buffer[sector.data_size-1] + (sector.header.parts.hi_used << 8);
-	else
-		sector.end = sector.buffer + sector.data_size;
-	sector.offset = sector.start;
-
-	return(1);
 }
 
 
@@ -546,9 +551,10 @@ static int bkr_sector_write_data(void)
 
 	if(sector.offset < sector.end)
 		{
-		sector.header.parts.truncate = 1;
-		sector.buffer[sector.data_size-1] = (sector.offset - sector.start) & 0xff;
-		sector.header.parts.hi_used = (sector.offset - sector.start) >> 8;
+		i = sector.offset - sector.buffer;
+		i = i + (i / 15) + 1;
+		sector.header.low_used = i;
+		HIGH_USED = i >> 4;
 		sector.offset = sector.end;
 		}
 
@@ -564,14 +570,14 @@ static int bkr_sector_write_data(void)
 	 * Put the finishing touches on the sector data and write to tape.
 	 */
 
-	if(sector.header.parts.type == DATA_SECTOR)
-		bkr_sector_randomize((unsigned int *) sector.buffer, sector.data_size, sector.header.parts.number);
+	if(sector.header.type == DATA_SECTOR)
+		bkr_sector_randomize((unsigned int *) sector.buffer, sector.data_size - sizeof(bkr_sector_header_t), sector.header.number);
 
-	*HEADER_PTR = sector.header;
+	put_sector_header(sector.header);
 
 	data = sector.buffer;
 	parity = sector.buffer + sector.data_size;
-	for(i = 0; i < sector.interleave; data += block.data, parity += block.parity, i++)
+	for(i = 0; i < sector.interleave; data += sector.rs_format.k, parity += sector.rs_format.parity, i++)
 		reed_solomon_encode(parity, data, &sector.rs_format);
 
 	bkr_put_sector();
@@ -580,73 +586,68 @@ static int bkr_sector_write_data(void)
 	 * Reset for the next sector
 	 */
 
-	sector.header.parts.number++;
-	sector.header.parts.hi_used = 0;
-	sector.header.parts.truncate = 0;
-	sector.offset = sector.start;
+	sector.header.number++;
+	sector.header.low_used = 0;
+	sector.offset = sector.buffer;
 
 	return(0);
 }
 
 
 /*
- * bkr_get_sector()
+ * bkr_find_key()  bkr_get_sector()
  *
  * Demodulates the next sector from the data stream.
  *
- * The search is done by computing a correlation coefficient for the data
- * stream against a copy of the key.  If this number goes above a threshold
- * then we've found the key and from its location the start of the sector can
- * be identified.  The value returned is the number of bytes in the data stream
- * that were skipped before the sector start was found.  On success, the DMA
- * buffer tail is left pointing to the first byte of sector data with enough
- * bytes in the buffer for the sector to be retrieved.  On failure (eg. on
- * -EWOULDBLOCK), the buffer tail is left pointing to the location it had
+ * The value returned is the number of bytes in the data stream that were
+ * skipped before the sector start was found.  On success, the DMA buffer
+ * tail is left pointing to the first byte of sector data with enough bytes
+ * in the buffer for the sector to be retrieved.  On failure (eg. on
+ * -EAGAIN), the buffer tail is left pointing to the location it had
  * advanced to when the failure occured (is suitable for a retry).
  */
 
-static int bkr_get_sector(void)
+static inline int bkr_find_key(void)
 {
-	int  result, skipped = -1;
-	bkr_offset_t  i, j;
-	unsigned int  correlation = 0;
-#ifdef GCR_STUFF
-	unsigned short  state, tmp;
-	unsigned char  *in_pos, *out_pos;
-	char  shift;
-#endif
+	int  i, result, skipped;
+	unsigned int  longest, length;
+	bkr_offset_t  in_off;
 
 	/*
 	 * Scan for the sector key in the byte stream
 	 */
 
-	device.tail--;
-	do
+	for(skipped = 0; 1; skipped++, device.tail++)
 		{
-		device.tail++;
-		skipped++;
-
-		if(skipped > 0)
-			if(correlation > health.best_nonkey)
-				health.best_nonkey = correlation;
-
 		result = bkr_device_read(sector.video_size);
 		if(result < 0)
 			return(result);
 
-		correlation = 0;
-		j = KEY_LENGTH;
-		i = device.tail + sector.leader + KEY_LENGTH*sector.interleave;
-		while(j)
-			correlation += weight[device.buffer[i -= sector.interleave] ^ sector.header.parts.key[--j]];
-		correlation /= KEY_LENGTH;
+		longest = length = 0;
+		i = sector.key_length;
+		in_off = device.tail + sector.leader + sector.key_length*sector.key_interval-1;
+		do
+			{
+			if(device.buffer[in_off] == key[--i])
+				{
+				length++;
+				if(length > longest)
+					longest = length;
+				}
+			else
+				length = 0;
+			in_off -= sector.key_interval;
+			}
+		while(i);
+
+		if(longest >= MIN_MATCH_LENGTH)
+			break;
+		if(longest > health.best_nonkey)
+			health.best_nonkey = longest;
 		}
-	while(correlation < CORRELATION_THRESHOLD);
 
-	device.tail += sector.leader;
-
-	if(correlation < health.worst_key)
-		health.worst_key = correlation;
+	if(longest < health.worst_key)
+		health.worst_key = longest;
 	if(skipped < health.least_skipped)
 		health.least_skipped = skipped;
 	if(skipped > health.most_skipped)
@@ -655,46 +656,81 @@ static int bkr_get_sector(void)
 	if(skipped > sector.trailer+device.bytes_per_line)
 		errors.frame++;
 
+	return(skipped);
+}
+
+static int bkr_get_sector(void)
+{
+	int  result;
+	int  i, j;
+	u_int16_t  state, tmp;
+	bkr_offset_t  in_off, out_off;
+	signed char  shift;
+
 	/*
-	 * Apply the appropriate demodulation to the data in place.
+	 * Find the key
 	 */
 
-#ifdef GCR_STUFF
-	in_pos = out_pos = &device.buffer[device.tail];
-	state = 0;
-	shift = 1;
-	while(1)
+	result = bkr_find_key();
+	if(result < 0)
+		return(result);
+
+	device.tail += sector.leader;
+
+	/*
+	 * Remove the key sequence
+	 */
+
+	in_off = (out_off = device.tail + sector.key_length*sector.key_interval - 1) - 1;
+	for(j = sector.key_length; j; in_off--, j--)
+		for(i = sector.key_interval-1; i; i--)
+			device.buffer[out_off--] = device.buffer[in_off--];
+	device.tail += sector.key_length;
+
+	/*
+	 * Apply the appropriate demodulation to the data.
+	 */
+
+	if(sector.modulation == GCR)
 		{
-		tmp = *(unsigned short *) (in_pos++);
-#ifdef ROL
-		ROL(tmp, shift);
-#else
-		tmp = (tmp >> 8) | (tmp << 8);
-		tmp >>= 8 - shift;
-#endif
-		if(state & 1)
-			tmp = ~tmp;
-		state ^= tmp;
-		*(out_pos++) = gcr_decode[tmp & GCR_MASK];
-		if(++shift > 8)
+		in_off = out_off = device.tail;
+		state = 0;
+		shift = 1;
+		while(1)
 			{
-			if(++in_pos - &device.buffer[device.tail] >= sector.active_size)
-				break;
-			shift = 1;
+			tmp  = device.buffer[in_off++];
+			tmp |= device.buffer[in_off] << 8;
+#ifdef rolw
+			rolw(tmp, shift);
+#else
+			tmp = __swab16(tmp);
+			tmp >>= 8 - shift;
+#endif
+			if(state & 1)
+				tmp = ~tmp;
+			state ^= tmp;
+			device.buffer[out_off++] = gcr_decode[tmp & GCR_MASK];
+			if(++shift > 8)
+				{
+				if((bkr_offset_t) (out_off - device.tail) >= sector.buffer_size)
+					break;
+				in_off++;
+				shift = 1;
+				}
 			}
 		}
-#endif
 
 	/*
 	 * Deinterleave the sector data from the DMA buffer.
 	 */
 
-	for(i = 0; i < block.data; i += 1 - sector.data_size)
-		for(; i < sector.data_size; i += block.data)
+	for(i = 0; i < sector.rs_format.k; i += 1 - sector.data_size)
+		for(; i < sector.data_size; i += sector.rs_format.k)
 			sector.buffer[i] = device.buffer[device.tail++];
-	for(i = sector.data_size; i < sector.data_size + block.parity; i += 1 - sector.parity_size)
-		for(; i < sector.active_size; i += block.parity)
+	for(i = sector.data_size; i < sector.data_size + sector.rs_format.parity; i += 1 - sector.parity_size)
+		for(; i < sector.buffer_size; i += sector.rs_format.parity)
 			sector.buffer[i] = device.buffer[device.tail++];
+	device.tail += sector.modulation_pad - sector.key_length;
 
 	return(0);
 }
@@ -710,14 +746,10 @@ static int bkr_get_sector(void)
 
 static int bkr_put_sector(void)
 {
-	int  i;
-#ifdef GCR_STUFF
-	unsigned short  state, tmp;
+	int  i, j;
+	u_int16_t  state, tmp;
 	unsigned char  *in_pos, *out_pos;
-	char  shift;
-#else
-	unsigned char  *out_pos;
-#endif
+	signed char  shift;
 
 	/*
 	 * Write the leader to the DMA buffer
@@ -730,63 +762,73 @@ static int bkr_put_sector(void)
 	 * Interleave the data into the DMA buffer
 	 */
 
-#ifdef GCR_STUFF
-	out_pos = &device.buffer[device.head + sector.modulation_padding];
-#else
-	out_pos = &device.buffer[device.head];
-#endif
-	for(i = 0; i < block.data; i += 1 - sector.data_size)
-		for(; i < sector.data_size; i += block.data)
+	out_pos = &device.buffer[device.head + sector.modulation_pad];
+	for(i = 0; i < sector.rs_format.k; i += 1 - sector.data_size)
+		for(; i < sector.data_size; i += sector.rs_format.k)
 			*(out_pos++) = sector.buffer[i];
-	for(i = sector.data_size; i < sector.data_size + block.parity; i += 1 - sector.parity_size)
-		for(; i < sector.active_size; i += block.parity)
+	for(i = sector.data_size; i < sector.data_size + sector.rs_format.parity; i += 1 - sector.parity_size)
+		for(; i < sector.buffer_size; i += sector.rs_format.parity)
 			*(out_pos++) = sector.buffer[i];
 
 	/*
-	 * Apply the appropriate modulation to the data
+	 * Apply the appropriate modulation
 	 */
 
-#ifdef GCR_STUFF
-	in_pos = &device.buffer[device.head + sector.modulation_padding];
-	out_pos = &device.buffer[device.head];
-	state = 0;
-	tmp = 0;
-	shift = 7;
-	while(1)
+	if(sector.modulation == GCR)
 		{
-		if(state &= 1)
-			state = GCR_MASK;
-		state ^= gcr_encode[*(in_pos++)];
-		tmp |= state << shift;
-		tmp = (tmp >> 8) | (tmp << 8);
-		if(--shift >= 0)
+		in_pos = &device.buffer[device.head + sector.modulation_pad];
+		out_pos = &device.buffer[device.head + sector.key_length];
+		state = 0;
+		tmp = 0;
+		shift = 7;
+		while(1)
 			{
-			*(out_pos++) = tmp;  /* write low byte */
-			tmp &= (unsigned short) 0xff00;
-			}
-		else
-			{
-			*( ((unsigned short *) out_pos)++ ) = tmp;
-			if(out_pos >= in_pos)
-				break;
-			tmp = 0;
-			shift = 7;
+			if(state &= 1)
+				state = GCR_MASK;
+			state ^= gcr_encode[*(in_pos++)];
+			tmp |= state << shift;
+			if(--shift >= 0)
+				{
+				tmp = __swab16(tmp);
+				*(out_pos++) = tmp; /* write low byte */
+				tmp &= (u_int16_t) 0xff00;
+				}
+			else
+				{
+				put_unaligned(__cpu_to_be16(tmp), (u_int16_t *) out_pos);
+				out_pos += sizeof(u_int16_t);
+				if(out_pos >= in_pos)
+					break;
+				tmp = 0;
+				shift = 7;
+				}
 			}
 		}
-#endif
+
+	/*
+	 * Insert the sector key sequence
+	 */
+
+	in_pos = &device.buffer[device.head + sector.key_length];
+	out_pos = &device.buffer[device.head];
+	for(j = 0; j < sector.key_length; *(out_pos++) = key[j++])
+		for(i = sector.key_interval-1; i; i--)
+			*(out_pos++) = *(in_pos++);
 	device.head += sector.active_size;
 
 	/*
 	 * Write the trailer to the DMA buffer
 	 */
 
-	memset(device.buffer + device.head, BKR_TRAILER, sector.trailer);
-	device.head += sector.trailer;
-
 	if(sector.oddfield && (BKR_VIDEOMODE(sector.mode) == BKR_NTSC))
 		{
-		memset(device.buffer + device.head, BKR_TRAILER, device.bytes_per_line);
-		device.head += device.bytes_per_line;
+		memset(device.buffer + device.head, BKR_TRAILER, sector.trailer + device.bytes_per_line);
+		device.head += sector.trailer + device.bytes_per_line;
+		}
+	else
+		{
+		memset(device.buffer + device.head, BKR_TRAILER, sector.trailer);
+		device.head += sector.trailer;
 		}
 	sector.oddfield ^= 1;
 
@@ -817,46 +859,39 @@ static int bkr_sector_read_raw(void)
 	int  result;
 	unsigned int  count;
 
-	result = bkr_device_read(sector.active_size);
+	result = bkr_device_read(sector.buffer_size);
 	if(result < 0)
 		return(result);
 
-	if(device.tail + sector.active_size > device.size)
+	if(device.tail + sector.buffer_size > device.size)
 		{
 		count = device.size - device.tail;
-		memcpy(sector.start, device.buffer + device.tail, count);
-		memcpy(sector.start + count, device.buffer, sector.active_size - count);
+		memcpy(sector.buffer, device.buffer + device.tail, count);
+		memcpy(sector.buffer + count, device.buffer, sector.buffer_size - count);
 		}
 	else
-		memcpy(sector.start, device.buffer + device.tail, sector.active_size);
-	device.tail += sector.active_size;
+		memcpy(sector.buffer, device.buffer + device.tail, sector.buffer_size);
+	device.tail += sector.buffer_size;
 
-	sector.offset = sector.start;
+	sector.offset = sector.buffer;
 
-	return(1);
+	return(0);
 }
 
 static int bkr_sector_write_raw(void)
 {
 	int  result;
-	unsigned int  count;
 
-	result = bkr_device_write(sector.active_size);
+	result = bkr_device_write(sector.buffer_size);
 	if(result < 0)
 		return(result);
 
-	if(device.head + sector.active_size >= device.size)
-		{
-		count = device.size - device.head;
-		memcpy(device.buffer + device.head, sector.start, count);
-		memcpy(device.buffer, sector.start + count, sector.active_size - count);
-		device.head -= device.size;
-		}
-	else
-		memcpy(device.buffer + device.head, sector.start, sector.active_size);
-	device.head += sector.active_size;
+	memcpy(device.buffer + device.head, sector.buffer, sector.buffer_size);
+	device.head += sector.buffer_size;
+	if(device.head == device.size)
+		device.head = 0;
 
-	sector.offset = sector.start;
+	sector.offset = sector.buffer;
 
 	return(0);
 }

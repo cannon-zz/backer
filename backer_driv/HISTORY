@@ -1,4 +1,75 @@
-2.1 (?)
+3.0 (2001/6/2)
+	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
+
+	Documentation and Makefile updates.
+
+	Added power management support:  the kernel's power management
+	system is kept informed of the driver's active/idle state and the
+	driver will not start data transfers between suspend and resume
+	requests from the kernel.
+
+	Found and fixed a bug in the init code:  driver would continue to
+	load even if the proc interface could not be created.  I decided,
+	however, that this was a nice feature so I tidied it up and "added"
+	it to the new power management code too.
+
+	Implemented a new tape format.  First, the sector key has been
+	removed from the sector data proper and is now handled by the same
+	code that inserts the leader, trailer and does the interleaving.
+	This allows the key to be optimally interleaved irregardless of the
+	interleaving used for the data blocks.  It also means that parity
+	is not wasted correcting errors in the key --- the redundancy is
+	now applied 100% to data alone.  The second change is the
+	completion of a bit stream modulation mechanism which will
+	hopefully lead to reasonably reliable EP recording.  1:1 non-return
+	to zero (NRZ) modulation is used for SP/LP modes (same as before)
+	and an 8:9 (0,4/4) group code record (GCR) modulation is used for
+	EP modes.  Thirdly, the sector header was moved to the end of the
+	data area so that it doesn't cause quite as much visual "clutter"
+	when GCR modulation is used but also for the added benefits of
+	simplifying the formating code a bit and keeping the header visible
+	on a television set despite its having shrunk following the removal
+	of the key sequence.  Fourthly and finally, the header itself has
+	been given a tune-up:  by encoding the quantity of data present in
+	a truncated sector in such a way that the low four bits are never
+	all 0, the 0 value can be used to indicate a non-trucated sector
+	thus elliminating the need for a separate flag for that purpose.
+
+	Fixed a bug in the underflow counting logic created by the new
+	non-blocking logic introduced in version 2.1:  the underflow_detect
+	flag was not being preserved across returns to the kernel interface
+	layer causing a single underflow to be recorded as many.
+
+	Implemented stuff that I think makes the driver SMP safe but the
+	kernel documentation is, as usual, piss-poor so for all I know I'm
+	not even close.  This will, no doubt, evolve.
+
+	The data processing code is now endian and alignment safe.  With
+	the exception of possible DMA controller issues, the driver should
+	now be portable across all architectures supported by Linux.
+	Furthermore, tapes can be shared between computers of different
+	endianness.  Tape data processing has been tested by compiling and
+	running bkrencode on an IBM RS-6000 running AIX --- the byte
+	streams produced could be correctly decoded on an x86.
+
+	Fixed a bug in error reporting:  the number being returned for the
+	quantity of data moved prior to the error was potentially incorrect
+	although it was correct for non-blocking, -EAGAIN, errors.  The
+	solution was to report all errors using the same logic as -EAGAIN.
+	I don't know if this is correct semantics.
+
+	Implemented a new sector key locator algorithm.  The new algorithm
+	is conceptually simpler and far more robust.  Before, the algorithm
+	counted the number of bits that were in agreement and compared that
+	to an entropy-based threshold.  Now, the code measures the length
+	of the longest run of matching bytes and compares that to a
+	likelihood based threshold.
+
+	Changed the behaviour within devfs so that the device files do not
+	become the property of the user who has them open but now always
+	appear owned by root:root.
+
+2.1 (2001/4/29)
 	Documentation updates and corrections.
 
 	Replaced the BKRIOCGETSTATUS ioctl call with a human-readable /proc
@@ -7,9 +78,9 @@
 
 	Added the early stages of group code record (GCR) bit stream
 	modulation to the formating layer.  The actual modulation code is
-	currently is disabled with #if 0 blocks but the structural changes
-	that need to be made before it can be implemented have begun ---
-	so ignore all "unused variable" warnings.
+	currently disabled with #if 0 blocks but the structural changes
+	that need to be made before it can be implemented have begun --- so
+	ignore all "unused variable" warnings.
 
 	Changed the configuration system a bit.  Rather than having to edit
 	paramters in backer_isa.c, all parameters are now located in the

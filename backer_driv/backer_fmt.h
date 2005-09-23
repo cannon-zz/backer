@@ -11,9 +11,8 @@
  *
  * Do some pre-cleaning.
  *
- *	device.direction = STOPPED;
+ *	device.state = STOPPED;
  *	device.buffer = (allocate a buffer here)
- *	device.alloc_size = (insert allocated buffer size here)
  *	sector.buffer = NULL;
  *
  * Reset the two layers in order.
@@ -27,16 +26,16 @@
  *
  * Read/write data.
  *
- *	bkr_write_bor();                (only if writing)
- *
  *	sector.read();                  (repeat as needed if reading)
  *      sector.write();                 (repeat as needed if writing)
  *
- *	bkr_write_eor();                (only if writing)
+ * End the recording (only if writing)
  *
- * Flush if needed and stop the transfer.
+ *	bkr_write_eor();
+ *	bkr_device_flush();
  *
- *	bkr_device_flush();             (only if writing)
+ * Stop the transfer.
+ *
  *	bkr_device_stop_transfer();
  *
  * Final clean up.
@@ -46,7 +45,10 @@
  *
  * Note:  In order to support multiple formats, reading and writing is done
  * via function pointers in the sector structure.  The pointers are set
- * according to the mode passed to bkr_format_reset().
+ * according to the mode passed to bkr_format_reset().  During formated
+ * writes, the first calls to write are directed to the BOR mark generator
+ * until after the BOR has been fully written after which calls are
+ * directed to the normal sector writer.
  *
  *
  * Copyright (C) 2000,2001  Kipp C. Cannon
@@ -75,7 +77,7 @@
  *
  *    --       --  +-------------+
  *    ^   leader   |   leader    |
- *    |        --  +-------------+  --  <-- buffer (pointer)
+ *    |        --  +-------------+  --
  *    |            |     A       |   ^
  *    |            |     C       |   |
  *    |            |     T R     |   |
@@ -111,56 +113,74 @@
  * trailer.  (Note:  although they are 1/2 width lines, a full line of data
  * is output by the Backer hardware).
  *
- * Zoomed in on the active area of a single sector, the meaning of a few more
- * variables is shown below.  offset always points to the next byte to be
- * read/written and if equal to end then the sector is empty/full respectively.
+ * Zoomed in on the active area of a single sector, the meaning of a few
+ * more variables is shown below.  offset always points to the next byte to
+ * be read/written and if equal to end then the sector is empty/full
+ * respectively.
+ *
  * If the sector contains less than its maximum capacity of data, then the
- * truncate bit is set in the header and the last byte of the data area is used
- * to hold the lowest 8 bits of the count of actual bytes (excluding the
- * header) in the sector while the upper 4 bits of the count are stored in the
- * header itself.  end always points to the end of the data portion of the
- * sector and is adjusted appropriately when a truncated sector is retrieved.
+ * actual number of bytes in the sector is represented as a 12 bit number
+ * whose high 8 bits are placed in the last available byte of the data area
+ * and low 4 bits are stored in the header.  The number thusly represented
+ * is not simply the count of bytes in the sector but the count of bytes
+ * encoded in such a way that the low 4 bits are never all 0 which allows
+ * the 0 value to be used to indicate that the sector is full.
  *
  * Logically, the data portion of the sector (including the header) is
- * divided into blocks although this is hidden from the interface.
- * Associated with each block is a group of parity symbols used for error
- * control.  The parity symbols for all the blocks are grouped together at
- * the top end of the sector's active area.
+ * divided into blocks.  Associated with each block is a group of parity
+ * symbols used for error control.  The parity symbols for all the blocks
+ * are grouped together at the top end of the sector's active area.
  *
  * The active area of the sector is not written linearly to tape but is
- * instead interleaved in order to distribute burst errors among the
- * individual blocks.  The final distance, in bytes, between adjacent bytes
- * of a given block when written to tape is given by the interleave
- * paramter.
+ * instead interleaved in order to distribute burst errors among separate
+ * blocks.  The final distance, in bytes, between adjacent bytes of a given
+ * block when written to tape is given by the interleave parameter.
  *
- *             --  +-------------+
- *             ^   |    Header   |
- *             |   +-------------+  <--- start (pointer)
- *             |   |             |
- *             |   |             |
- *             |   |             |
- *     data_size   |      D      |
- *             |   |      A      |
- *             |   |      T      |
- *             |   |      A      |
- *             |   |             |
- *             |   |             |
- *             |   |             |
- *             |   +- - - - - - -+
- *             v   |   capacity  |
- *             --  +-------------+  <--- end (pointer)
- *             ^   |             |
- *   parity_size   |    Parity   |
- *             v   |             |
- *             --  +-------------+
+ *             --  +-------------+ -- <-- buffer (pointer)
+ *             ^   |             |  ^
+ *             |   |             |  |
+ *             |   |             |  |
+ *             |   |             |  |
+ *             |   |      D      |  |
+ *     data_size   |      A      |  |
+ *             |   |      T      |  buffer_size
+ *             |   |      A      |  |
+ *             |   |             |  |
+ *             |   |             |  | <--- end (pointer as appropriate)
+ *             |   |             |  |
+ *             |   +- hi 8 bits -+  |
+ *             |   +-------------+  |
+ *             v   |    Header   |  |
+ *             --  +-------------+  |
+ *             ^   |             |  |
+ *   parity_size   |    Parity   |  |
+ *             v   |             |  v
+ *             --  +-------------+ --
  */
 
 
 #ifndef BACKER_FMT_H
 #define BACKER_FMT_H
 
-#include "rs.h"
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
+#include <sys/types.h>
+#endif
+
+#include "backer.h"
 #include "backer_device.h"
+#include "rs.h"
+
+#if !defined __BYTE_ORDER
+#if defined __LITTLE_ENDIAN && !defined __BIG_ENDIAN
+#define __BYTE_ORDER __LITTLE_ENDIAN
+#elif !defined __LITTLE_ENDIAN && defined __BIG_ENDIAN
+#define __BYTE_ORDER __BIG_ENDIAN
+#else
+#error Oh oh:  byte order problems!  figure it out yourself.
+#endif
+#endif
 
 /*
  * Paramters
@@ -169,45 +189,52 @@
 #define  BKR_LEADER            0xe2     /* leader is filled with this */
 #define  BKR_TRAILER           0x33     /* trailer is filled with this */
 #define  BKR_FILLER            0x33     /* unused space is filled with this */
-#define  KEY_LENGTH            28       /* bytes */
-#define  BOR_LENGTH            4        /* seconds */
-#define  EOR_LENGTH            1        /* seconds */
+#define  BOR_LENGTH            4        /* second(s) */
+#define  EOR_LENGTH            1        /* second(s) */
 
 
 /*
  * Header structure
  *
- * NOTE:  assumes unsigned int is 32 bits.
+ * T-200 at EP = 600 minutes = 2160000 NTSC sectors = 22 bit sector number
  */
 
-typedef union
+typedef enum
 	{
-	struct
-		{
-		unsigned char key[KEY_LENGTH];                           /* key sequence */
-		unsigned int  number : 22 __attribute__ ((packed));      /* sector number */
-		unsigned int  hi_used : 4 __attribute__ ((packed));      /* high 4 bits of usage */
-		unsigned int  type : 5 __attribute__ ((packed));         /* sector type */
-		unsigned int  truncate : 1 __attribute__ ((packed));     /* sector is truncated */
-		} parts;
-	struct
-		{
-		unsigned char key[KEY_LENGTH];                           /* key sequence */
-		unsigned int  state __attribute__ ((packed));            /* merged flags */
-		} all;
-	} sector_header_t;
+	BOR_SECTOR = 0,                 /* sector is a BOR marker */
+	EOR_SECTOR,                     /* sector is an EOR marker */
+	DATA_SECTOR                     /* sector contains data */
+	} bkr_sector_type_t;
 
-#define KEY_SEQUENCE                                         \
-	{ 0xb9, 0x57, 0xd1, 0x0b, 0xb5, 0xd3, 0x66, 0x07,    \
-	  0x5e, 0x76, 0x99, 0x7d, 0x73, 0x6a, 0x09, 0x1e,    \
-	  0x89, 0x55, 0x3f, 0x21, 0xca, 0xa6, 0x36, 0xb7,    \
-	  0xdf, 0xf9, 0xaa, 0x17 }
+#if __BYTE_ORDER == __LITTLE_ENDIAN
 
-#define  BOR_SECTOR   0                 /* sector is a BOR marker */
-#define  EOR_SECTOR   1                 /* sector is an EOR marker */
-#define  DATA_SECTOR  2                 /* sector contains data */
+typedef struct
+	{
+	u_int32_t  number : 22;         /* sector number */
+	u_int32_t  low_used : 4;        /* low 4 bits of usage */
+	u_int32_t  type : 6;            /* sector type */
+	} bkr_sector_header_t;
 
-#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) {{ KEY_SEQUENCE, 0, 0, BOR_SECTOR, 0 }})
+#define  SECTOR_HEADER_INITIALIZER  ((bkr_sector_header_t) { 0, 0, BOR_SECTOR })
+
+#else /* __BYTE_ORDER */
+
+typedef struct
+	{
+	u_int32_t  type : 6;           /* sector type */
+	u_int32_t  low_used : 4;       /* low 4 bits of usage */
+	u_int32_t  number : 22;        /* sector number */
+	} bkr_sector_header_t;
+
+#define  SECTOR_HEADER_INITIALIZER  ((bkr_sector_header_t) { BOR_SECTOR, 0, 0 })
+
+#endif /* __BYTE_ORDER */
+
+typedef enum
+	{
+	NRZ = 0,                        /* Non-return to zero */
+	GCR                             /* Group code record */
+	} modulation_t;
 
 
 /*
@@ -221,11 +248,15 @@ struct
 	{
 	unsigned char  *buffer;         /* uninterleaved data buffer */
 	unsigned char  *offset;         /* location of next byte to be read/written */
-	unsigned char  *start;          /* see diagram above */
 	unsigned char  *end;            /* see diagram above */
 	unsigned int  interleave;       /* block interleave */
+	unsigned int  key_interval;     /* key byte spacing */
+	unsigned int  key_length;       /* number of key bytes */
+	modulation_t  modulation;       /* modulation type */
 	unsigned int  video_size;       /* see diagram above */
 	unsigned int  active_size;      /* see diagram above */
+	unsigned int  buffer_size;      /* see diagram above */
+	unsigned int  modulation_pad;   /* extra space for modulation overhead */
 	unsigned int  data_size;        /* see diagram above */
 	unsigned int  parity_size;      /* see diagram above */
 	unsigned int  leader;           /* see diagram above */
@@ -235,7 +266,7 @@ struct
 	int  found_data;                /* have found first valid data sector */
 	int  op_count;                  /* counter for misc operations */
 	int  mode;                      /* current mode (see backer.h) */
-	sector_header_t  header;        /* sector header copy */
+	bkr_sector_header_t  header;    /* sector header copy */
 	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
 	int  (*read)(void);             /* sector read function */
 	int  (*write)(void);            /* sector write function */
@@ -247,21 +278,10 @@ struct
  * accessed through the pointers in the sector data structure.
  */
 
-int           bkr_format_reset(int, direction_t);
+int           bkr_format_reset(int, bkr_state_t);
 int           bkr_sector_write_eor(void);
 unsigned int  space_in_buffer(void);
 unsigned int  bytes_in_buffer(void);
-
-
-/*
- * Some private stuff meant only for export to the error analysis program.
- */
-
-#ifdef BACKER_FMT_PRIVATE
-
-extern unsigned char  weight[];
-
-#endif /* BACKER_FMT_PRIVATE */
 
 
 #endif /* BACKER_FMT_H */

@@ -12,19 +12,15 @@ Makefile.  These are:
     DEVICE_NAME   The default device name to compile into the utilities.
     DEFAULT_MODE  The default mode to compile into bkrencode.
 
-The executables will be put in PREFIX/bin and the man pages in
-PREFIX/man/man8.
+The executables will be put in $(PREFIX)/bin and the man pages in
+$(PREFIX)/man/man8.
 
 The install directories are not referred to within the applications
-themselves so you can safetly set PREFIX to a location other than the final
+themselves so you can safely set PREFIX to a location other than the final
 install location.  For example, you might find PREFIX=${RPM_BUILD_ROOT}/usr
 to be convenient if you are building an RPM.
 
-For the constants to use for DEFAULT_MODE, see DRIVER_DIR/backer.h.
-
-(note:  If you *are* building an RPM, it's safe to just set these options
-on make's command line in the build stage so you don't have to screw around
-patching the Makefile in the prep stage.)
+For the constants to use for DEFAULT_MODE, see $(DRIVER_DIR)/backer.h.
 
 
 2.  Build the utilities.  Typing

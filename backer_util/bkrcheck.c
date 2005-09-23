@@ -222,7 +222,7 @@ void gen_formated()
 
 	length = format.sector_capacity;
 	data = (unsigned char *) malloc(length);
-	memset(data, 0x55, length);
+	memset(data, 0, length);
 }
 
 

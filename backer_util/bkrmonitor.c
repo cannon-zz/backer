@@ -51,9 +51,7 @@ FILE  *procfile;
 int  update_interval = -1;
 struct
 	{
-	GtkWidget  *ntsc, *pal;
-	GtkWidget  *high, *low;
-	GtkWidget  *raw, *sp, *ep;
+	GtkWidget  *vmode, *density, *format;
 	GtkWidget  *sector;
 	GtkWidget  *total;
 	GtkWidget  *symbol, *block, *frame, *overrun, *underflow;
@@ -95,7 +93,7 @@ int main(int argc, char *argv[])
 {
 	int  i;
 	GtkWidget  *window;
-	GtkWidget  *vbox;
+	GtkWidget  *vbox, *hbox;
 	GtkWidget  *table;
 	GtkWidget  *widget;
 
@@ -153,27 +151,29 @@ int main(int argc, char *argv[])
 
 	/* Mode indicators */
 
-	table = gtk_table_new(3, 3, TRUE);
-	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
+	hbox = gtk_hbox_new(TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
-	widgets.ntsc = gtk_radio_button_new_with_label(NULL, "NTSC");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ntsc, 0, 1, 0, 1);
-	widgets.pal = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.ntsc)), "PAL");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.pal, 0, 1, 1, 2);
+	widget = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
+	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
 
-	widgets.high = gtk_radio_button_new_with_label(NULL, "High");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.high, 1, 2, 0, 1);
-	widgets.low = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.high)), "Low");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.low, 1, 2, 1, 2);
+	widgets.vmode = gtk_label_new(NULL);
+	gtk_container_add(GTK_CONTAINER(widget), widgets.vmode);
 
-	widgets.raw = gtk_radio_button_new_with_label(NULL, "RAW");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.raw, 2, 3, 0, 1);
-	widgets.sp = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.raw)), "SP/LP");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sp, 2, 3, 1, 2);
-	widgets.ep = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.sp)), "EP");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ep, 2, 3, 2, 3);
+	widget = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
+	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
 
-	gtk_widget_set_sensitive(GTK_WIDGET(table), FALSE);
+	widgets.density = gtk_label_new(NULL);
+	gtk_container_add(GTK_CONTAINER(widget), widgets.density);
+
+	widget = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
+	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
+
+	widgets.format = gtk_label_new(NULL);
+	gtk_container_add(GTK_CONTAINER(widget), widgets.format);
 
 	/* Error counts */
 
@@ -298,45 +298,46 @@ gint update_status(gpointer data)
 	switch(BKR_VIDEOMODE(proc_data.mode))
 		{
 		case BKR_NTSC:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ntsc), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.vmode), "NSTC");
 		break;
 
 		case BKR_PAL:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.pal), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.vmode), "PAL");
 		break;
 		}
 
 	switch(BKR_DENSITY(proc_data.mode))
 		{
 		case BKR_HIGH:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.high), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.density), "HIGH");
 		break;
 
 		case BKR_LOW:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.low), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.density), "LOW");
 		break;
 		}
 
 	switch(BKR_FORMAT(proc_data.mode))
 		{
 		case BKR_RAW:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.raw), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.format), "RAW");
 		break;
 
 		case BKR_SP:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.sp), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.format), "SP/LP");
 		break;
 
 		case BKR_EP:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ep), TRUE);
+		gtk_label_set_text(GTK_LABEL(widgets.format), "EP");
 		break;
 		}
 
 	gtk_progress_configure(GTK_PROGRESS(error_rate.widget), 0, 0, proc_data.parity/2*DECAY_INTERVAL);
 	gtk_progress_configure(GTK_PROGRESS(widgets.buffer_status), 0, 0, proc_data.buffer_size);
 
-	if(proc_data.recent_block != 0)
-		error_rate.rate = proc_data.recent_block * DECAY_INTERVAL;
+	proc_data.recent_block *= DECAY_INTERVAL;
+	if(proc_data.recent_block > error_rate.rate)
+		error_rate.rate = proc_data.recent_block;
 	else if(error_rate.rate > 0)
 		{
 		error_rate.rate -= proc_data.sector_number - error_rate.last_block;

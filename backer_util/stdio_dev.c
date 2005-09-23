@@ -36,7 +36,7 @@
  * These functions pass on any error codes returned by the file system.
  */
 
-int  bkr_device_reset(int mode, direction_t direction)
+int bkr_device_reset(int mode, bkr_state_t direction)
 {
 	if(BKR_DENSITY(mode) == BKR_HIGH)
 		device.bytes_per_line = BYTES_PER_LINE_HIGH;
@@ -49,16 +49,16 @@ int  bkr_device_reset(int mode, direction_t direction)
 		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
 
 	device.size = BKR_BUFFER_SIZE;
-	if(direction != READING)
+	if(direction == WRITING)
 		device.size -= BKR_BUFFER_SIZE % device.frame_size;
 
 	return(0);
 }
 
 
-int  bkr_device_start_transfer(direction_t direction, jiffies_t bailout)
+int bkr_device_start_transfer(bkr_state_t direction, jiffies_t bailout)
 {
-	device.direction = direction;
+	device.state = direction;
 	device.head = 0;
 	device.tail = 0;
 	memset(device.buffer, 0, BKR_BUFFER_SIZE);
@@ -68,38 +68,37 @@ int  bkr_device_start_transfer(direction_t direction, jiffies_t bailout)
 
 void bkr_device_stop_transfer(void)
 {
-	device.direction = STOPPED;
+	device.state = STOPPED;
 	return;
 }
 
 
 int bkr_device_read(unsigned int length)
 {
-	int  desired;
+	int  tmp, desired;
 
-	if(feof(stdin) && (bytes_in_buffer() < length))
-		return(-EPIPE);
-
-	desired = (device.size >> 1) - bytes_in_buffer();
+	desired = device.size / 2 - bytes_in_buffer();
 	if((int) desired <= 0)
 		return(0);
 
 	if(device.head + desired > device.size)
 		{
-		device.head += fread(device.buffer + device.head, 1, device.size - device.head, stdin);
+		tmp = fread(device.buffer + device.head, 1, device.size - device.head, stdin);
+		device.head += tmp;
 		if(device.head != 0)
 			goto done;
-		desired = (device.size >> 1) - bytes_in_buffer();
+		desired -= tmp;
 		}
-
 	device.head += fread(device.buffer + device.head, 1, desired, stdin);
 
 	done:
+	if(bytes_in_buffer() >= length)
+		return(0);
+	if(feof(stdin))
+		return(-EPIPE);
 	if(ferror(stdin))
 		return(-errno);
-	if(bytes_in_buffer() < length)
-		return(-EAGAIN);
-	return(0);
+	return(-EAGAIN);
 }
 
 
@@ -112,13 +111,14 @@ int bkr_device_write(unsigned int length)
 			goto done;
 		device.tail = 0;
 		}
-
 	device.tail += fwrite(device.buffer + device.tail, 1, bytes_in_buffer(), stdout);
 
 	done:
+	if(space_in_buffer() >= length)
+		return(0);
 	if(ferror(stdout))
 		return(-errno);
-	return(0);
+	return(-EAGAIN);
 }
 
 

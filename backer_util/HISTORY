@@ -1,4 +1,18 @@
-2.1 (?)
+3.0 (2001/6/2)
+	Brought stdio_dev.c and bkrencode.c in line with the changes to the
+	driver sources caused by the addition of power management.
+
+	Removed -a option from bkrencode for real this time :-P (it was
+	still listed as a case in the switch statement).
+
+	A few minor tweaks to streamline reads & writes in stdio_dev.c.
+
+	Added -s option to bkrencode for skipping bad sectors.
+
+	Replaced the greyed-out buttons in bkrmonitor with some text
+	labels.
+
+2.1 (2001/4/29)
 	Documentation updates.
 
 	Removed -a option from bkrencode.  The -f option is used instead
@@ -7,8 +21,8 @@
 
 	With the driver's new /proc status output, bkrmonitor was returned
 	to a purely graphical application and now gets its info from the
-	/proc entry rather than the (now non-existant) ioctl call.
-	bkrmonitor no longer needs to be stoped and started if the driver's
+	/proc entry rather than the (now non-existent) ioctl call.
+	bkrmonitor no longer needs to be stopped and started if the driver's
 	mode is changed.
 
 	bkrcheck's tape length calculation now works properly with raw
@@ -41,7 +55,7 @@
 1.107 (2001/3/24)
 	Adjusted some more of bkrcheck's messages.
 
-	Changed a bunch of command line arguements and messages to match
+	Changed a bunch of command line arguments and messages to match
 	the new mode flag structures of the driver.  The utilities, like
 	the driver, now consider there to simply be three data formats (SP,
 	EP and raw) rather than two formated modes and a pass-through mode.
@@ -65,7 +79,7 @@
 
 1.104 (2001/3/4)
 	Split bkrencode's standard I/O device layer into a separate file.
-	This faciliates its use in a new utility (TBA).  Also cleaned up
+	This facilitates its use in a new utility (TBA).  Also cleaned up
 	bkrencode and it's I/O layer a bit... might be a bit faster now but
 	I've never benchmarked it so I can't tell.
 
@@ -143,7 +157,7 @@
 
 	Added underflow field to error structure.  This indicates the
 	number of underflows detected in the data stream.  These are most
-	likely present due to buffer underflows occuring when the data was
+	likely present due to buffer underflows occurring when the data was
 	recorded but might also indicate an overflow condition if much time
 	has elapsed since the last read.
 

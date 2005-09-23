@@ -37,7 +37,6 @@
 #include "bkr_disp_mode.h"
 
 #define  PROGRAM_NAME    "bkrencode"
-#define  BAILOUT         1
 
 /*
  * Function prototypes
@@ -60,7 +59,8 @@ unsigned int  got_sigint;
 int main(int argc, char *argv[])
 {
 	int  tmp, result;
-	direction_t  direction;
+	int  skip_bad = 0;
+	bkr_state_t  direction;
 	char  *devname = DEFAULT_DEVICE;
 	struct mtget  mtget;
 
@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
 	 * Some setup stuff
 	 */
 
-	device.direction = STOPPED;
+	device.state = STOPPED;
 	sector.buffer = NULL;
 	direction = WRITING;
 	mtget.mt_dsreg = DEFAULT_MODE;
@@ -85,21 +85,21 @@ int main(int argc, char *argv[])
 	 * Process command line options
 	 */
 
-	while((result = getopt(argc, argv, "D:F:f::huV:")) != EOF)
+	while((result = getopt(argc, argv, "D:F:f::hsuV:")) != EOF)
 		switch(result)
 			{
-			case 'u':
-			direction = READING;
-			break;
-
-			case 'a':
-			mtget.mt_dsreg = -1;
-			break;
-
 			case 'f':
 			mtget.mt_dsreg = -1;
 			if(optarg != NULL)
 				devname = optarg;
+			break;
+
+			case 's':
+			skip_bad = 1;
+			break;
+
+			case 'u':
+			direction = READING;
 			break;
 
 			case 'D':
@@ -162,13 +162,14 @@ int main(int argc, char *argv[])
 	"Backer tape data encoder/unencoder.\n" \
 	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
-	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
 	"	-D <h/l>  Set the data rate to high or low\n" \
 	"	-F <s/e>  Set the data format to SP or EP\n" \
+	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
 	"	-f [dev]  Get the format to use from the Backer device dev\n" \
 	"                  (default " DEFAULT_DEVICE ")\n" \
-	"	-u        Unencode tape data (default is to encode)\n" \
-	"	-h        Display usage message\n", stderr);
+	"	-h        Display usage message\n" \
+	"	-s        Skip bad sectors\n" \
+	"	-u        Unencode tape data (default is to encode)\n", stderr);
 			exit(-1);
 			}
 
@@ -176,6 +177,7 @@ int main(int argc, char *argv[])
 	 * Do more setup stuff.
 	 */
 
+	setbuf(stderr, NULL);
 	if(mtget.mt_dsreg == -1)
 		{
 		if((tmp = open(devname, O_RDONLY)) < 0)
@@ -210,10 +212,9 @@ int main(int argc, char *argv[])
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
-	setbuf(stderr, NULL);
 	bkr_device_reset(mtget.mt_dsreg, direction);
 	bkr_format_reset(mtget.mt_dsreg, direction);
-	bkr_device_start_transfer(direction, BAILOUT);
+	bkr_device_start_transfer(direction, 0);
 	switch(direction)
 		{
 		case READING:
@@ -221,10 +222,24 @@ int main(int argc, char *argv[])
 			{
 			errno = 0;
 			result = sector.read();
-			if(result == 0)
+			if(result > 0)
+				{
+				/* FIXME: some hacks to let us concat data streams
+				sector.need_sequence_reset = 1;
+				sector.found_data = 0;
+				continue;
+				*/
 				break;
+				}
 			if(result < 0)
 				{
+				if(result == -EPIPE)
+					break;
+				if((result == -ENODATA) && skip_bad)
+					{
+					fprintf(stderr, PROGRAM_NAME": skipping bad sector (%d total)\n", skip_bad++);
+					continue;
+					}
 				errno = -result;
 				perror(PROGRAM_NAME": stdin");
 				exit(-1);
@@ -272,6 +287,7 @@ int main(int argc, char *argv[])
 		break;
 
 		default:
+		break;
 		}
 	bkr_device_stop_transfer();
 

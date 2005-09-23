@@ -20,13 +20,13 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrencode 8 "TODAYS_DATE" "Linux" "Backer"
+.TH bkrencode 8 "June 2, 2001" "Linux" "Backer"
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
-\fBbkrencode\fP [\fB\-h\fP] [\fB\-u\fP] [\fB\-V\fP \fBn\fP|\fBp\fP]
-[\fB\-D\fP \fBh\fP|\fBl\fP] [\fB\-F\fP \fBe\fP|\fBs\fP]
-[\fB\-f\fP [\fIdevname\fP]]
+\fBbkrencode\fP [\fB\-D\fP \fBh\fP|\fBl\fP] [\fB\-F\fP \fBe\fP|\fBs\fP]
+[\fB\-V\fP \fBn\fP|\fBp\fP] [\fB\-f\fP [\fIdevname\fP]] [\fB\-h\fP]
+[\fB\-s\fP] [\fB\-u\fP]
 .SH DESCRIPTION
 \fBbkrencode\fP is a user space implementation of the
 .IR backer (4)
@@ -58,26 +58,29 @@ operation is safe to perform at any time:  it will not interfere with any
 transfer.
 .SS OPTIONS
 .TP
-\fB\-h\fP
-Print a usage message.
-.TP
-\fB\-u\fP
-``Unencode''.  Extract file data from a tape data stream.
-.TP
-\fB\-V\fP \fBn\fP|\fBp\fP
-Set the video mode to format the data for to NTSC (\fBn\fP) or PAL
-(\fBp\fP).
-.TP
 \fB\-D\fP \fBh\fP|\fBl\fP
 Set the density to format the data for to high (\fBh\fP) or low (\fBl\fP).
 .TP
 \fB\-F\fP \fBe\fP|\fBs\fP
 Set the tape speed to format the data for to EP (\fBe\fP) or SP (\fBs\fP).
 .TP
+\fB\-V\fP \fBn\fP|\fBp\fP
+Set the video mode to format the data for to NTSC (\fBn\fP) or PAL
+(\fBp\fP).
+.TP
 \fB\-f\fP [\fIdevname\fP]
 Retrieve the mode to use from a Backer device file.  If specified,
 \fIdevname\fP is used otherwise the mode is retrieved from
 \fBDEVICE_NAME\fP.
+.TP
+\fB\-h\fP
+Print a usage message.
+.TP
+\fB\-s\fP
+Skip over bad sectors instead of aborting.
+.TP
+\fB\-u\fP
+``Unencode''.  Extract file data from a tape data stream.
 .SH EXAMPLES
 To save a file in short play high density NTSC mode using
 \fBbkrencode\fP to process the data, type

@@ -11,7 +11,7 @@
 #
 # Major numbers that your system is probably not using (because they are
 # for other kinds of tape devices) and so can probably be used with this
-# driver:
+# driver if you don't want to use 60:
 #	9: SCSI tape devices
 #	12: QIC-02 tape devices
 #	27: QIC-117 tape devices
@@ -26,7 +26,7 @@ MAN_DIR               = /usr/man
 MODULES_DIR           = /lib/modules/misc
 CONFIG_BACKER_IOPORT  = 0x300
 CONFIG_BACKER_DMA     = 3
-CONFIG_BACKER_TIMEOUT = 15
+CONFIG_BACKER_TIMEOUT = 10
 
 
 #
@@ -51,25 +51,27 @@ CONFIG_BACKER_TIMEOUT = 15
 #	Same as clean plus all build targets are also deleted.
 #
 
+CC = gcc
 INCLUDE_DIR = /usr/include
 CONFIGFLAGS = -DBKR_MAJOR=$(BKR_MAJOR) \
-               -DCONFIG_BACKER_IOPORT=$(CONFIG_BACKER_IOPORT) \
-               -DCONFIG_BACKER_DMA=$(CONFIG_BACKER_DMA) \
-               -DCONFIG_BACKER_TIMEOUT=$(CONFIG_BACKER_TIMEOUT)
-KERNELFLAGS = -D__KERNEL__ -DMODULE -DMODVERSIONS -include $(INCLUDE_DIR)/linux/modversions.h
+              -DCONFIG_BACKER_IOPORT=$(CONFIG_BACKER_IOPORT) \
+              -DCONFIG_BACKER_DMA=$(CONFIG_BACKER_DMA) \
+              -DCONFIG_BACKER_TIMEOUT=$(CONFIG_BACKER_TIMEOUT)
+KERNELFLAGS  = -D__KERNEL__ -DMODULE
+KERNELFLAGS += -DMODVERSIONS -include $(INCLUDE_DIR)/linux/modversions.h
 CFLAGS = -O3 -Wall -Wstrict-prototypes -I$(INCLUDE_DIR) $(KERNELFLAGS) $(CONFIGFLAGS)
 LDFLAGS = -r
 INSMODFLAGS = dma=1
 
-TARGET = backer.o
+.PHONY : all install devs uninstall clean realclean load unload
 
-all : $(TARGET)
+all : backer.o
 
-$(TARGET) : backer_fmt.o backer_isa.o rs.o
-	$(LD) $(LDFLAGS) $^ -o $@
-backer_fmt.o : backer_fmt.c backer.h backer_device.h backer_fmt.h rs.h
+backer.o : backer_isa.o backer_fmt.o rs.o
+	$(LD) $(LDFLAGS) -o $@ $^
 backer_isa.o : backer_isa.c backer.h backer_device.h backer_fmt.h
-rs.o :  rs.c rs.h
+backer_fmt.o : backer_fmt.c backer.h backer_device.h backer_fmt.h rs.h
+rs.o : rs.c rs.h
 
 install:
 	install -d -m 0700 $(MODULES_DIR)
@@ -91,13 +93,21 @@ install:
 	@echo "Done."
 
 devs:
+	@if [ -d $(DEV_DIR)/backer/0 ]; then \
+	   echo "ERROR:  Device files appear to have already been created." ;\
+	   exit 1; \
+	fi
 	mkdir -m 0755 -p $(DEV_DIR)/backer/0
+	mknod -m 0666 $(DEV_DIR)/backer/0/nhe c $(BKR_MAJOR) 0
 	mknod -m 0666 $(DEV_DIR)/backer/0/nhr c $(BKR_MAJOR) 1
 	mknod -m 0666 $(DEV_DIR)/backer/0/nhs c $(BKR_MAJOR) 2
+	mknod -m 0666 $(DEV_DIR)/backer/0/nle c $(BKR_MAJOR) 3
 	mknod -m 0666 $(DEV_DIR)/backer/0/nlr c $(BKR_MAJOR) 4
 	mknod -m 0666 $(DEV_DIR)/backer/0/nls c $(BKR_MAJOR) 5
+	mknod -m 0666 $(DEV_DIR)/backer/0/phe c $(BKR_MAJOR) 6
 	mknod -m 0666 $(DEV_DIR)/backer/0/phr c $(BKR_MAJOR) 7
 	mknod -m 0666 $(DEV_DIR)/backer/0/phs c $(BKR_MAJOR) 8
+	mknod -m 0666 $(DEV_DIR)/backer/0/ple c $(BKR_MAJOR) 9
 	mknod -m 0666 $(DEV_DIR)/backer/0/plr c $(BKR_MAJOR) 10
 	mknod -m 0666 $(DEV_DIR)/backer/0/pls c $(BKR_MAJOR) 11
 
@@ -106,7 +116,13 @@ uninstall:
 	rm -f $(MODULES_DIR)/backer.o
 	rm -f $(MAN_DIR)/man4/backer.4
 	depmod -a
-	rm -Rf $(DEV_DIR)/backer
+	if [ -d $(DEV_DIR)/backer ]; then rm -Rf $(DEV_DIR)/backer; fi
+
+clean:
+	rm -f backer_isa.o backer_fmt.o rs.o
+
+realclean: clean
+	rm -f backer.o
 
 load:
 	/sbin/insmod backer.o $(INSMODFLAGS)
@@ -115,9 +131,3 @@ load:
 unload:
 	/sbin/rmmod backer
 	cat /proc/devices
-
-clean:
-	rm -f backer_isa.o backer_fmt.o rs.o
-
-realclean: clean
-	rm -f backer.o

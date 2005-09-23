@@ -53,13 +53,19 @@
 #ifndef BACKER_DEVICE_H
 #define BACKER_DEVICE_H
 
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
+#include <sys/types.h>
+#endif
+
 /*
  * The formating layer now assumes this is a power of 2 in order to
  * introduce some much needed code simplifications.  It must match the size
  * of bkr_offset_t defined below.
  */
 
-#define  BKR_BUFFER_SIZE        65536   /* must be 64kB */
+#define  BKR_BUFFER_SIZE        65536   /* bkr_offset_t is 16 bits */
 
 
 /*
@@ -70,16 +76,17 @@ typedef enum
 	{
 	STOPPED = 0,
 	READING,
-	WRITING
-	} direction_t;
+	WRITING,
+	SUSPENDED
+	} bkr_state_t;
 
 
 /*
  * Functions exported by the device layer.
  */
 
-int   bkr_device_reset(int, direction_t);
-int   bkr_device_start_transfer(direction_t, jiffies_t);
+int   bkr_device_reset(int, bkr_state_t);
+int   bkr_device_start_transfer(bkr_state_t, jiffies_t);
 void  bkr_device_stop_transfer(void);
 int   bkr_device_read(unsigned int);
 int   bkr_device_write(unsigned int);
@@ -90,7 +97,7 @@ int   bkr_device_flush(void);
  * Data shared with formating and I/O layer.
  */
 
-typedef __u16  bkr_offset_t;            /* unsigned 16 bit integer */
+typedef u_int16_t  bkr_offset_t;        /* unsigned 16 bit integer */
 
 struct
 	{
@@ -100,7 +107,7 @@ struct
 	bkr_offset_t  tail;             /* offset of next read transfer */
 	unsigned int  bytes_per_line;   /* width of one line of video */
 	unsigned int  frame_size;       /* bytes in a full video frame */
-	direction_t  direction;         /* current transfer direction */
+	bkr_state_t  state;             /* current device state */
 	} device;
 
 #endif /* BACKER_DEVICE_H */

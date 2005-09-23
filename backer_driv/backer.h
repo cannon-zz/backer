@@ -23,7 +23,6 @@
 #ifndef  _BACKER_H
 #define  _BACKER_H
 
-#include <linux/types.h>
 
 /*
  * Data Types

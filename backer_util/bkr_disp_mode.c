@@ -4,8 +4,7 @@
  * Common mode display function for command line utilities.
  *
  * The items to be displayed can be selected by passing invalid values for the
- * unwanted parameters.  For example, if the timeout passed to this function
- * is too high then it will not be displayed.
+ * unwanted parameters.
  *
  * Copyright (C) 2000,2001  Kipp C. Cannon
  *

@@ -6,7 +6,6 @@ See INSTALL for instructions on compiling, installing and loading the
 driver.
 
 
-
 TROUBLESHOOTING
 ---------------
 
@@ -21,9 +20,9 @@ or set the correct options on the insmod command line).  If there's a
 problem reserving a DMA buffer, try freeing some memory or rebooting your
 system and loading the driver soon after start-up.
 
-DRIVER LOADS BUT YOU CAN'T OPEN THE DEVICE FILE.  If the error message is
-"Permission denied" then check the permissions of the /dev entry.  They
-must allow you access to the device.
+DRIVER LOADS BUT YOU CAN'T OPEN THE DEVICE FILES.  If the error message is
+"Permission denied" then check the permissions of the /dev entries.  They
+must allow you access them.
 
 YOU CAN OPEN THE DEVICE BUT YOU CAN'T TRANSFER DATA.  Do the following test
 to see what error message you see

@@ -51,8 +51,7 @@ int   write(struct inode *, struct file *, const char *, int);
 int   ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 int   lseek(struct inode *, struct file *, off_t, int);
 static void  bkr_device_reset(void);
-static void  update_device_offset(unsigned int *, unsigned long bailout);
-static int   video_present(void);
+static int   update_device_offset(unsigned int *);
 static void  start_transfer(void);
 static void  stop_transfer(void);
 static void  bkr_reset_dma(void);
@@ -102,7 +101,7 @@ struct file_operations file_ops =
 
 int init_module(void)
 {
-	int  result_code;
+	int  result;
 
 	/*
 	 * Don't export any symbols;  print version.
@@ -137,22 +136,22 @@ int init_module(void)
 	if((device.buffer = (unsigned char *) kmalloc(buffer, GFP_KERNEL | GFP_DMA)) == NULL)
 		{
 		printk(KERN_ERR BKR_NAME ":   can't get %u byte dma buffer\n", buffer);
-		result_code = -ENOMEM;
+		result = -ENOMEM;
 		goto no_dmamem;
 		}
 	if(check_region(ioport, 1) < 0)
 		{
 		printk(KERN_ERR BKR_NAME ":   port %#x in use\n", ioport);
-		result_code = -EBUSY;
+		result = -EBUSY;
 		goto ioport_busy;
 		}
 	request_region(ioport, 1, BKR_NAME);
-	if((result_code = bkr_set_parms(DEFAULT_MODE, buffer)) < 0)
+	if((result = bkr_set_parms(DEFAULT_MODE, buffer)) < 0)
 		{
 		printk(KERN_ERR BKR_NAME ":   can't get internal buffers\n");
 		goto no_bufmem;
 		}
-	if((result_code = register_chrdev(BKR_MAJOR, BKR_NAME, &file_ops)) < 0)
+	if((result = register_chrdev(BKR_MAJOR, BKR_NAME, &file_ops)) < 0)
 		{
 		printk(KERN_ERR BKR_NAME ":   can't get device major %u\n", BKR_MAJOR);
 		goto cant_register;
@@ -176,7 +175,7 @@ int init_module(void)
 	no_bufmem:	release_region(ioport, 1);
 	ioport_busy:	kfree(device.buffer);
 	no_dmamem:	printk(KERN_ERR BKR_NAME ":   driver not installed\n");
-	return(result_code);
+	return(result);
 }
 
 void cleanup_module(void)
@@ -205,7 +204,7 @@ void cleanup_module(void)
 
 int open(struct inode *inode, struct file *filp)
 {
-	unsigned long  bailout;
+	int  result;
 
 	/*
 	 * Access control.
@@ -244,24 +243,20 @@ int open(struct inode *inode, struct file *filp)
 	bkr_format_reset();
 	start_transfer();
 
-	if(!video_present())
-		{
-		stop_transfer();
-		MOD_DEC_USE_COUNT;
-		return(-EIO);
-		}
-
 	if((device.direction == O_WRONLY) && (BKR_FORMAT(device.mode) == BKR_FMT))
 		{
-		bailout = jiffies + timeout;
-		bkr_write_bor(bailout);
-		if(jiffies >= bailout)
+		result = bkr_write_bor(jiffies + timeout);
+		if(result < 0)
 			{
 			stop_transfer();
 			MOD_DEC_USE_COUNT;
-			return(-ETIMEDOUT);
+			return(result);
 			}
 		}
+
+	/* FIXME: temporary diagnostic message */
+	if(filp->f_flags & O_NONBLOCK)
+		printk(KERN_INFO "backer: device opened for non-blocking I/O\n");
 
 	return(0);
 }
@@ -419,14 +414,12 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 
 /*
  * read(), write()
- *
- * During reads, timeout checking is done in block.read().
  */
 
 int read(struct inode *inode, struct file *filp, char *buff, int count)
 {
-	unsigned long  bailout;
-	int  moved, chunk_size;
+	jiffies_t  bailout;
+	int  moved, chunk_size, result = 0;
 
 	if((filp->f_flags & O_ACCMODE) != O_RDONLY)
 		return(-EPERM);
@@ -440,21 +433,22 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 
 		memcpy_tofs(buff, block.offset, chunk_size);
 
-		moved += chunk_size;
 		if((block.offset += chunk_size) == block.end)
-			if(block.read(bailout) == EOR_BLOCK)
+			{
+			result = block.read(filp->f_flags, bailout);
+			if((result < 0) || (result == EOR_BLOCK))
 				break;
+			}
+		moved += chunk_size;
 		}
 
-	if(jiffies >= bailout)
-		return(moved ? moved : -ETIMEDOUT);
-	return(moved);
+	return(moved ? moved : result);
 }
 
 int write(struct inode *inode, struct file *filp, const char *buff, int count)
 {
-	unsigned long  bailout;
-	int  moved, chunk_size;
+	jiffies_t  bailout;
+	int  moved, chunk_size, result;
 
 	if((filp->f_flags & O_ACCMODE) != O_WRONLY)
 		return(-EPERM);
@@ -468,13 +462,13 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 
 		memcpy_fromfs(block.offset, buff, chunk_size);
 
-		moved += chunk_size;
 		if((block.offset += chunk_size) == block.end)
 			{
-			block.write(bailout);
-			if(jiffies >= bailout)
-				return(moved ? moved : -ETIMEDOUT);
+			result = block.write(filp->f_flags, bailout);
+			if(result < 0)
+				return(moved ? moved : result);
 			}
+		moved += chunk_size;
 		}
 
 	return(moved);
@@ -508,19 +502,27 @@ int lseek(struct inode *inode, struct file *filp, off_t offset, int whence)
  *
  * Doesn't actually "read" data... just waits until the requested length of
  * data starting at device.tail becomes available in the DMA buffer.
+ * Returns 0 on success, -EINTR on interrupt, -ETIMEDOUT on timeout or any
+ * error code returned by update_device_offset().
  */
 
-void bkr_device_read(unsigned int length, unsigned long  bailout)
+int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t  bailout)
 {
+	int  result;
+
 	length += DMA_HOLD_OFF;
 
 	if((jiffies - device.last_update < HZ/MIN_UPDATE_FREQ) && (bytes_in_buffer() >= length))
-		return;
+		return(0);
 
-	update_device_offset(&device.head, bailout);
+	result = update_device_offset(&device.head);
+
+	if(((bytes_in_buffer() < length) || (space_in_buffer() <= DMA_HOLD_OFF))
+	   && !result && (f_flags & O_NONBLOCK))
+		result = -EWOULDBLOCK;
 
 	while(((bytes_in_buffer() < length) || (space_in_buffer() <= DMA_HOLD_OFF))
-	      && (jiffies < bailout))
+	      && !result && (jiffies < bailout))
 		{
 		current->timeout = jiffies + HZ/MAX_UPDATE_FREQ;
 		current->state = TASK_INTERRUPTIBLE;
@@ -528,16 +530,17 @@ void bkr_device_read(unsigned int length, unsigned long  bailout)
 		if(jiffies < current->timeout)
 			{
 			current->timeout = 0;
+			result = -EINTR;
 			break;
 			}
 		current->timeout = 0;
 
-		update_device_offset(&device.head, bailout);
+		result = update_device_offset(&device.head);
 		}
 
-	device.last_update = jiffies;
-
-	return;
+	if(jiffies >= bailout)
+		return(-ETIMEDOUT);
+	return(result);
 }
 
 
@@ -545,50 +548,66 @@ void bkr_device_read(unsigned int length, unsigned long  bailout)
  * bkr_device_write()
  *
  * Doesn't actually "write" data... just waits until the requested amount
- * of space has become available starting at the device head.
+ * of space has become available starting at the device head.  Returns 0 on
+ * success, -ETIMEDOUT on timeout or any error code returned by
+ * update_device_offset().
  */
 
-void bkr_device_write(unsigned int length, unsigned long bailout)
+int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 {
+	int  result;
+
 	length += DMA_HOLD_OFF;
 
 	if((jiffies - device.last_update < HZ/MIN_UPDATE_FREQ) && (space_in_buffer() >= length))
-		return;
+		return(0);
 
-	update_device_offset(&device.tail, bailout);
+	result = update_device_offset(&device.tail);
+
+	if(((space_in_buffer() < length) || (bytes_in_buffer() <= DMA_HOLD_OFF))
+	   && !result && (f_flags & O_NONBLOCK))
+		result = -EWOULDBLOCK;
 
 	while(((space_in_buffer() < length) || (bytes_in_buffer() <= DMA_HOLD_OFF))
-	      && (jiffies < bailout))
+	      && !result && (jiffies < bailout))
 		{
 		current->timeout = jiffies + HZ/MAX_UPDATE_FREQ;
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		current->timeout = 0;
 
-		update_device_offset(&device.tail, bailout);
+		result = update_device_offset(&device.tail);
 		}
 
-	device.last_update = jiffies;
-
-	return;
+	if(jiffies >= bailout)
+		return(-ETIMEDOUT);
+	return(result);
 }
 
 /*
  * bkr_device_flush()
  *
  * Wait until the contents of the DMA buffer have been written to tape.
+ * Returns 0 on success, -ETIMEDOUT on timeout or any error code returned
+ * by update_device_offset();
  */
 
-void bkr_device_flush(unsigned long bailout)
+int bkr_device_flush(jiffies_t bailout)
 {
+	int  result = 0;
+
 	device.head += INTERNAL_BUFFER;
 	if(device.head >= device.size)
 		device.head -= device.size;
 
-	bkr_device_write(device.size - 2*sector.size, bailout);
+	result = bkr_device_write(device.size - 2*sector.size, 0, bailout);
 
-	while(bytes_in_buffer() && (jiffies < bailout))
-		update_device_offset(&device.tail, bailout);
+	while(bytes_in_buffer() && (jiffies < bailout) && !result)
+		result = update_device_offset(&device.tail);
+
+	if(jiffies >= bailout)
+		return(-ETIMEDOUT);
+	return(result);
 }
 
 
@@ -597,36 +616,27 @@ void bkr_device_flush(unsigned long bailout)
  *
  * Retrieves the offset within the DMA buffer at which the next transfer
  * will occur.  During read operations this is the buffer's head; during
- * write operations it is the tail.
+ * write operations it is the tail.  Returns 0 on success, -EIO if no video
+ * signal is present.
  */
 
-static void update_device_offset(unsigned int *offset, unsigned long bailout)
+static int update_device_offset(unsigned int *offset)
 {
-	while(!(inb(ioport) & BIT_SYNC) && (jiffies < bailout));
-	while((inb(ioport) & BIT_SYNC) && (jiffies < bailout));
-
-	clear_dma_ff(dma);
-	*offset = device.size - get_dma_residue(dma);
-}
-
-
-/*
- * device_video_present()
- *
- * Checks to see if a video signal is present by watching for the sync bit
- * to toggle.  Returns 1 if a signal is present, 0 if not.
- */
-
-static int video_present(void)
-{
-	unsigned long  bailout;
+	jiffies_t  bailout;
 
 	bailout = jiffies + HZ/MIN_SYNC_FREQ;
 
 	while(!(inb(ioport) & BIT_SYNC) && (jiffies < bailout));
 	while((inb(ioport) & BIT_SYNC) && (jiffies < bailout));
 
-	return(jiffies < bailout);
+	clear_dma_ff(dma);
+	*offset = device.size - get_dma_residue(dma);
+
+	device.last_update = jiffies;
+
+	if(jiffies >= bailout)
+		return(-EIO);
+	return(0);
 }
 
 

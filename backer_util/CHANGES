@@ -1,3 +1,7 @@
+0.7 (2000/11/03)
+	Minor modifications to the I/O code in bkrencode to work with new
+	error reporting scheme.  Also made bkrencode abort on any error.
+
 0.6 (2000/10/30)
 	Re-release to keep version number in step with driver.
 

@@ -1,3 +1,28 @@
+0.7 (2000/11/03)
+	Re-worked the I/O code's error reporting mechanism.  Save for any
+	bugs that might be discovered in this stuff this now completes the
+	system friendliness of the driver.
+
+	Implemented the beginings of non-blocking I/O.  It's actually all
+	in there but it's completely untested.  Since tar does not make use
+	of non-blocking I/O there's no easy way to put this through its
+	paces.  I'm going to have to write a test program.
+
+	Fixed bug in overrun checking code:  the subtraction wasn't being
+	done modulo the sequence size.  I hope this didn't cause any
+	problems for anyone... 'cause it could have :-(.  It was defeating
+	the ability of the driver to skip over underflows during playback.
+
+	If an uncorrectable block is encountered, the driver now removes
+	the block from the data stream and returns -ENODATA rather than
+	silently pretending that nothing's wrong.
+
+	If an error occurs in the data stream while reading the block
+	sequence counter is now reset.  This keeps the quantity of lost
+	data to a minimum.
+
+	Some documentation updates and additions.
+
 0.6 (2000/10/30)
 	The driver now checks to see if a video signal is present before
 	attempting to proceed with a transfer.  This avoids getting the
@@ -11,7 +36,7 @@
 
 	Driver now counts buffer overruns on read.
 
-	Minor performance improvements to the Reed-Solomon decoder.
+	Another minor performance improvement to the Reed-Solomon decoder.
 
 0.5 (2000/10/25)
 	Implemented an internal sector buffer.  Previously sectors were

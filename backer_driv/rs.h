@@ -56,9 +56,9 @@
  */
 
 #if MM <= 8
-typedef unsigned char dtype;
+typedef unsigned char data_t;
 #else
-typedef unsigned short dtype;
+typedef unsigned short data_t;
 #endif
 
 /*
@@ -112,7 +112,7 @@ int   reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_f
  * enough room must have been set aside for them.
  */
 
-void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format);
+void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format);
 
 /*
  * Reed-Solomon erasures-and-errors decoding
@@ -130,7 +130,7 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format);
  * erasure positions.  It must be large enough to hold n-k elements.
  */
 
-int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format_t *rs_format);
+int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_format_t *rs_format);
 
 
 /*

@@ -25,6 +25,13 @@
 
 #include <linux/types.h>
 
+#ifndef __KERNEL__
+#define  HZ  100
+#endif
+
+typedef  unsigned long  jiffies_t;          /* type for jiffies */
+typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file */
+
 /*
  * Hardware stuff
  */
@@ -49,13 +56,13 @@
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.6"
+#define  BKR_VERSION           "0.7"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
 #define  DEFAULT_DMA_CHANNEL   3            /* adjust this for your system */
 #define  DEFAULT_BUFFER_SIZE   65000        /* bytes */
-#define  DEFAULT_TIMEOUT       10           /* seconds (must be > BOR_LENGTH) */
+#define  DEFAULT_TIMEOUT       10           /* seconds */
 #define  DEFAULT_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BKR_MAX_TIMEOUT       120          /* seconds */
 
@@ -74,6 +81,8 @@ struct bkrerrors                            /* Error counts */
 	unsigned int  sector;               /* framing errors since BOR */
 	unsigned int  overrun;              /* buffer overruns since BOR */
 	};
+
+#define  ERRORS_INITIALIZER  ((struct bkrerrors) {0, 0, 0, 0})
 
 /*
  * IOCTL stuff
@@ -145,10 +154,11 @@ struct bkrconfig                            /* Config structure (read/write) */
  * Note KEY_LENGTH and the parity lengths must be multiples of 2.
  *
  * UPCOMING TAPE FORMAT CHANGES
- * -reduced number of parity symbols (12/16 rather than 16/20)
+ * -reduce the number of parity symbols (12 & 16 rather than 16 & 20)
+ * -reduce the number of bits in the block sequence number
  */
 
-#define  TAPE_FORMAT           1            /* tape format version 1 (not yet used!) */
+#define  TAPE_FORMAT           0            /* tape format version (not yet used!) */
 #define  CORR_THRESHOLD(x)     ((x)*8/5)    /* maximum number of bits allowed to be bad (20%) */
 #define  BKR_FILLER            0x33         /* filler for unused space */
 #define  KEY_LENGTH            28           /* bytes (must be a multiple of 2) */
@@ -189,6 +199,10 @@ struct bkr_format
  * Parameter checks.
  */
 
+#if DEFAULT_BUFFER_SIZE >= 65536
+#error "DEFAULT_BUFFER_SIZE too high"
+#endif
+
 #if (BKR_VIDEOMODE(DEFAULT_MODE) != BKR_PAL) && (BKR_VIDEOMODE(DEFAULT_MODE) != BKR_NTSC)
 #error "Bad video mode specifier in DEFAULT_MODE"
 #endif
@@ -208,6 +222,14 @@ struct bkr_format
 
 #if (KEY_LENGTH & 1) != 0
 #error "KEY_LENGTH must be a multiple of 2"
+#endif
+
+#if EOR_BLOCK == 0
+#error "EOR_BLOCK must be non-zero"
+#endif
+
+#if (MIN_UPDATE_FREQ > HZ) || (MAX_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
+#error "One of the *_FREQ parameters is too high"
 #endif
 
 #endif /* _BACKER_H */

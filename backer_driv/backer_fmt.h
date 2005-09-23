@@ -115,6 +115,7 @@
 #define BACKER_FMT_H
 
 #include "rs.h"
+#include "backer.h"
 
 #define KEY_INITIALIZER                                      \
 	{ 0xb9, 0x57, 0xd1, 0x0b, 0xb5, 0xd3, 0x66, 0x07,    \
@@ -169,8 +170,8 @@
 
 int           bkr_set_parms(unsigned int, unsigned int);
 void          bkr_format_reset(void);
-void          bkr_write_bor(unsigned long);
-void          bkr_write_eor(unsigned long);
+int           bkr_write_bor(jiffies_t);
+int           bkr_write_eor(jiffies_t);
 unsigned int  space_in_buffer(void);
 unsigned int  bytes_in_buffer(void);
 
@@ -198,8 +199,8 @@ struct
 	unsigned int  size;             /* block size in bytes */
 	unsigned int  parity;           /* see diagram above */
 	unsigned int  sequence;         /* sequence number */
-	int   (*read)(unsigned long);   /* pointer to appropriate read function */
-	void  (*write)(unsigned long);  /* pointer to appropriate write function */
+	int  (*read)(f_flags_t, jiffies_t);        /* pointer to appropriate read function */
+	int  (*write)(f_flags_t, jiffies_t);       /* pointer to appropriate write function */
 	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
 	} block;
 

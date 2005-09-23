@@ -58,15 +58,15 @@
  * Function prototypes
  */
 
-static int           bkr_block_read_fmt(unsigned long);
-static void          bkr_block_write_fmt(unsigned long);
-static int           bkr_block_read_raw(unsigned long bailout);
-static void          bkr_block_write_raw(unsigned long bailout);
+static int           bkr_block_read_fmt(f_flags_t, jiffies_t);
+static int           bkr_block_write_fmt(f_flags_t, jiffies_t);
+static int           bkr_block_read_raw(f_flags_t, jiffies_t);
+static int           bkr_block_write_raw(f_flags_t, jiffies_t);
 static void          bkr_block_randomize(__u32);
 static unsigned int  bkr_sector_blocks_remaining(void);
-static void          bkr_sector_read(unsigned long);
-static unsigned int  bkr_sector_write(unsigned long);
-static unsigned int  bkr_get_sector(unsigned long);
+static int           bkr_sector_read(f_flags_t, jiffies_t);
+static int           bkr_sector_write(f_flags_t, jiffies_t);
+static int           bkr_get_sector(f_flags_t, jiffies_t);
 
 
 /*
@@ -169,7 +169,7 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 		return(-ENOMEM);
 
 	sector.aux = sector.buffer + sector.header_length + block.size * device.bytes_per_line;
-	sector.footer = sector.buffer + sector.size - sector.footer_length;
+	sector.footer = sector.buffer + sector.footer_offset;
 
 	block.header = (header_t *) (block.buffer + (unsigned int) block.header);
 	block.start = block.buffer + (unsigned int) block.start;
@@ -225,10 +225,7 @@ void bkr_format_reset(void)
 	 * Stats
 	 */
 
-	errors.symbol = 0;
-	errors.block = 0;
-	errors.sector = 0;
-	errors.overrun = 0;
+	errors = ERRORS_INITIALIZER;
 
 	return;
 }
@@ -239,13 +236,6 @@ void bkr_format_reset(void)
  *
  * Return the space and bytes available in the DMA buffer.  Note that
  * space_in_buffer() + bytes_in_buffer() == device.size - 1.
- *
- * These functions are not, strictly speaking, part of the "block" and
- * "sector" layers but should really be associated with the "device" layer.
- * However, since the definition of these functions is universal to all
- * device layers due to the expectations of the code in the formating
- * layers it is reasonable to include them here to save the effort of
- * duplicating them in each implementation.
  */
 
 unsigned int space_in_buffer(void)
@@ -269,6 +259,9 @@ unsigned int bytes_in_buffer(void)
  *                                      BLOCK-LEVEL FORMATING
  *
  * ================================================================================================
+ *
+ * Any errors occuring in the sector or device layers cancel the current
+ * operation and the error code is passed along.
  */
 
 /*
@@ -277,8 +270,9 @@ unsigned int bytes_in_buffer(void)
  * Generate Begining-Of-Record and End-Of-Record marks
  */
 
-void bkr_write_bor(unsigned long bailout)
+int bkr_write_bor(jiffies_t bailout)
 {
+	int  result = 0;
 	unsigned int  i;
 
 	block.offset = block.start;
@@ -286,25 +280,30 @@ void bkr_write_bor(unsigned long bailout)
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= BOR_BLOCK;
 
-	for(i = BLOCKS_PER_SECOND * BOR_LENGTH; i && (jiffies < bailout); i--)
+	for(i = BLOCKS_PER_SECOND * BOR_LENGTH; i && (jiffies < bailout) && !result; i--)
 		{
 		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
-		bkr_block_write_fmt(bailout);
+		result = bkr_block_write_fmt(0, bailout);
 		}
 
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= DATA_BLOCK;
 
-	return;
+	return(result);
 }
 
-void bkr_write_eor(unsigned long bailout)
+int bkr_write_eor(jiffies_t bailout)
 {
+	int  result;
 	unsigned int  i;
 
 	if(block.offset != block.start)
-		bkr_block_write_fmt(bailout);
+		{
+		result = bkr_block_write_fmt(0, bailout);
+		if(result < 0)
+			return(result);
+		}
 
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= EOR_BLOCK;
@@ -314,12 +313,14 @@ void bkr_write_eor(unsigned long bailout)
 		{
 		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
-		bkr_block_write_fmt(bailout);
+		result = bkr_block_write_fmt(0, bailout);
+		if(result < 0)
+			return(result);
 		}
 
-	bkr_device_flush(bailout);
+	result = bkr_device_flush(bailout);
 
-	return;
+	return(result);
 }
 
 /*
@@ -332,54 +333,58 @@ void bkr_write_eor(unsigned long bailout)
  * returned to the calling function.
  */
 
-static int bkr_block_read_fmt(unsigned long bailout)
+static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 {
-	unsigned int  tmp;
+	int  result;
+	static char  need_sequence_reset = 0;
 
 	while(1)
 		{
-		bkr_sector_read(bailout);
+		result = bkr_sector_read(f_flags, bailout);
 
-		if(jiffies >= bailout)
+		if(result < 0)
 			{
-			block.offset = block.start;
-			block.end = block.offset;
-			return(EOR_BLOCK);
+			block.offset = block.end;
+			return(result);
 			}
 
-		tmp = reed_solomon_decode(block.buffer, NULL, 0, &block.rs_format);
+		result = reed_solomon_decode(block.buffer, NULL, 0, &block.rs_format);
 
-		if((int) tmp < 0)
+		if(result < 0)
+			{
 			errors.block++;
-		else if(tmp > errors.symbol)
-			errors.symbol = tmp;
+			block.offset = block.end;
+			need_sequence_reset = 1;
+			return(-ENODATA);
+			}
+
+		if(result > errors.symbol)
+			errors.symbol = result;
 
 		if(BLOCK_TYPE(*block.header) == BOR_BLOCK)
 			{
 			block.sequence = BLOCK_SEQ(*block.header);
-			errors.symbol = 0;
-			errors.block = 0;
-			errors.sector = 0;
-			errors.overrun = 0;
+			errors = ERRORS_INITIALIZER;
 			best_nonmatch = 1000000;
 			worst_match = 0;
 			least_skipped = 1000000;
 			most_skipped = 0;
+			continue;
 			}
-		else
+
+		result = BLOCK_SEQ(BLOCK_SEQ(*block.header) - block.sequence);
+
+		if((result > 1) && (result <= BLOCK_SEQ(-1) >> 1))
 			{
-			tmp = BLOCK_SEQ(*block.header);
-			if(BLOCK_SEQ(tmp - block.sequence) == 1)
-				{
-				block.sequence = tmp;
-				break;
-				}
-			else if(tmp - block.sequence > 1)
-				{
-				errors.overrun++;
-				block.sequence = tmp;
-				break;
-				}
+			errors.overrun++;
+			need_sequence_reset = 1;
+			}
+
+		if((result == 1) || need_sequence_reset)
+			{
+			block.sequence = BLOCK_SEQ(*block.header);
+			need_sequence_reset = 0;
+			break;
 			}
 		}
 
@@ -401,7 +406,7 @@ static int bkr_block_read_fmt(unsigned long bailout)
 	else
 		block.end += block.size;
 
-	return(DATA_BLOCK);
+	return(0);
 }
 
 /*
@@ -412,9 +417,9 @@ static int bkr_block_read_fmt(unsigned long bailout)
  * appropriately, and the sector key is inserted if needed.
  */
 
-static void bkr_block_write_fmt(unsigned long bailout)
+static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 {
-	unsigned int  result;
+	int  result;
 
 	if(block.offset < block.end)
 		{
@@ -425,7 +430,18 @@ static void bkr_block_write_fmt(unsigned long bailout)
 	bkr_block_randomize(block.sequence);
 	reed_solomon_encode(block.buffer, &block.rs_format);
 
-	result = bkr_sector_write(bailout);
+	result = bkr_sector_write(f_flags, bailout);
+
+	if(result < 0)
+		{
+		*block.header &= ~TRUNCATE_BLOCK(-1);
+
+		block.offset = block.start;
+		if(KEY_BLOCK(*block.header))
+			block.offset += KEY_LENGTH;
+
+		return(result);
+		}
 
 	*block.header &= BLOCK_TYPE(-1);
 	*block.header |= block.sequence = BLOCK_SEQ(block.sequence + 1);
@@ -438,7 +454,7 @@ static void bkr_block_write_fmt(unsigned long bailout)
 		block.offset += KEY_LENGTH;
 		}
 
-	return;
+	return(0);
 }
 
 /*
@@ -476,56 +492,58 @@ static void bkr_block_randomize(__u32 num)
  * Read and write raw data, by-passing the sector layer.
  */
 
-static int bkr_block_read_raw(unsigned long bailout)
+static int bkr_block_read_raw(f_flags_t f_flags, jiffies_t bailout)
 {
+	int  result;
 	unsigned int  count;
 
-	bkr_device_read(block.size, bailout);
-
-	if(jiffies >= bailout)
+	result = bkr_device_read(block.size, f_flags, bailout);
+	if(result < 0)
 		{
-		block.offset = block.start;
-		block.end = block.offset;
-		return(EOR_BLOCK);
+		block.offset = block.end;
+		return(result);
 		}
 
 	if(device.tail + block.size >= device.size)
 		{
-		count = device.size - device.head;
+		count = device.size - device.tail;
 		memcpy(block.buffer, device.buffer + device.tail, count);
 		memcpy(block.buffer + count, device.buffer, block.size - count);
-		device.tail += block.size - device.size;
+		device.tail -= device.size;
 		}
 	else
-		{
 		memcpy(block.buffer, device.buffer + device.tail, block.size);
-		device.tail += block.size;
-		}
+	device.tail += block.size;
 	block.offset = block.buffer;
 
-	return(DATA_BLOCK);
+	return(0);
 }
 
-static void bkr_block_write_raw(unsigned long bailout)
+static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 {
+	int  result;
 	unsigned int  count;
 
-	bkr_device_write(block.size, bailout);
+	result = bkr_device_write(block.size, f_flags, bailout);
+	if(result < 0)
+		{
+		block.offset = block.buffer;
+		return(result);
+		}
 
 	if(device.head + block.size >= device.size)
 		{
 		count = device.size - device.head;
 		memcpy(device.buffer + device.head, block.buffer, count);
 		memcpy(device.buffer, block.buffer + count, block.size - count);
-		device.head += block.size - device.size;
+		device.head -= device.size;
 		}
 	else
-		{
 		memcpy(device.buffer + device.head, block.buffer, block.size);
-		device.head += block.size;
-		}
-
+	device.head += block.size;
 	block.offset = block.buffer;
+
+	return(0);
 }
 
 
@@ -535,6 +553,9 @@ static void bkr_block_write_raw(unsigned long bailout)
  *                                     SECTOR-LEVEL FORMATING
  *
  * ================================================================================================
+ *
+ * Any errors occuring at the device level cancel the current operation and
+ * the error code is passed along to the block layer.
  */
 
 /*
@@ -559,14 +580,16 @@ static unsigned int bkr_sector_blocks_remaining(void)
  * of the current sector then we move to the next one.
  */
 
-static void bkr_sector_read(unsigned long bailout)
+static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 {
-	int  count;
+	int  result, count;
 	unsigned char  *location;
 
 	if(sector.block == sector.aux)
 		{
-		bkr_get_sector(bailout);
+		result = bkr_get_sector(f_flags, bailout);
+		if(result < 0)
+			return(result);
 		sector.block = sector.footer + device.bytes_per_line;
 		}
 	else if(sector.block == sector.footer)
@@ -576,7 +599,7 @@ static void bkr_sector_read(unsigned long bailout)
 	for(count = block.size; count;)
 		block.buffer[--count] = *(location -= device.bytes_per_line);
 
-	return;
+	return(0);
 }
 
 
@@ -589,14 +612,16 @@ static void bkr_sector_read(unsigned long bailout)
  * block.
  */
 
-static unsigned int bkr_sector_write(unsigned long bailout)
+static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
 {
-	int  count;
+	int  result, count;
 	unsigned char  *location;
 
 	if(sector.block == sector.aux)
 		{
-		bkr_device_write(sector.size+device.bytes_per_line, bailout);
+		result = bkr_device_write(sector.size+device.bytes_per_line, f_flags, bailout);
+		if(result < 0)
+			return(result);
 
 		memcpy(device.buffer + device.head, sector.buffer, sector.size);
 		device.head += sector.size;
@@ -621,7 +646,7 @@ static unsigned int bkr_sector_write(unsigned long bailout)
 
 	if(sector.block == sector.aux + 1)
 		return(KEY_BLOCK(-1));
-	return(~KEY_BLOCK(-1));
+	return(0);
 }
 
 
@@ -639,13 +664,17 @@ static unsigned int bkr_sector_write(unsigned long bailout)
  * block was found.
  */
 
-static unsigned int bkr_get_sector(unsigned long bailout)
+static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
 {
+	int  result;
 	unsigned int  i, j;
 	unsigned int  anti_corr;
 	unsigned int  skipped = -1;
 
-	bkr_device_read(SECTOR_KEY_OFFSET, bailout);
+	result = bkr_device_read(SECTOR_KEY_OFFSET, f_flags, bailout);
+	if(result < 0)
+		return(result);
+
 	device.tail += SECTOR_KEY_OFFSET - 1;
 	if(device.tail >= device.size)
 		device.tail -= device.size;
@@ -660,7 +689,9 @@ static unsigned int bkr_get_sector(unsigned long bailout)
 			if(anti_corr < best_nonmatch)
 				best_nonmatch = anti_corr;
 
-		bkr_device_read(KEY_LENGTH*device.bytes_per_line, bailout);
+		result = bkr_device_read(KEY_LENGTH*device.bytes_per_line, f_flags, bailout);
+		if(result < 0)
+			break;
 
 		anti_corr = 0;
 		j = KEY_LENGTH;
@@ -681,7 +712,13 @@ static unsigned int bkr_get_sector(unsigned long bailout)
 	if(device.tail >= device.size)
 		device.tail += device.size;
 
-	bkr_device_read(sector.footer_offset, bailout);
+	if(result < 0)
+		return(result);
+
+	result = bkr_device_read(sector.footer_offset, f_flags, bailout);
+	if(result < 0)
+		return(result);
+
 	if(device.tail + sector.footer_offset >= device.size)
 		{
 		i = device.size - device.tail;

@@ -277,13 +277,13 @@ static void generate_poly(struct rs_format_t *rs_format)
  *   7.  The contents of the shift register are the parity symbols.
  */
 
-void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
+void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
 {
 	int    i, j;                    /* general purpose counters */
 	int    b;                       /* feed-back index */
-	gf     feedback;                /* feed-back multiplier */
+	gf   feedback;                  /* feed-back multiplier */
 
-	memset(block, 0, rs_format->parity * sizeof(dtype));
+	memset(block, 0, rs_format->parity * sizeof(data_t));
 
 	/*
 	 * At the start of each iteration of the loop, b is the index of
@@ -369,7 +369,7 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
  * error magnitudes.
  */
 
-int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
+int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
 {
 	int  i, j, k;                   /* general purpose loop indecies */
 	int  deg_lambda, deg_omega;     /* degrees of lambda(x) and omega(x) */

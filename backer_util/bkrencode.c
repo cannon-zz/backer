@@ -191,8 +191,14 @@ int main(int argc, char *argv[])
 		case O_RDONLY:
 		while(!feof(stdin))
 			{
-			if(block.read(1) == EOR_BLOCK)
+			tmp = block.read(0, 1);
+			if(tmp == EOR_BLOCK)
 				break;
+			if(tmp < 0)
+				{
+				fprintf(stderr, sys_errlist[tmp]);
+				exit(tmp);
+				}
 			fwrite(block.offset, 1, block.end - block.offset, stdout);
 			}
 		break;
@@ -202,7 +208,7 @@ int main(int argc, char *argv[])
 		while(!feof(stdin))
 			{
 			block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
-			block.write(1);
+			block.write(0, 1);
 			}
 		bkr_write_eor(1);
 		break;
@@ -220,12 +226,14 @@ int main(int argc, char *argv[])
  * of free space is available starting at device.head.  The flush function
  * function must ensure the buffer has been completely commited to the
  * output stream.
+ *
+ * These functions always return success.
  */
 
-void bkr_device_read(unsigned int length, unsigned long bailout)
+int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 {
 	if(bytes_in_buffer() >= length)
-		return;
+		return(0);
 	length -= bytes_in_buffer();
 
 	if(device.head + length >= device.size)
@@ -236,9 +244,11 @@ void bkr_device_read(unsigned int length, unsigned long bailout)
 		}
 	fread(device.buffer + device.head, 1, length, stdin);
 	device.head += length;
+
+	return(0);
 }
 
-void bkr_device_write(unsigned int length, unsigned long bailout)
+int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 {
 	if(bytes_in_buffer() < length)
 		length = bytes_in_buffer();
@@ -251,10 +261,13 @@ void bkr_device_write(unsigned int length, unsigned long bailout)
 		}
 	fwrite(device.buffer + device.tail, 1, length, stdout);
 	device.tail += length;
+
+	return(0);
 }
 
-void bkr_device_flush(unsigned long bailout)
+int bkr_device_flush(jiffies_t bailout)
 {
-	bkr_device_write(bytes_in_buffer(), bailout);
+	bkr_device_write(bytes_in_buffer(), 0, bailout);
 	fflush(stdout);
+	return(0);
 }

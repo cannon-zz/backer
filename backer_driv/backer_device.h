@@ -28,13 +28,15 @@
 #ifndef BACKER_DEVICE_H
 #define BACKER_DEVICE_H
 
+#include "backer.h"
+
 /*
  * Functions exported to formating layer
  */
 
-void  bkr_device_read(unsigned int, unsigned long);
-void  bkr_device_write(unsigned int, unsigned long);
-void  bkr_device_flush(unsigned long);
+int  bkr_device_read(unsigned int, f_flags_t, jiffies_t);
+int  bkr_device_write(unsigned int, f_flags_t, jiffies_t);
+int  bkr_device_flush(jiffies_t);
 
 
 /*

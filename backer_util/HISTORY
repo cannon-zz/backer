@@ -1,3 +1,8 @@
+1.102 (2001/2/13)
+	Got bkrencode working with the new formating code.
+
+	Moved the documentation for the utilities into a separate file.
+
 1.101 (2001/2/8)
 	Brought the utilities in line with the new access semantics of the
 	driver.

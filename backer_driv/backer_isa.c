@@ -38,19 +38,27 @@
 #include "backer_device.h"
 #include "backer_fmt.h"
 
+/*
+ * Config
+ *
+ * If I decide to submit this thing to the kernel source tree, these are
+ * the things that will be moved to config.h
+ */
+
+#define  CONFIG_BACKER_IOPORT   0x300   /* adjust this for your system */
+#define  CONFIG_BACKER_DMA      3       /* adjust this for your system */
+#define  CONFIG_BACKER_MODE     (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
+#define  CONFIG_BACKER_TIMEOUT  10      /* seconds */
+
 
 /*
  * Parameters and constants
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "1.101"
+#define  BKR_VERSION           "1.102"
 #define  BKR_MAJOR             60       /* adjust this for your system */
-
-#define  BKR_DEF_IOPORT        0x300    /* adjust this for your system */
-#define  BKR_DEF_DMA_CHANNEL   3        /* adjust this for your system */
 #define  BKR_DEF_BUFFER_SIZE   65500    /* bytes */
-#define  BKR_DEF_TIMEOUT       10       /* seconds */
 
 #define  DMA_IO_TO_MEM         0x14     /* demand transfer, inc addr, auto-init */
 #define  DMA_MEM_TO_IO         0x18     /* demand transfer, inc addr, auto-init */
@@ -84,7 +92,7 @@ typedef struct
 int         open(struct inode *, struct file *);
 void        release(struct inode *, struct file *);
 void        stop_release(struct inode *, struct file *);
-static int  start_common(int);
+static int  start_common(direction_t);
 int         start_read(struct inode *, struct file *, char *, int);
 int         start_write(struct inode *, struct file *, const char *, int);
 int         read(struct inode *, struct file *, char *, int);
@@ -103,13 +111,13 @@ static int  get_dreq_status(unsigned int);
  *    mmap, open, release, fsync, fasync, check_media_change, revalidate }
  */
 
-unsigned int  ioport = BKR_DEF_IOPORT;          /* I/O port */
-unsigned int  dma    = BKR_DEF_DMA_CHANNEL;     /* DMA channel */
+unsigned int  ioport = CONFIG_BACKER_IOPORT;    /* I/O port */
+unsigned int  dma    = CONFIG_BACKER_DMA;       /* DMA channel */
 unsigned int  buffer = BKR_DEF_BUFFER_SIZE;     /* allocated DMA buffer size */
 struct bkrconfig  config =                      /* config info */
 	{
-	BKR_DEF_MODE,
-	BKR_DEF_TIMEOUT
+	CONFIG_BACKER_MODE,
+	CONFIG_BACKER_TIMEOUT
 	};
 
 #define STOPPED_OPS                                           \
@@ -126,7 +134,7 @@ struct bkrconfig  config =                      /* config info */
 
 static struct file_operations file_ops[] =      /* file I/O functions */
 	{
-	STOPPED_OPS,
+	STOPPED_OPS,                            /* for order see direction_t */
 	READING_OPS,
 	WRITING_OPS
 	};
@@ -165,7 +173,7 @@ int init_module(void)
 	sector.data = NULL;
 
 	if(config.timeout > BKR_MAX_TIMEOUT)
-		config.timeout = BKR_DEF_TIMEOUT;
+		config.timeout = CONFIG_BACKER_TIMEOUT;
 	config.timeout *= HZ;
 
 	/*
@@ -201,8 +209,8 @@ int init_module(void)
 	 * Driver installed.
 	 */
 
-	printk(KERN_INFO BKR_NAME ": dma=%u ioport=%#x buffer=%u mode=%#06x\n",
-	       dma, ioport, buffer, config.mode);
+	printk(KERN_INFO BKR_NAME ": dma=%u ioport=%#x buffer=%u config=%#04x,%u\n",
+	       dma, ioport, buffer, config.mode, config.timeout/HZ);
 	return(0);
 
 	/*
@@ -405,7 +413,7 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		case BKRIOCGETFORMAT:
 		if(device.direction == STOPPED)
 			bkr_format_reset(STOPPED, config.mode);
-		if(block.size == 0)
+		if(sector.mode == 0)
 			return(-ENXIO);
 		arg.bkrformat.buffer_size = device.size;
 		arg.bkrformat.sector_size = sector.size;
@@ -432,7 +440,7 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
  * write() method is made.
  */
 
-static int start_common(int direction)
+static int start_common(direction_t direction)
 {
 	int  result = 0;
 
@@ -646,7 +654,7 @@ int bkr_device_reset(int mode, unsigned int max_buffer)
  * Start the tape <---> memory data transfer.
  */
 
-int bkr_device_start_transfer(int direction)
+int bkr_device_start_transfer(direction_t direction)
 {
 	unsigned long  flags;
 	jiffies_t  bailout;

@@ -7,9 +7,9 @@
  * access sequence should be as follows:
  *
  *      2.  bkr_format_reset()
- *      3.  bkr_write_bor()                 (only needed when writing)
+ *      3.  bkr_write_bor()                 (only when writing)
  *      4.  block.read() or block.write()   (repeat as needed)
- *      5.  bkr_write_eor()                 (only needed when writing)
+ *      5.  bkr_write_eor()                 (only when writing)
  *
  * Note:  In order to support multiple formats, reading and writing is done
  * via function pointers in the block info structure.  The pointers are set
@@ -117,13 +117,16 @@
 #ifndef BACKER_FMT_H
 #define BACKER_FMT_H
 
+#include "backer_device.h"
 #include "rs.h"
 
 /*
  * Paramters
  */
 
-#define  BKR_FILLER            0x33     /* filler for unused space */
+#define  BKR_LEADER            0x33     /* leader is filled with this */
+#define  BKR_TRAILER           0x33     /* trailer is filled with this */
+#define  BKR_FILLER            0x33     /* unused space is filled with this */
 #define  KEY_LENGTH            28       /* bytes */
 #define  BOR_LENGTH            4        /* seconds */
 #define  EOR_LENGTH            1        /* seconds */
@@ -135,7 +138,7 @@
 	  0xdf, 0xf9, 0xaa, 0x17 }
 
 /*
- * Format structure
+ * Header structures
  */
 
 typedef struct
@@ -146,15 +149,19 @@ typedef struct
 	unsigned char truncate : 1;     /* block is truncated */
 	} block_header_t;
 
-#define  BOR_BLOCK     0                /* block is a BOR marker */
-#define  EOR_BLOCK     1                /* blcok is an EOR marker */
-#define  DATA_BLOCK    2                /* block contains data */
+#define  BOR_BLOCK   0                  /* block is a BOR marker */
+#define  EOR_BLOCK   1                  /* blcok is an EOR marker */
+#define  DATA_BLOCK  2                  /* block contains data */
+
+#define  BLOCK_HEADER_INITIALIZER  ((block_header_t) { DATA_BLOCK, 0, 0, 0 })
 
 typedef struct
 	{
 	unsigned char key[KEY_LENGTH];                  /* sector key */
 	unsigned int  number __attribute__ ((packed));  /* sector number */
 	} sector_header_t;
+
+#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) { KEY_INITIALIZER, 0 });
 
 
 /*
@@ -166,7 +173,7 @@ struct bkrhealth health;                /* health indicators */
 
 struct
 	{
-	unsigned char  *offset;         /* pointer to next byte to be read/written */
+	unsigned char  *offset;         /* next byte to be read/written */
 	unsigned char  *start;          /* see diagram above */
 	unsigned char  *end;            /* see diagram above */
 	block_header_t  header;         /* block header copy */
@@ -180,14 +187,14 @@ struct
 struct
 	{
 	unsigned char  *data;           /* uninterleaved data for current sector */
-	unsigned char  *offset;         /* pointer to current block */
+	unsigned char  *offset;         /* location of current block */
 	unsigned int  interleave;       /* block interleave */
 	unsigned int  size;             /* see diagram above */
 	unsigned int  data_size;        /* see diagram above */
 	unsigned int  leader;           /* see diagram above */
 	unsigned int  trailer;          /* see diagram above */
 	int  oddfield;                  /* current video field is odd */
-	int  need_sequence_reset;       /* we need to reset the sequence counter */
+	int  need_sequence_reset;       /* sector number needs to be reset */
 	int  mode;                      /* as in bkrconfig.mode */
 	sector_header_t  *header_loc;   /* sector header location */
 	sector_header_t  header;        /* sector header copy */
@@ -199,7 +206,7 @@ struct
  * functions are accessed through the pointers in the block data structure.
  */
 
-int           bkr_format_reset(int, int);
+int           bkr_format_reset(direction_t, int);
 int           bkr_write_bor(jiffies_t);
 int           bkr_write_eor(jiffies_t);
 unsigned int  space_in_buffer(void);

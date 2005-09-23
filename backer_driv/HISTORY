@@ -1,3 +1,16 @@
+1.102 (2001/2/13)
+	Formating code now flushes itself after writing an EOR mark.
+
+	The interleave ratio can now be set on a mode-by-mode basis at
+	compile time via the format[] parameter array.  Added support for
+	non-comensurate interleaving (but it wastes space on the tape so
+	it's not recommended).
+
+	Fixed a critical pointer initialization bug in bkr_format_reset()
+	and a few other bugs here and there too.
+
+	Moved the documentation for the utilities into a separate file.
+
 1.101 (2001/2/8)
 	This is another major re-write.  Many changes have been made to the
 	way the driver interacts with the outside world.

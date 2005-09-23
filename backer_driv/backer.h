@@ -41,7 +41,6 @@ typedef  unsigned short  f_flags_t;             /* type for f_flags in struct fi
  * exactly one constant from each group ORed together).
  */
 
-#define  BKR_DEF_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BKR_MAX_TIMEOUT       120              /* seconds */
 
 #ifndef __KERNEL__

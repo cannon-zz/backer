@@ -31,10 +31,12 @@
 #include "backer.h"
 #include "bkr_disp_mode.h"
 
+#define  PROGRAM_NAME  "bkrmode"
+
 int main(int argc, char *argv[])
 {
 	struct bkrconfig  oldconfig, newconfig;
-	char  *fname = "/dev/backer";
+	char  *fname = DEFAULT_DEVICE;
 	int  devfile;
 	int  opt;
 
@@ -42,7 +44,7 @@ int main(int argc, char *argv[])
 	 * Parse command line.
 	 */
 
-	newconfig.mode = BKR_VIDEOMODE(-1) | BKR_DENSITY(-1) | BKR_FORMAT(-1) | BKR_SPEED(-1);
+	newconfig.mode = -1;
 	newconfig.timeout = -1;
 
 	while((opt = getopt(argc, argv, "v:d:m:f:s:t:h")) != EOF)
@@ -123,7 +125,7 @@ int main(int argc, char *argv[])
 	"	-m <formated/raw>  Set the driver to formated or raw mode\n" \
 	"	-s <SP/EP>         Set the driver for a tape speed of SP or EP\n" \
 	"	-t num             Set the timeout to num seconds\n" \
-	"	-f dev             Use the device named dev\n" \
+	"	-f dev             Use the device named dev (default " DEFAULT_DEVICE ")\n" \
 	"If no options are given then the current mode is displayed.\n");
 			exit(-1);
 			}

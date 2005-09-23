@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 {
 	int  i;
 	struct termios oldterm, newterm;
-	char  *device = "/dev/backer";
+	char  *device = DEFAULT_DEVICE;
 	long  size = -1;
 	double  time;
 	int  term, outfile;
@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 			puts(
 	"Usage:  bkrcheck [options] [filname]\n" \
 	"the following options are recognized:\n" \
-	"	-f devname   Use device devname (default /dev/backer)\n" \
+	"	-f devname   Use device devname (default " DEFAULT_DEVICE ")\n" \
 	"	-h           Display usage\n" \
 	"	filename     Calculate tape required for filename (incl. BOR + EOR)");
 			exit(0);

@@ -36,7 +36,7 @@
 #include "bkr_disp_mode.h"
 
 #define  PROGRAM_NAME    "bkrencode"
-#define  DEFAULT_DEVICE  "/dev/backer"
+#define  DEFAULT_MODE    (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BUFFER_SIZE     16384
 
 /*
@@ -60,19 +60,21 @@ unsigned int  got_sigint;
 int main(int argc, char *argv[])
 {
 	int  tmp;
+	direction_t  direction;
 	char  *devname = DEFAULT_DEVICE;
-	struct bkrconfig  config = { BKR_DEF_MODE, 0 };
+	struct bkrconfig  config = { DEFAULT_MODE, 0 };
 
 	/*
 	 * Some setup stuff
 	 */
 
 	sector.data = NULL;
-	device.direction = WRITING;
+	direction = WRITING;
 
 	if((device.buffer = (unsigned char *) malloc(BUFFER_SIZE)) == NULL)
 		{
-		fputs(PROGRAM_NAME ": cannot allocate memory\n", stderr);
+		errno = ENOMEM;
+		perror(PROGRAM_NAME);
 		exit(-1);
 		}
 
@@ -84,7 +86,7 @@ int main(int argc, char *argv[])
 		switch(tmp)
 			{
 			case 'u':
-			device.direction = READING;
+			direction = READING;
 			break;
 
 			case 'a':
@@ -108,7 +110,7 @@ int main(int argc, char *argv[])
 				config.mode |= BKR_LOW;
 				break;
 				default:
-				config.mode |= BKR_DENSITY(BKR_DEF_MODE);
+				config.mode |= BKR_DENSITY(DEFAULT_MODE);
 				break;
 				}
 			break;
@@ -126,7 +128,7 @@ int main(int argc, char *argv[])
 				config.mode |= BKR_EP;
 				break;
 				default:
-				config.mode |= BKR_SPEED(BKR_DEF_MODE);
+				config.mode |= BKR_SPEED(DEFAULT_MODE);
 				break;
 				}
 			break;
@@ -144,7 +146,7 @@ int main(int argc, char *argv[])
 				config.mode |= BKR_PAL;
 				break;
 				default:
-				config.mode |= BKR_VIDEOMODE(BKR_DEF_MODE);
+				config.mode |= BKR_VIDEOMODE(DEFAULT_MODE);
 				break;
 				}
 			break;
@@ -158,8 +160,8 @@ int main(int argc, char *argv[])
 	"	-v <p/n>  Set the video mode to PAL or NTSC\n" \
 	"	-d <h/l>  Set the data rate to high or low\n" \
 	"	-s <s/e>  Set the tape speed to SP or EP\n" \
-	"	-a        Set the format from the current mode of the Backer device\n" \
-	"	-f dev    Use the device named dev for the \"-a\" option\n" \
+	"	-a        Get the format from the current mode of the Backer device\n" \
+	"	-f dev    Use device dev for the \"-a\" option (default " DEFAULT_DEVICE ")\n" \
 	"	-u        Unencode tape data (default is to encode)\n" \
 	"	-h        Display usage message\n", stderr);
 			exit(0);
@@ -187,10 +189,8 @@ int main(int argc, char *argv[])
 	config.mode = (config.mode & ~BKR_FORMAT(-1)) | BKR_FMT;
 
 	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
-	        (device.direction == READING) ? "DECODING" : "ENCODING");
+	        (direction == READING) ? "DECODING" : "ENCODING");
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
-
-	bkr_device_reset(config.mode, BUFFER_SIZE);
 
 	/*
 	 * Grab interrupt signal so we can write a nice EOR before exiting
@@ -205,7 +205,8 @@ int main(int argc, char *argv[])
 	 */
 
 	setbuf(stderr, NULL);
-	switch(device.direction)
+	bkr_device_reset(config.mode, BUFFER_SIZE);
+	switch(direction)
 		{
 		case READING:
 		bkr_format_reset(READING, config.mode);
@@ -247,6 +248,8 @@ int main(int argc, char *argv[])
 			}
 		bkr_write_eor(1);
 		break;
+
+		default:
 		}
 	bkr_device_stop_transfer();
 	fclose(stdout);
@@ -287,12 +290,9 @@ int  bkr_device_reset(int mode, unsigned max_buffer)
 {
 	device.direction = STOPPED;
 
-	device.control = 0;
-
 	switch(BKR_DENSITY(mode))
 		{
 		case BKR_HIGH:
-		device.control |= BIT_HIGH_DENSITY;
 		device.bytes_per_line = BYTES_PER_LINE_HIGH;
 		break;
 
@@ -307,7 +307,6 @@ int  bkr_device_reset(int mode, unsigned max_buffer)
 	switch(BKR_VIDEOMODE(mode))
 		{
 		case BKR_NTSC:
-		device.control |= BIT_NTSC_VIDEO;
 		device.frame_size = device.bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
 		break;
 
@@ -325,7 +324,7 @@ int  bkr_device_reset(int mode, unsigned max_buffer)
 }
 
 
-int  bkr_device_start_transfer(int direction)
+int  bkr_device_start_transfer(direction_t direction)
 {
 	device.direction = direction;
 	device.head = 0;

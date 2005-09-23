@@ -35,9 +35,12 @@
  * Transfer directions
  */
 
-#define  STOPPED  0
-#define  READING  1
-#define  WRITING  2
+typedef enum
+	{
+	STOPPED = 0,
+	READING,
+	WRITING
+	} direction_t;
 
 
 /*
@@ -45,7 +48,7 @@
  */
 
 int   bkr_device_reset(int, unsigned int);
-int   bkr_device_start_transfer(int);
+int   bkr_device_start_transfer(direction_t);
 void  bkr_device_stop_transfer(void);
 int   bkr_device_read(unsigned int, f_flags_t, jiffies_t);
 int   bkr_device_write(unsigned int, f_flags_t, jiffies_t);
@@ -66,7 +69,7 @@ struct
 	unsigned int  frame_size;       /* bytes in a full video frame */
 	jiffies_t  last_update;         /* jiffies at time of last update */
 	unsigned int  owner;            /* owner's user id */
-	unsigned int  direction;        /* current transfer direction */
+	direction_t  direction;         /* current transfer direction */
 	unsigned char control;          /* control byte for card */
 	} device;
 

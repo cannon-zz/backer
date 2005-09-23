@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH Backer 4 "June 24, 2001" "Linux" "Special Files"
+.TH Backer 4 "June 26, 2001" "Linux" "Special Files"
 .SH NAME
 backer \- Backer video tape based storage device.
 .SH INTRODUCTION
@@ -121,8 +121,7 @@ pass-through mode.  One of the formats is intended for short and long play
 (SP/LP) recordings and the other for extended play (EP) recordings while
 the pass-through mode by-passes all data processing within the driver
 allowing the raw tape data stream to be read and written.  The desired
-settings are selected by accessing the appropriate device file but see below
-for important information on EP recordings.
+settings are selected by accessing the appropriate device file.
 .PP
 A data transfer is started by making a call to
 .IR read (2)
@@ -385,16 +384,6 @@ Not used (set to 0).
 .IP \fBMTIOCPOS\fP
 Accepts a pointer to an \fBmtpos\fP structure which is filled with the
 current sector number.
-.IP \fBBKRIOCGETFORMAT\fP
-Accepts a pointer to a \fBbkrformat\fP structure which is filled with
-information describing the format in which the current transfer is occuring
-or, if no transfer is taking place, the format represented by the file on
-which the ioctl is performed (in which case the buffer size field will not
-be accurate).  This is intended for use with external applications which
-wish to interact with the data stream at a ``low level''.  For example,
-.IR bkrcheck (8)
-needs to know how many bytes to generate in order to get a stable test
-pattern on the television screen.
 .PP
 For the definitions of the structures mentioned above or for more
 information generally on these calls see \fBsys/mtio.h\fP and
@@ -511,14 +500,40 @@ The current operation timed out.
 .SS "EP RECORDINGS"
 Since version 3.0 of the driver, the data conditioning and processing
 algorithms used by the driver have been capable of storing and recovering
-data from tapes recorded in EP (extended play) mode.  This is very
-experimental work, however, and generally speaking \fBRECORDING DATA IN EP
-MODE IS NOT RELIABLE!\fP  Feel free to try it out and see what sort of
-performance you get.  I, personally, have been able to store and retrieve
-files this way but I would not (yet) use an EP recording for anything
-important and it might not work at all on different equipment.  On my own
-equipment it seems to work better if my VCR has been ``warmed up'' by being
-used for a while.
+data from tapes recorded in EP (extended play) mode although it was not
+particularly reliable.  With the addition of the
+.IR bkrenhanced (8)
+utility in version 3.1 and a new sector key locator algorithm in version
+3.2, it became possible to reliably record data in EP modes.  Overall, EP
+recordings to not offer significantly higher capacity than LP recordings
+for their longer record times are partially offset by lower data rates.
+If, however, your VCR is like mine and does not have an LP mode then an EP
+recording is your only choice if you want the higher capacity.
+.SS "RECORDING LONGEVITY"
+Backer's don't seem to be able to recover their data from tapes that have
+been sitting for a long time.  My one data point in this matter is a tape
+that I recorded and then tried to recover data from after it had sat on a
+shelf for two years.  For the most part the tape could be recovered except
+for one file which could not be.  The conclusion I have drawn from this is
+that this technology is not well suited to the long-term archival of data.
+It is, however, quite well suited for the use it is meant for:  backing up
+a hard disk.
+.PP
+If you make regular backups then you will probably not need any one tape to
+be readable beyond several months.  Over this period you should find you
+have no problems at all with tape stability since even after several years
+tapes would seem to be mostly recoverable.  Obviously the stability of the
+data on a tape can be improved by doing anything that will reduce the
+likelihood of magnetic domains flipping.  This means keeping the tape away
+from sources of heat and magnetic fields.  Don't leave tapes near furnace
+grates, near radiators, sitting in the sun or even sitting in a room that
+is excessively warmed by the sun.  Do not leave tapes near television sets,
+near stereo speakers, near electric motors, etc..
+.PP
+It is reasonable to expect EP recordings to be less stable than SP/LP
+recordings.  If you do not make frequent backups, it is probably a better
+idea to not use EP recordings until more is known about their relative
+stability.
 .SS "TAPE CARE"
 VCRs are not as gentle with their tapes as data grade transports are
 designed to be.  In particular, VCRs have a tendency to stretch tapes when
@@ -540,11 +555,10 @@ of data in the DMA buffer.  This shifts the video image up one line and
 makes it hard for the driver to stop the card at a proper frame boundary.
 The cause of this is unknown and the tape format is designed to work around
 the problem.
-.PP
-The /proc interface only provides status info for unit 0.
 .SH "SEE ALSO"
 .IR bkrcheck (8),
 .IR bkrencode (8),
+.IR bkrenhanced (8),
 .IR bkrmonitor (8),
 .IR mt (1),
 .IR tar (1)
@@ -570,4 +584,5 @@ _
 2001/04/29	Stable release	2.1
 2001/06/02	Stable release	3.0
 2001/06/24	Stable release	3.1
+2001/06/26	Stable release	3.2
 .TE

@@ -404,11 +404,9 @@ void read_proc(void)
 	int unit;
 
 	fseek(procfile, 0L, SEEK_SET);
-	while(!feof(procfile))
+	while(!feof(procfile) & !ferror(procfile))
 		{
 		fscanf(procfile, "%*17c%u %*s\n", &unit);
-		if(unit != monitor_device)
-			continue;
 		fscanf(procfile, "%*17c%u\n"
 		                 "%*17c%lu\n"
 		                 "%*17c%u\n"
@@ -437,6 +435,8 @@ void read_proc(void)
 		       &proc_data.least_skipped,
 		       &proc_data.most_skipped,
 		       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
+		if(unit == monitor_device)
+			break;
 		}
 
 	return;

@@ -276,18 +276,21 @@ typedef struct
 	unsigned int  modulation_pad;
 	unsigned int  buffer_size;
 	unsigned int  interleave;
-        unsigned int  parity;
+	unsigned int  n;
+	unsigned int  k;
+	unsigned int  data_size;
+	unsigned int  parity_size;
 	} bkr_format_info_t;
 
 #define BKR_FORMAT_INFO_INITIALIZER                                                        \
-	{ { 1012,  32,  28,  952,  45, 21, NRZ,  21,  931,  7,  8 },    /* LOW  NTSC SP */ \
-	  { 1012,  40,  32,  940,  42, 22, GCR, 124,  816, 12,  8 },    /* LOW  NTSC EP */ \
-	  { 1220,  40,  36, 1144,  47, 24, NRZ,  24, 1120,  8,  8 },    /* LOW  PAL  SP */ \
-	  { 1220,  48,  36, 1136,  39, 29, GCR, 152,  984, 12,  8 },    /* LOW  PAL  EP */ \
-	  { 2530,  80,  70, 2380, 119, 20, NRZ,  20, 2360, 20,  8 },    /* HIGH NTSC SP */ \
-	  { 2530, 100,  70, 2360,  81, 29, GCR, 288, 2072, 28,  8 },    /* HIGH NTSC EP */ \
-	  { 3050, 100,  90, 2860, 130, 22, NRZ,  22, 2838, 22,  8 },    /* HIGH PAL  SP */ \
-	  { 3050, 120,  90, 2840,  88, 32, GCR, 344, 2496, 26,  8 } };  /* HIGH PAL  EP */
+	{ { 1012,  32, 28,  952,  45, 21, NRZ,  21,  931,  7, 133, 125,  875,  56 },    /* LOW  NTSC SP */ \
+	  { 1012,  40, 32,  940,  42, 22, GCR, 124,  816, 12,  68,  60,  720,  96 },    /* LOW  NTSC EP */ \
+	  { 1220,  40, 36, 1144,  47, 24, NRZ,  24, 1120,  8, 140, 132, 1056,  64 },    /* LOW  PAL  SP */ \
+	  { 1220,  48, 36, 1136,  39, 29, GCR, 152,  984, 12,  82,  74,  888,  96 },    /* LOW  PAL  EP */ \
+	  { 2530,  80, 70, 2380, 119, 20, NRZ,  20, 2360, 20, 118, 110, 2200, 160 },    /* HIGH NTSC SP */ \
+	  { 2530, 100, 70, 2360,  81, 29, GCR, 288, 2072, 28,  74,  66, 1848, 224 },    /* HIGH NTSC EP */ \
+	  { 3050, 100, 90, 2860, 130, 22, NRZ,  22, 2838, 22, 129, 121, 2662, 176 },    /* HIGH PAL  SP */ \
+	  { 3050, 120, 90, 2840,  88, 32, GCR, 344, 2496, 26,  96,  88, 2288, 208 } }   /* HIGH PAL  EP */
 
 struct bkr_sector_t
 	{
@@ -343,8 +346,7 @@ static inline int bkr_mode_to_format(int mode)
 
 static inline int bkr_sector_capacity(bkr_format_info_t *fmt)
 {
-	return( ((fmt->buffer_size / fmt->interleave) - fmt->parity) *
-	        fmt->interleave - sizeof(bkr_sector_header_t) );
+	return(fmt->data_size - sizeof(bkr_sector_header_t));
 }
 
 

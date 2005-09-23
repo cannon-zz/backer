@@ -61,7 +61,7 @@
  * ========================================================================
  */
 
-#define  MIN_MATCH_LENGTH  6                    /* 6 bytes == 10^14 against */
+#define  MIN_MATCH_FRACTION  30                 /* 30% == 10^14 against */
 
 
 /*
@@ -229,12 +229,10 @@ int bkr_format_reset(bkr_device_t *device, bkr_sector_t *sector)
 		sector->modulation_pad   = fmt->modulation_pad;
 		sector->buffer_size      = fmt->buffer_size;
 		sector->interleave       = fmt->interleave;
-		sector->rs_format.parity = fmt->parity;
-
-		sector->rs_format.n = sector->buffer_size / sector->interleave;
-		sector->rs_format.k = sector->rs_format.n - sector->rs_format.parity;
-		sector->data_size = sector->rs_format.k * sector->interleave;
-		sector->parity_size = sector->rs_format.parity * sector->interleave;
+		sector->rs_format.n      = fmt->n;
+		sector->rs_format.k      = fmt->k;
+		sector->data_size        = fmt->data_size;
+		sector->parity_size      = fmt->parity_size;
 
 		sector->oddfield            = 1;
 		sector->need_sequence_reset = 1;
@@ -426,7 +424,6 @@ static int bkr_sector_read_data(bkr_device_t *device, bkr_sector_t *sector)
 			result = reed_solomon_decode(parity, data, NULL, 0, &sector->rs_format);
 			if(result < 0)
 				{
-				sector->header.number++;
 				if(!sector->found_data)
 					{
 					/* FIXME: potential infinite loop:
@@ -434,9 +431,10 @@ static int bkr_sector_read_data(bkr_device_t *device, bkr_sector_t *sector)
 					 * found and the device buffer
 					 * never empties then we get stuck.
 					 */
-					sector->need_sequence_reset = 0;
+					sector->need_sequence_reset = 1;
 					goto next;
 					}
+				sector->header.number++;
 				sector->errors.block++;
 				return(-ENODATA);
 				}
@@ -468,7 +466,7 @@ static int bkr_sector_read_data(bkr_device_t *device, bkr_sector_t *sector)
 		underflow_detect = 1;
 
 		/*
-		 * Retrieve header and process the sector type.
+		 * Extract header and process the sector type.
 		 */
 
 		sector->header = get_sector_header(sector);
@@ -510,8 +508,8 @@ static int bkr_sector_read_data(bkr_device_t *device, bkr_sector_t *sector)
  * bkr_sector_write_data()
  *
  * Writes the current sector to the DMA buffer and resets for the next one.
- * Returns 0 on success, < 0 on error (on error, a retry can be attempted
- * by simply re-calling this function).
+ * Returns 0 on success, < 0 on error in which case a retry can be
+ * attempted by simply re-calling this function.
  */
 
 static int bkr_sector_write_data(bkr_device_t *device, bkr_sector_t *sector)
@@ -581,7 +579,7 @@ static int bkr_sector_write_data(bkr_device_t *device, bkr_sector_t *sector)
 static inline int bkr_find_key(bkr_device_t *device, bkr_sector_t *sector)
 {
 	int  i, result, skipped;
-	unsigned int  longest, length;
+	unsigned int  fraction;
 	bkr_offset_t  in_off;
 
 	/*
@@ -594,31 +592,27 @@ static inline int bkr_find_key(bkr_device_t *device, bkr_sector_t *sector)
 		if(result < 0)
 			return(result);
 
-		longest = length = 0;
+		fraction = 0;
 		i = sector->key_length;
 		in_off = device->tail + sector->leader + sector->key_length*sector->key_interval-1;
 		do
 			{
 			if(device->buffer[in_off] == key[--i])
-				{
-				length++;
-				if(length > longest)
-					longest = length;
-				}
-			else
-				length = 0;
+				fraction++;
 			in_off -= sector->key_interval;
 			}
 		while(i);
 
-		if(longest >= MIN_MATCH_LENGTH)
+		fraction = 100 * fraction / sector->key_length;
+
+		if(fraction >= MIN_MATCH_FRACTION)
 			break;
-		if(longest > sector->health.best_nonkey)
-			sector->health.best_nonkey = longest;
+		if(fraction > sector->health.best_nonkey)
+			sector->health.best_nonkey = fraction;
 		}
 
-	if(longest < sector->health.worst_key)
-		sector->health.worst_key = longest;
+	if(fraction < sector->health.worst_key)
+		sector->health.worst_key = fraction;
 	if(skipped < sector->health.least_skipped)
 		sector->health.least_skipped = skipped;
 	if(skipped > sector->health.most_skipped)

@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrenhanced 8 "June 24, 2001" "Linux" "Backer"
+.TH bkrenhanced 8 "June 26, 2001" "Linux" "Backer"
 .SH NAME
 bkrenhanced \- Backer enhanced redundancy filter.
 .SH SYNOPSIS

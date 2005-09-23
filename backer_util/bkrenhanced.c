@@ -88,7 +88,7 @@ bkr_format_info_t  format_info[] = BKR_FORMAT_INFO_INITIALIZER;
 int  got_sigint = 0;
 sync_gate_t  io_gate = SYNC_GATE_INITIALIZER;
 unsigned char  *io_buffer[2];
-gf  erasure[PARITY][2];
+gf  erasure[2][PARITY];
 int  num_erase[2] = { 0, 0 };
 int sector_capacity;
 
@@ -99,6 +99,7 @@ rs_format_t  rs_format;
 unsigned char  *group_buffer;
 int  *group_length;
 int  worst_group = 0;
+unsigned long  extra_errors = 0;
 
 
 /*
@@ -292,7 +293,7 @@ int main(int argc, char *argv[])
 
 			if(num_erase[current_buffer] < PARITY)
 				{
-				erasure[num_erase[current_buffer]][current_buffer] = i;
+				erasure[current_buffer][num_erase[current_buffer]] = i;
 				num_erase[current_buffer]++;
 				}
 			memset(io_buffer[current_buffer] + i++ * sector_capacity, 0, sector_capacity);
@@ -358,8 +359,9 @@ int main(int argc, char *argv[])
 
 	if(direction == READING)
 		{
-		fprintf(stderr, PROGRAM_NAME ": Number of lost sectors detected:  %u of %u\n" \
-		                PROGRAM_NAME ": Number of errors in worst block:  %d (%u allowed)\n", lost_sectors, total_sectors, worst_group, PARITY);
+		fprintf(stderr, PROGRAM_NAME ": Number of lost sectors reported:  %u of %u\n" \
+		                PROGRAM_NAME ": Number of errors in worst block:  %d (%u allowed)\n" \
+		                PROGRAM_NAME ": Additional bytes corrected:  %lu\n", lost_sectors, total_sectors, worst_group, PARITY, extra_errors);
 		}
 
 	exit(0);
@@ -388,6 +390,8 @@ void *decoding_write(void *arg)
 {
 	int  i;
 	int  current_buffer = 0;
+	unsigned int  block_number = 0;
+	unsigned long  group_number = 0;
 
 	while(1)
 		{
@@ -409,18 +413,30 @@ void *decoding_write(void *arg)
 		 * Perform error & erasure correction
 		 */
 
+		block_number = 0;
 		parity = group_buffer + group_parity_size - PARITY;
 		data = group_buffer + group_buffer_size - (BLOCK_SIZE - PARITY);
-		while(parity >= group_buffer)
+		for(; parity >= group_buffer;
+		      block_number++, data -= BLOCK_SIZE - PARITY, parity -= PARITY)
 			{
 			i = reed_solomon_decode(parity, data, erasure[current_buffer], num_erase[current_buffer], &rs_format);
+			if(i < 0)
+				{
+				fprintf(stderr, PROGRAM_NAME ": error: group %lu block %u is uncorrectable\n", group_number, block_number);
+				continue;
+				}
+			if(i > num_erase[current_buffer])
+				{
+				fprintf(stderr, PROGRAM_NAME ": warning: %u extra error(s) in group %lu block %u --- adding to erasures\n", i - num_erase[current_buffer], group_number, block_number);
+				extra_errors += i - num_erase[current_buffer];
+				num_erase[current_buffer] = i;
+				}
 			if(i > worst_group)
 				worst_group = i;
-			parity -= PARITY;
-			data -= BLOCK_SIZE - PARITY;
 			}
 
 		fwrite(group_buffer + group_parity_size, 1, *group_length, stdout);
+		group_number++;
 		current_buffer ^= 1;
 		}
 }
@@ -442,27 +458,29 @@ void *encoding_write(void *arg)
 /*
  * sync_gate()
  *
- * Waits for num_to_wait_for threads to enter.  This function is a
- * cancellation point.
+ * Waits for num_to_wait_for threads to enter and then all threads are
+ * restarted.  This function is a cancellation point.
+ *
+ * sync_gate_wait()
+ *
+ * Waits for at least num_to_wait_for threads to enter (not including
+ * itself) and then returns without restarting the threads.
  */
 
 void sync_gate(sync_gate_t *gate, int num_to_wait_for)
 {
-	if(num_to_wait_for <= 1)
-		{
-		pthread_testcancel();
-		return;
-		}
-
 	pthread_mutex_lock(&gate->all_out_mutex);
 	pthread_mutex_lock(&gate->gate_mutex);
 
 	pthread_cond_broadcast(&gate->entered);
 
-	if(++gate->num_in == num_to_wait_for)
+	if(++gate->num_in >= num_to_wait_for)
 		{
 		pthread_cond_broadcast(&gate->all_in);
-		pthread_cond_wait(&gate->all_out, &gate->gate_mutex);
+		if(num_to_wait_for > 1)
+			pthread_cond_wait(&gate->all_out, &gate->gate_mutex);
+		else
+			pthread_testcancel();
 		--gate->num_in;
 		pthread_mutex_unlock(&gate->all_out_mutex);
 		}
@@ -483,7 +501,7 @@ void sync_gate_wait(sync_gate_t *gate, int num_to_wait_for)
 	pthread_mutex_lock(&gate->gate_mutex);
 
 	pthread_mutex_unlock(&gate->all_out_mutex);
-	while(gate->num_in != num_to_wait_for)
+	while(gate->num_in < num_to_wait_for)
 		pthread_cond_wait(&gate->entered, &gate->gate_mutex);
 
 	pthread_mutex_unlock(&gate->gate_mutex);

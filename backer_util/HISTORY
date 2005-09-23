@@ -1,3 +1,20 @@
+3.2 (2001/6/26)
+	Fixed a bug in bkrmonitor that prevented it from properly parsing
+	/proc/driver/backer if there were multiple devices listed.  Also
+	fixed bug that would hang bkrmonitor if the driver was unloaded.
+
+	bkrenhanced had been allowing the erasure location array to be
+	overwritten by the error correction routine.  It doesn't now.  What
+	it was doing might not have been a half bad thing to do though.
+	Hmm...  Ok, put this back the way it was but now bkrenhanced
+	updates the erasure count appropriately.
+
+	Updated stdio_dev.c and bkrencode.c for changes to device layer in
+	kernel code.
+
+	Fixed a critical array index foul-up in bkrenhanced.  Don't know
+	why it even worked at all!
+
 3.1 (2001/6/24)
 	Changed the error exit codes from -1 (255) to 1.
 
@@ -6,7 +23,7 @@
 	however.
 
 	Fixed the way bkrcheck determines the size of a file:  I hadn't
-	known there was such a thing as the stat() function :-).
+	known there was such a thing as the stat() system call :-).
 
 	Brought stdio_dev.c and bkrencode.c in line with the changes to the
 	driver sources caused by the addition of multiple device support.

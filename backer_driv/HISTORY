@@ -1,3 +1,26 @@
+3.2 (2001/6/26)
+	Documentation corrections and updates.
+
+	On single CPU machines, the read() and write() methods have been,
+	essentially, re-entrant safe since version 2.1 so I elliminated the
+	kludgy mechanism for preventing re-entrance.  There can still be
+	problems on SMP machines, though, so locking was added to
+	completely prevent re-entrance in that case.
+
+	New sector key locator algorithm:  require any n symbols to match
+	rather than n in a row.
+
+	Fixed bug that caused autoprobe routine to release any ioports that
+	had been requested by module parameters.  Cleaned the autoprobe
+	code up a bit.
+
+	Removed DMA pulse check from transfer start code since that
+	functionality is handled by device read/write functions and
+	autoprobing.
+
+	Device level stuff now monitors DMA activity via the DMA
+	controller's DREQ bit rather than the Backer hardware's DREQ bit.
+
 3.1 (2001/6/24)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE (EP modes only) ***
 

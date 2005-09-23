@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
 
 	bkr_device_reset(&device, direction);
 	bkr_format_reset(&device, &sector);
-	bkr_device_start_transfer(&device, direction, 0);
+	bkr_device_start_transfer(&device, direction);
 	switch(direction)
 		{
 		case BKR_READING:

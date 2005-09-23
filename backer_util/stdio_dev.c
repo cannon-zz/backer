@@ -78,7 +78,7 @@ int bkr_device_reset(bkr_device_t *device, bkr_state_t direction)
 }
 
 
-int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction, jiffies_t bailout)
+int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction)
 {
 	device->state = direction;
 	device->head = 0;

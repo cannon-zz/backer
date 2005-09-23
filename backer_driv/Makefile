@@ -67,7 +67,7 @@ backer_isa.o : backer_isa.c backer.h backer_device.h backer_fmt.h
 backer_fmt.o : backer_fmt.c backer.h backer_device.h backer_fmt.h rs.h
 rs.o : rs.c rs.h
 
-install:
+install: all
 	install -d -m 0700 $(MODULES_DIR)
 	install -m 0600 backer.o $(MODULES_DIR)
 	depmod -a
@@ -118,7 +118,7 @@ clean:
 realclean: clean
 	rm -f backer.o
 
-load:
+load: all
 	/sbin/insmod backer.o $(INSMODFLAGS)
 	cat /proc/devices
 

@@ -61,7 +61,7 @@
  */
 
 #define  BKR_NAME               "backer"
-#define  BKR_VERSION            "3.1"
+#define  BKR_VERSION            "3.2"
 #define  BKR_MINOR_BASE         0       /* first minor number */
 #define  BKR_PROC_NAME          "driver/"BKR_NAME
 
@@ -563,25 +563,29 @@ static ssize_t start_common(struct file *filp, bkr_state_t direction)
 	spin_lock(&device->lock);
 
 	if(device->state != BKR_STOPPED)
-		{
 		result = -EBUSY;
-		goto done;
+	else
+		{
+		do
+			{
+			pm_access(PRIVATE_PTR(filp)->pm_handle);
+
+			device->mode = PRIVATE_PTR(filp)->mode;
+			bkr_device_reset(device, direction);
+
+			if((result = bkr_format_reset(device, sector)) < 0);
+			else if((result = bkr_device_start_transfer(device, direction)) < 0);
+			else
+				{
+				filp->f_op = &file_ops[direction];
+				break;
+				}
+
+			pm_dev_idle(PRIVATE_PTR(filp)->pm_handle);
+			}
+		while(0);
 		}
 
-	pm_access(PRIVATE_PTR(filp)->pm_handle);
-
-	device->mode = PRIVATE_PTR(filp)->mode;
-	bkr_device_reset(device, direction);
-	if((result = bkr_format_reset(device, sector)) >= 0)
-		if((result = bkr_device_start_transfer(device, direction, jiffies + timeout)) >= 0)
-			{
-			filp->f_op = &file_ops[direction];
-			goto done;
-			}
-
-	pm_dev_idle(PRIVATE_PTR(filp)->pm_handle);
-
-	done:
 	spin_unlock(&device->lock);
 	return(result);
 }
@@ -612,8 +616,9 @@ static ssize_t start_write(struct file *filp, const char *buff, size_t count, lo
 /*
  * read(), write()
  *
- * While inside these functions, file operations for the current descriptor
- * are reset to their "stopped" state to elliminate re-entrance.
+ * These functions allow re-entrance but only because they sleep at a safe
+ * spot.  They are not, generally, re-entrance safe so on SMP machines we
+ * make sure to grab the device lock.
  */
 
 static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
@@ -625,64 +630,64 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 	bkr_device_t *device = PRIVATE_PTR(filp)->device;
 	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
 
-	filp->f_op = &file_ops[BKR_STOPPED];
+	spin_lock(&device->lock);
 
 	if(PRIVATE_PTR(filp)->last_error != 0)
 		{
 		result = PRIVATE_PTR(filp)->last_error;
 		PRIVATE_PTR(filp)->last_error = 0;
-		goto done;
 		}
-
-	bailout = jiffies + timeout;
-	while(1)
+	else
 		{
-		chunk_size = sector->end - sector->offset;
-		if(chunk_size > count)
-			chunk_size = count;
-
-		copy_to_user(buff, sector->offset, chunk_size);
-
-		sector->offset += chunk_size;
-		buff += chunk_size;
-		moved += chunk_size;
-		count -= chunk_size;
-
-		if(count == 0)
-			break;
-
-		result = sector->read(device, sector);
-		if(result == 0)
-			continue;
-		if(result > 0)
+		bailout = jiffies + timeout;
+		while(1)
 			{
-			/* EOF */
-			result = 0;
-			break;
+			chunk_size = sector->end - sector->offset;
+			if(chunk_size > count)
+				chunk_size = count;
+
+			copy_to_user(buff, sector->offset, chunk_size);
+
+			sector->offset += chunk_size;
+			buff += chunk_size;
+			moved += chunk_size;
+			count -= chunk_size;
+
+			if(count == 0)
+				break;
+
+			result = sector->read(device, sector);
+			if(result == 0)
+				continue;
+			if(result > 0)
+				{
+				/* EOF */
+				result = 0;
+				break;
+				}
+			if((result != -EAGAIN) || (filp->f_flags & O_NONBLOCK))
+				break;
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ/MAX_RETRY_FREQ);
+			if(jiffies >= bailout)
+				{
+				result = -ETIMEDOUT;
+				break;
+				}
+			if(signal_pending(current))
+				{
+				result = -EINTR;
+				break;
+				}
 			}
-		if((result != -EAGAIN) || (filp->f_flags & O_NONBLOCK))
-			break;
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(HZ/MAX_RETRY_FREQ);
-		if(jiffies >= bailout)
+		if(moved)
 			{
-			result = -ETIMEDOUT;
-			break;
-			}
-		if(signal_pending(current))
-			{
-			result = -EINTR;
-			break;
+			PRIVATE_PTR(filp)->last_error = result;
+			result = moved;
 			}
 		}
-	if(moved)
-		{
-		PRIVATE_PTR(filp)->last_error = result;
-		result = moved;
-		}
 
-	done:
-	filp->f_op = &file_ops[BKR_READING];
+	spin_unlock(&device->lock);
 	return(result);
 }
 
@@ -695,53 +700,53 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 	bkr_device_t *device = PRIVATE_PTR(filp)->device;
 	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
 
-	filp->f_op = &file_ops[BKR_STOPPED];
+	spin_lock(&device->lock);
 
 	if(PRIVATE_PTR(filp)->last_error != 0)
 		{
 		result = PRIVATE_PTR(filp)->last_error;
 		PRIVATE_PTR(filp)->last_error = 0;
-		goto done;
 		}
-
-	bailout = jiffies + timeout;
-	while(1)
+	else
 		{
-		chunk_size = sector->end - sector->offset;
-		if(chunk_size > count)
-			chunk_size = count;
-
-		copy_from_user(sector->offset, buff, chunk_size);
-
-		sector->offset += chunk_size;
-		buff += chunk_size;
-		moved += chunk_size;
-		count -= chunk_size;
-
-		if(count == 0)
-			break;
-
-		result = sector->write(device, sector);
-		if(result == 0)
-			continue;
-		if((result != -EAGAIN) || (filp->f_flags & O_NONBLOCK))
-			break;
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(HZ/MAX_RETRY_FREQ);
-		if(jiffies >= bailout)
+		bailout = jiffies + timeout;
+		while(1)
 			{
-			result = -ETIMEDOUT;
-			break;
+			chunk_size = sector->end - sector->offset;
+			if(chunk_size > count)
+				chunk_size = count;
+
+			copy_from_user(sector->offset, buff, chunk_size);
+
+			sector->offset += chunk_size;
+			buff += chunk_size;
+			moved += chunk_size;
+			count -= chunk_size;
+
+			if(count == 0)
+				break;
+
+			result = sector->write(device, sector);
+			if(result == 0)
+				continue;
+			if((result != -EAGAIN) || (filp->f_flags & O_NONBLOCK))
+				break;
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ/MAX_RETRY_FREQ);
+			if(jiffies >= bailout)
+				{
+				result = -ETIMEDOUT;
+				break;
+				}
+			}
+		if(moved)
+			{
+			PRIVATE_PTR(filp)->last_error = result;
+			result = moved;
 			}
 		}
-	if(moved)
-		{
-		PRIVATE_PTR(filp)->last_error = result;
-		result = moved;
-		}
 
-	done:
-	filp->f_op = &file_ops[BKR_WRITING];
+	spin_unlock(&device->lock);
 	return(result);
 }
 
@@ -780,7 +785,7 @@ static int bkr_read_proc(char *page, char **start, off_t off, int count, int *eo
 		device = &bkr_device[unit];
 		sector = &bkr_sector[unit];
 
-		pos += sprintf(pos, "Unit:             %u (", unit);
+		pos += sprintf(pos, "Unit            : %u (", unit);
 		switch(device->state)
 			{
 			case BKR_READING:
@@ -803,20 +808,20 @@ static int bkr_read_proc(char *page, char **start, off_t off, int count, int *eo
 			}
 
 		pos += sprintf(pos, ")\n"
-		                    "Current Mode:     %u\n"
-		                    "Sector Number:    %lu\n"
-		                    "Byte Errors:      %u\n"
-		                    "In Worst Block:   %u / %u\n"
-		                    "Recently:         %u\n"
-		                    "Bad Blocks:       %u\n"
-		                    "Framing Errors:   %u\n"
-		                    "Overrun Errors:   %u\n"
-		                    "Underflows:       %u\n"
-		                    "Worst Key:        %u\n"
-		                    "Closest Non-Key:  %u\n"
-		                    "Least Skipped:    %u\n"
-		                    "Most Skipped:     %u\n"
-		                    "DMA Buffer:       %u / %u\n",
+		                    "Current Mode    : %u\n"
+		                    "Sector Number   : %lu\n"
+		                    "Byte Errors     : %u\n"
+		                    "In Worst Block  : %u / %u\n"
+		                    "Recently        : %u\n"
+		                    "Bad Blocks      : %u\n"
+		                    "Framing Errors  : %u\n"
+		                    "Overrun Errors  : %u\n"
+		                    "Underflows      : %u\n"
+		                    "Worst Key       : %u\n"
+		                    "Closest Non-Key : %u\n"
+		                    "Least Skipped   : %u\n"
+		                    "Most Skipped    : %u\n"
+		                    "DMA Buffer      : %u / %u\n",
 		                    device->mode,
 		                    sector->header.number,
 		                    sector->health.total_errors,
@@ -947,16 +952,16 @@ static inline int get_dreq_status(unsigned int dmanr)
 static int update_dma_offset(bkr_device_t *device, bkr_offset_t *offset)
 {
 	unsigned long  flags;
-	jiffies_t  dma_bailout;
+	jiffies_t  bailout;
 
-	dma_bailout = jiffies + HZ/MIN_SYNC_FREQ;
+	bailout = jiffies + HZ/MIN_SYNC_FREQ;
 
-	while(~inb(device->hrdwr.isa.ioport) & BIT_DMA_REQUEST)
-		 if(jiffies >= dma_bailout)
+	while(!get_dreq_status(device->hrdwr.isa.dma))
+		 if(jiffies >= bailout)
 			return(-EIO);
 
-	while(inb(device->hrdwr.isa.ioport) & BIT_DMA_REQUEST)
-		if(jiffies >= dma_bailout)
+	while(get_dreq_status(device->hrdwr.isa.dma))
+		if(jiffies >= bailout)
 			return(-EIO);
 
 	flags = claim_dma_lock();
@@ -1035,10 +1040,9 @@ int bkr_device_reset(bkr_device_t *device, bkr_state_t direction)
  * Start the tape <---> memory data transfer.
  */
 
-int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction, jiffies_t bailout)
+int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction)
 {
 	unsigned long  flags;
-	jiffies_t  short_bailout;
 
 	device->state = direction;
 
@@ -1072,29 +1076,6 @@ int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction, jiffi
 	outb(device->hrdwr.isa.control, device->hrdwr.isa.ioport);
 	device->hrdwr.isa.control |= (direction == BKR_WRITING) ? BIT_TRANSMIT : BIT_RECEIVE;
 	outb(device->hrdwr.isa.control, device->hrdwr.isa.ioport);
-
-	/*
-	 * Do we see a heart beat on the DREQ line?
-	 */
-
-	short_bailout = jiffies + HZ/MIN_SYNC_FREQ;
-	while(get_dreq_status(device->hrdwr.isa.dma) == 0)
-		if(jiffies >= short_bailout)
-			{
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule_timeout(HZ/MIN_UPDATE_FREQ);
-			if(jiffies >= bailout)
-				{
-				bkr_device_stop_transfer(device);
-				return(-EIO);
-				}
-			if(signal_pending(current))
-				{
-				bkr_device_stop_transfer(device);
-				return(-EINTR);
-				}
-			short_bailout = jiffies + HZ/MIN_SYNC_FREQ;
-			}
 
 	/*
 	 * Force a buffer update on the first bkr_device_read/write().
@@ -1246,7 +1227,7 @@ static int __init bkr_isa_probe(bkr_device_t *device, int start)
 {
 	unsigned long  flags;
 	jiffies_t  bailout;
-	unsigned int  i, found;
+	unsigned int  i;
 	unsigned int  ioport;
 	unsigned int  dma[2], num_dma = 0;
 	unsigned int  count = start;
@@ -1267,29 +1248,43 @@ static int __init bkr_isa_probe(bkr_device_t *device, int start)
 
 	/*
 	 * Try starting a transfer with each possible I/O port while
-	 * watching for DREQ activity on DMA channels.
+	 * watching for DREQ activity on DMA channels.  Be sure to skip
+	 * ports we've already got.
 	 */
 
 	for(ioport = 0x300; (ioport <= 0x33c) && (count < BKR_MAX_DEVICES); ioport += 4)
 		{
+		for(i = 0; i < start; i++)
+			if(device[i].hrdwr.isa.ioport == ioport)
+				break;
+		if(i < start)
+			continue;
 		if(request_region(ioport, 1, BKR_NAME) < 0)
 			continue;
 		outb(BIT_DMA_REQUEST, ioport);
 		outb(BIT_DMA_REQUEST | BIT_TRANSMIT, ioport);
-		for(i = found = 0; (i < num_dma) && !found; i++)
-			for(bailout = jiffies + HZ/MIN_SYNC_FREQ; jiffies < bailout; )
-				if((found = get_dreq_status(dma[i])) != 0)
+		for(i = 0, bailout = jiffies + HZ/MIN_SYNC_FREQ; 1; )
+			{
+			if(get_dreq_status(dma[i]))
+				{
+				outb(0, ioport);
+				device[count].hrdwr.type = BKR_ISA_DEVICE;
+				device[count].hrdwr.isa.ioport = ioport;
+				device[count].hrdwr.isa.dma = dma[i];
+				printk(KERN_INFO BKR_NAME ": unit%u: found at dma=%u ioport=%#x\n", count, dma[i], ioport);
+				count++;
+				break;
+				}
+			if(jiffies >= bailout)
+				{
+				if(++i >= num_dma)
 					{
-					outb(0, ioport);
-					device[count].hrdwr.type = BKR_ISA_DEVICE;
-					device[count].hrdwr.isa.ioport = ioport;
-					device[count].hrdwr.isa.dma = dma[i];
-					printk(KERN_INFO BKR_NAME ": unit%u: found at dma=%u ioport=%#x\n", count, dma[i], ioport);
-					count++;
+					release_region(ioport, 1);
 					break;
 					}
-		if(!found)
-			release_region(ioport, 1);
+				bailout = jiffies + HZ/MIN_SYNC_FREQ;
+				}
+			}
 		}
 
 	for(i = 0; i < num_dma; i++)

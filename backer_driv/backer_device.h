@@ -127,7 +127,7 @@ typedef struct
  */
 
 int   bkr_device_reset(bkr_device_t *, bkr_state_t);
-int   bkr_device_start_transfer(bkr_device_t *, bkr_state_t, jiffies_t);
+int   bkr_device_start_transfer(bkr_device_t *, bkr_state_t);
 void  bkr_device_stop_transfer(bkr_device_t *);
 int   bkr_device_read(bkr_device_t *, unsigned int);
 int   bkr_device_write(bkr_device_t *, unsigned int);

@@ -1,0 +1,93 @@
+Name: backer
+Version: @PACKAGE_VERSION@
+Release: @KERNEL_VERSION@-1
+Summary: Backer device driver for Linux
+Copyright: GPL
+Group: System/Drivers
+Source: %{name}-%{version}.tar.gz
+URL: http://linbacker.sourceforge.net
+Packager: Kipp Cannon (kcannon@users.sf.net)
+BuildRoot: %{_tmppath}/%{name}-%{version}-root
+Requires: kernel = @KERNEL_VERSION@
+BuildPrereq: kernel-source >= 2.4.13
+Conflicts: %{name}-devnodes < 2.0
+%description
+Linux device drivers for the Backer video tape backup device manufactured
+by Danmere.  Both the ISA and parallel port versions are supported.
+Install this package if you would like to use your Backer in Linux.
+
+
+%package devnodes
+Summary: Device file inodes for accessing Backer devices
+Group: System/Drivers
+Prefix: /dev
+Requires: %{name} >= 2.0
+%description devnodes
+This package provides device inodes for accessing up to three installed
+Backer devices in Linux.  Install this package if you have a Backer and are
+not using the Linux device filesystem (devfs).  RedHat systems, for
+example, require this package.
+
+Do NOT install this package if you are using devfs!  If you are using
+devfs, device inodes will be created automatically for you.
+
+
+%package utilities
+Summary: Utilities for use with the Backer storage device
+Group: System/Utilities
+Prefix: %{_prefix}
+%description utilities
+Utilities for use with the Backer device driver.  Install this package if
+you have a Backer and would like to have some user-space utilities
+providing additional functionality for the device.
+
+
+%prep
+%setup -q
+
+
+%build
+./configure --prefix=%{_prefix} --mandir=%{_mandir}
+%{__make}
+
+
+%install
+%{__make} install install-devs DESTDIR=${RPM_BUILD_ROOT}
+ln -s backer/0/nhs ${RPM_BUILD_ROOT}/dev/tape
+
+
+%post
+depmod -ae
+cat <<EOF
+Please see %{_docdir}/%{name}-%{version}/INSTALL for instructions on
+post-install configuration of the device driver.
+EOF
+
+
+%postun
+depmod -ae
+cat <<EOF
+Remember to delete any Backer-related entries from /etc/modules.conf and
+/etc/devfsd.conf.
+EOF
+
+
+%clean
+[ ${RPM_BUILD_ROOT} != "/" ] && rm -Rf ${RPM_BUILD_ROOT}
+rm -Rf ${RPM_BUILD_DIR}/%{name}-%{version}
+
+
+%files
+%defattr(-,root,root)
+%doc INSTALL README drivers/EXTRAS
+/lib/modules/*/misc/*
+%doc %{_mandir}/man4/*
+
+%files devnodes
+%defattr(-,root,root)
+/dev/backer
+%config /dev/tape
+
+%files utilities
+%{_bindir}/*
+%doc %{_mandir}/man8/*

@@ -1,0 +1,34 @@
+@SET_MAKE@
+
+.PHONY : all benchmark install install-devs uninstall clean distclean realclean
+.EXPORT_ALL_VARIABLES :
+
+DESTDIR =
+
+all : modules
+	$(MAKE) -C utilities $@
+
+modules modules_install install-devs :
+	$(MAKE) -C drivers $@
+
+install uninstall :
+	$(MAKE) -C drivers $@
+	$(MAKE) -C utilities $@
+
+benchmark :
+	$(MAKE) -C utilities $@
+
+clean :
+	-rm -Rf autom4te*.cache
+	$(MAKE) -C drivers $@
+	$(MAKE) -C utilities $@
+
+distclean : clean
+	-rm -f config.log config.status Makefile
+	$(MAKE) -C drivers $@
+	$(MAKE) -C utilities $@
+
+realclean : distclean
+	-rm -f aclocal.m4 configure backer.spec
+	$(MAKE) -C drivers $@
+	$(MAKE) -C utilities $@

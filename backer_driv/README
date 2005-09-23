@@ -5,6 +5,15 @@
 See INSTALL for instructions on compiling, installing and loading the
 driver.
 
+See the man page (the file named backer.4) for information about the driver
+itself.  You can run a file through man by specifying it on the command
+line eg.
+
+		man ./backer.4
+
+(the ./ is needed so man knows to look for a file by this name rather than
+a man page).
+
 
 TROUBLESHOOTING
 ---------------

@@ -12,7 +12,7 @@
 # will be automatically pasted into the man pages.
 #
 
-DRIVER_DIR   = ../backer-driv-3.0
+DRIVER_DIR   = ../backer-driv-3.1
 PREFIX       = /usr/local
 DEVICE_NAME  = /dev/tape
 DEFAULT_MODE = (BKR_NTSC | BKR_HIGH | BKR_SP)
@@ -28,7 +28,7 @@ CC = gcc
 CFLAGS  = -O3 -Wall -Wstrict-prototypes -I$(DRIVER_DIR)
 GTK_CONFIG  = $(shell which gtk-config)
 
-TARGETS   = bkrcheck bkrencode bkrmonitor
+TARGETS   = bkrcheck bkrencode bkrenhanced bkrmonitor
 MAN_PAGES = $(TARGETS:%=%.8)
 
 .PHONY : all install uninstall clean realclean
@@ -45,12 +45,17 @@ bkrencode : bkrencode.c bkr_disp_mode.c stdio_dev.c \
             $(DRIVER_DIR)/backer_device.h $(DRIVER_DIR)/backer_fmt.h \
             Makefile
 	$(CC) $(CFLAGS) $(BKRFLAGS) -o $@ bkrencode.c bkr_disp_mode.c \
-	    stdio_dev.c $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c
+	   stdio_dev.c $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c
+
+bkrenhanced : bkrenhanced.c $(DRIVER_DIR)/rs.c $(DRIVER_DIR)/rs.h \
+              $(DRIVER_DIR)/backer.h Makefile
+	$(CC) $(CFLAGS) -D_REENTRANT $(BKRFLAGS) -lpthread -o $@ \
+	   bkrenhanced.c $(DRIVER_DIR)/rs.c
 
 bkrmonitor : bkrmonitor.c $(DRIVER_DIR)/backer.h Makefile
 ifneq ($(GTK_CONFIG),)
 	$(CC) $(CFLAGS) $(BKRFLAGS) $(shell $(GTK_CONFIG) --cflags --libs) \
-	    -o $@ bkrmonitor.c
+	   -o $@ bkrmonitor.c
 else
 	@echo
 	@echo "ATTENTION:  GTK+ not found:  bkrmonitor will not be built."

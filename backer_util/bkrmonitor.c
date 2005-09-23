@@ -33,6 +33,7 @@
 #define  DEFAULT_UPDATE  50                     /* milliseconds */
 #define  MIN_UPDATE      20                     /* milliseconds */
 #define  DECAY_INTERVAL  60                     /* sectors */
+#define  MAX_UNITS       3
 
 
 /*
@@ -49,6 +50,7 @@ void  read_proc(void);
 
 FILE  *procfile;
 int  update_interval = -1;
+int  monitor_device;
 struct
 	{
 	GtkWidget  *vmode, *density, *format;
@@ -102,9 +104,13 @@ int main(int argc, char *argv[])
 	 */
 
 	gtk_init(&argc, &argv);
-	while((i = getopt(argc, argv, "ht:")) != EOF)
+	while((i = getopt(argc, argv, "d:ht:")) != EOF)
 		switch(i)
 			{
+			case 'd':
+			monitor_device = atoi(optarg);
+			break;
+
 			case 't':
 			update_interval = atoi(optarg);
 			break;
@@ -114,9 +120,10 @@ int main(int argc, char *argv[])
 			puts(
 	"Usage:  " PROGRAM_NAME " [options]\n" \
 	"the following options are recognized:\n" \
+	"       -d num      Monitor device num (default 0)\n" \
 	"       -t num      Set the update interval to num milliseconds\n" \
 	"       -h          Display usage");
-			exit(-1);
+			exit(1);
 			}
 	if(update_interval < MIN_UPDATE)
 		update_interval = DEFAULT_UPDATE;
@@ -129,7 +136,7 @@ int main(int argc, char *argv[])
 	if(procfile == NULL)
 		{
 		perror(PROGRAM_NAME " : " PROC_ENTRY);
-		exit(-1);
+		exit(1);
 		}
 	read_proc();
 
@@ -394,35 +401,43 @@ gint update_status(gpointer data)
 
 void read_proc(void)
 {
+	int unit;
+
 	fseek(procfile, 0L, SEEK_SET);
-	fscanf(procfile, "%*24c%u\n"
-	                 "%*24c%lu\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u / %u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u\n"
-	                 "%*24c%u / %u\n",
-	       &proc_data.mode,
-	       &proc_data.sector_number,
-	       &proc_data.total_errors,
-	       &proc_data.worst_block, &proc_data.parity,
-	       &proc_data.recent_block,
-	       &proc_data.bad_blocks,
-	       &proc_data.frame_errors,
-	       &proc_data.overrun_errors,
-	       &proc_data.underflow_errors,
-	       &proc_data.worst_key,
-	       &proc_data.best_nonkey,
-	       &proc_data.least_skipped,
-	       &proc_data.most_skipped,
-	       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
+	while(!feof(procfile))
+		{
+		fscanf(procfile, "%*17c%u %*s\n", &unit);
+		if(unit != monitor_device)
+			continue;
+		fscanf(procfile, "%*17c%u\n"
+		                 "%*17c%lu\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u / %u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u\n"
+		                 "%*17c%u / %u\n",
+		       &proc_data.mode,
+		       &proc_data.sector_number,
+		       &proc_data.total_errors,
+		       &proc_data.worst_block, &proc_data.parity,
+		       &proc_data.recent_block,
+		       &proc_data.bad_blocks,
+		       &proc_data.frame_errors,
+		       &proc_data.overrun_errors,
+		       &proc_data.underflow_errors,
+		       &proc_data.worst_key,
+		       &proc_data.best_nonkey,
+		       &proc_data.least_skipped,
+		       &proc_data.most_skipped,
+		       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
+		}
 
 	return;
 }

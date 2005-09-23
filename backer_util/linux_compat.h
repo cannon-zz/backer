@@ -77,9 +77,7 @@ static inline u_int32_t __swab32(u_int32_t x)
  * two.  If unsure, use the second two.
  */
 
-#undef UNALIGNED_ARE_OK
-
-#ifdef UNALIGNED_ARE_OK
+#if 0
 
 #define get_unaligned(ptr) (*(ptr))
 #define put_unaligned(val, ptr) ((void)( *(ptr) = (val) ))
@@ -94,7 +92,7 @@ static inline u_int32_t __swab32(u_int32_t x)
      memcpy((ptr), &__tmp, sizeof(*(ptr)));   \
      (void)0; })
 
-#endif /* UNALIGNED_ARE_OK */
+#endif
 
 
 #endif /* _LINUX_COMPAT_H_ */

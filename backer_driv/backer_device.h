@@ -54,52 +54,42 @@
 #define BACKER_DEVICE_H
 
 #ifdef __KERNEL__
+
 #include <linux/types.h>
+
 #else
+
 #include <sys/types.h>
+typedef int spinlock_t;
+
 #endif
 
 /*
- * The formating layer now assumes this is a power of 2 in order to
- * introduce some much needed code simplifications.  It must match the size
- * of bkr_offset_t defined below.
+ * Types
  */
 
-#define  BKR_BUFFER_SIZE        65536   /* bkr_offset_t is 16 bits */
-
-
-/*
- * Transfer directions.
- */
-
-typedef enum
-	{
-	STOPPED = 0,
-	READING,
-	WRITING,
-	SUSPENDED
-	} bkr_state_t;
-
-
-/*
- * Functions exported by the device layer.
- */
-
-int   bkr_device_reset(int, bkr_state_t);
-int   bkr_device_start_transfer(bkr_state_t, jiffies_t);
-void  bkr_device_stop_transfer(void);
-int   bkr_device_read(unsigned int);
-int   bkr_device_write(unsigned int);
-int   bkr_device_flush(void);
-
-
-/*
- * Data shared with formating and I/O layer.
- */
+typedef  unsigned long  jiffies_t;      /* type for jiffies */
 
 typedef u_int16_t  bkr_offset_t;        /* unsigned 16 bit integer */
 
-struct
+#define  BKR_BUFFER_SIZE  65536         /* must match bkr_offset_t */
+
+typedef enum                            /* hardware state */
+	{
+	BKR_STOPPED = 0,
+	BKR_READING,
+	BKR_WRITING,
+	BKR_SUSPENDED
+	} bkr_state_t;
+
+typedef enum
+	{
+	BKR_ISA_DEVICE = 0,
+	BKR_PARPORT_DEVICE,
+	BKR_STDIO_DEVICE
+	} bkr_device_type_t;
+
+typedef struct
 	{
 	unsigned char *buffer;          /* location of I/O buffer */
 	unsigned int  size;             /* amount of buffer in use */
@@ -107,7 +97,43 @@ struct
 	bkr_offset_t  tail;             /* offset of next read transfer */
 	unsigned int  bytes_per_line;   /* width of one line of video */
 	unsigned int  frame_size;       /* bytes in a full video frame */
+	int  mode;                      /* mode (see backer.h) */
 	bkr_state_t  state;             /* current device state */
-	} device;
+	spinlock_t  lock;               /* spinlock for SMP machines */
+	union
+		{
+		bkr_device_type_t  type;
+#ifdef __KERNEL__
+		struct
+			{
+			bkr_device_type_t  type;
+			jiffies_t  last_update; /* jiffies at time of last update */
+			unsigned char  control; /* control byte for card */
+			unsigned int  ioport;   /* I/O port */
+			unsigned int  dma;      /* DMA channel number */
+			dma_addr_t  phys_addr;  /* DMA buffer's bus address */
+			} isa;
+		struct
+			{
+			bkr_device_type_t  type;
+			} parport;
+#endif
+		} hrdwr;
+	} bkr_device_t;
+
+
+/*
+ * Functions exported by the device layer.
+ */
+
+int   bkr_device_reset(bkr_device_t *, bkr_state_t);
+int   bkr_device_start_transfer(bkr_device_t *, bkr_state_t, jiffies_t);
+void  bkr_device_stop_transfer(bkr_device_t *);
+int   bkr_device_read(bkr_device_t *, unsigned int);
+int   bkr_device_write(bkr_device_t *, unsigned int);
+int   bkr_device_flush(bkr_device_t *);
+unsigned int  space_in_buffer(bkr_device_t *);
+unsigned int  bytes_in_buffer(bkr_device_t *);
+
 
 #endif /* BACKER_DEVICE_H */

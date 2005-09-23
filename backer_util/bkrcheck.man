@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrcheck 8 "June 2, 2001" "Linux" "Backer"
+.TH bkrcheck 8 "June 24, 2001" "Linux" "Backer"
 .SH NAME
 bkrcheck \- Backer device I/O testing tool.
 .SH SYNOPSIS
@@ -53,6 +53,7 @@ Print a usage message.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrencode (8),
+.IR bkrenhanced (8),
 .IR bkrmonitor (8)
 .SH AUTHOR
 Kipp Cannon (kcannon@users.sourceforge.net).

@@ -73,14 +73,14 @@ typedef int gf;
  * Reed-Solomon encoder/decoder format descriptor.
  */
 
-struct  rs_format_t
+typedef struct
 	{
 	int  n;                         /* code word size in symbols */
 	int  k;                         /* data symbols used in code */
 	int  parity;                    /* parity symbols used in code */
 	int  remainder_start;           /* initializer for encoder's remainder index */
 	gf  g[MAX_PARITY+1];            /* generator polynomial g(x) in alpha rep */
-	};
+	} rs_format_t;
 
 /*
  * Reed-Solomon encoder/decoder initialization routine.
@@ -103,7 +103,7 @@ struct  rs_format_t
  *      Pointer to the format structure to initialize.
  */
 
-int   reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_format);
+int reed_solomon_init(unsigned int n, unsigned int k, rs_format_t *rs_format);
 
 /*
  * Reed-Solomon encoder
@@ -113,7 +113,7 @@ int   reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_f
  * enough to contain them.
  */
 
-void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_format);
+void reed_solomon_encode(data_t *parity, data_t *data, rs_format_t *rs_format);
 
 /*
  * Reed-Solomon erasures-and-errors decoding
@@ -134,7 +134,7 @@ void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_fo
  * erasure positions.  It must be large enough to hold n-k elements.
  */
 
-int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, struct rs_format_t *rs_format);
+int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int num_erase, rs_format_t *rs_format);
 
 
 /*

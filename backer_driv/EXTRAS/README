@@ -1,0 +1,22 @@
+Introduction
+============
+
+This directory contains some extra things that users of the device driver
+might find helpful.
+
+
+format.gnumeric
+===============
+
+Since version 3.1 of the driver, the code for calculating the format
+parameters in backer_fmt.c was replaced with a look-up table.
+format.gnumeric is a Gnumeric spread sheet for computing the parameters
+allowing new, consistent, look-up tables to be produced.  This will be
+needed by anyone who wishes to experiment with the tape format.  When the
+spread sheet is loaded, the columns shaded in green are the columns that
+can be adjusted.  The other columns cannot be edited directly because they
+are either computed parameters or are determined by the hardware
+characteristics of the Backer.
+
+When adjusting numbers, the columns to pay particular attention to are the
+``Buffer Size'' and the ``Block n'' columns.  Both must be integers.

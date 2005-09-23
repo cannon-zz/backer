@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH Backer 4 "June 2, 2001" "Linux" "Special Files"
+.TH Backer 4 "June 24, 2001" "Linux" "Special Files"
 .SH NAME
 backer \- Backer video tape based storage device.
 .SH INTRODUCTION
@@ -32,45 +32,76 @@ Under Linux, the Backer hardware is represented by character device files.
 By default they are owned by root:root with mode 0666.  They do not have a
 standard major number assigned to them but the source is distributed with
 60 as the default.  This can be adjusted to the needs of the system.  The
-minor number encodes the video mode, bit density and data format.  In
-alphabetical order, the device names are:
+minor number encodes the unit number, video mode, bit density and data
+format.  In alphabetical order, the device names are:
 .PP
 .TS
 center;
-c c.
-Name	Minor
+c c l.
+Name	Minor	Format
 _
-\fBbacker/\fP\fIn\fP\fB/nhe\fP	0
-\fBbacker/\fP\fIn\fP\fB/nhr\fP	1
-\fBbacker/\fP\fIn\fP\fB/nhs\fP	2
-\fBbacker/\fP\fIn\fP\fB/nle\fP	3
-\fBbacker/\fP\fIn\fP\fB/nlr\fP	4
-\fBbacker/\fP\fIn\fP\fB/nls\fP	5
-\fBbacker/\fP\fIn\fP\fB/phe\fP	6
-\fBbacker/\fP\fIn\fP\fB/phr\fP	7
-\fBbacker/\fP\fIn\fP\fB/phs\fP	8
-\fBbacker/\fP\fIn\fP\fB/ple\fP	9
-\fBbacker/\fP\fIn\fP\fB/plr\fP	10
-\fBbacker/\fP\fIn\fP\fB/pls\fP	11
+\fBbacker/\fP\fIn\fP\fB/nhe\fP	12*\fIn\fP+0	NTSC, High Density, EP
+\fBbacker/\fP\fIn\fP\fB/nhr\fP	12*\fIn\fP+1	NTSC, High Density, Raw
+\fBbacker/\fP\fIn\fP\fB/nhs\fP	12*\fIn\fP+2	NTSC, High Density, SP/LP
+\fBbacker/\fP\fIn\fP\fB/nle\fP	12*\fIn\fP+3	NTSC, Low Density, EP
+\fBbacker/\fP\fIn\fP\fB/nlr\fP	12*\fIn\fP+4	NTSC, Low Density, Raw
+\fBbacker/\fP\fIn\fP\fB/nls\fP	12*\fIn\fP+5	NTSC, Low Density, SP/LP
+\fBbacker/\fP\fIn\fP\fB/phe\fP	12*\fIn\fP+6	PAL, High Density, EP
+\fBbacker/\fP\fIn\fP\fB/phr\fP	12*\fIn\fP+7	PAL, High Density, Raw
+\fBbacker/\fP\fIn\fP\fB/phs\fP	12*\fIn\fP+8	PAL, High Density, SP/LP
+\fBbacker/\fP\fIn\fP\fB/ple\fP	12*\fIn\fP+9	PAL, Low Density, EP
+\fBbacker/\fP\fIn\fP\fB/plr\fP	12*\fIn\fP+10	PAL, Low Density, Raw
+\fBbacker/\fP\fIn\fP\fB/pls\fP	12*\fIn\fP+11	PAL, Low Density, SP/LP
 .TE
 .PP
 When used with the device file system, the device files are created
-automatically when the driver is loaded.  The \fIn\fP in the path of each
-device is the unit number but the driver currently only supports one unit
-so this is always 0.  The three letter file name identifies the video mode
-(NTSC or PAL), the bit density (high or low), and the data format (SP, EP
-or raw) selected by accessing that particular file.
+automatically when the driver is loaded.  The \fIn\fP appearing in the path
+of each device and its minor number is the hardware unit number.  The
+driver currently only supports ISA devices and they are numbered from 0
+starting with devices specified on the
+.IR insmod (1)
+command line in the order in which they are given followed by additional
+devices found by autoprobing in the order of their I/O ports.  The three
+letter file name identifies the video mode, the bit density, and the data
+format selected by accessing that particular file.
 .PP
 Depending on how the driver was compiled, some mode combinations might not
 be available.  To adjust mode availability, see the \fBbkr_modes[]\fP array
 in the sources.
 .PP
-If the backer device is to be used as the default tape device then it is
-helpful to create a symbolic link named \fB/dev/tape\fP that points to the
-preferred mode.
+If a backer device is to be used as the system's default tape device then
+it is helpful to create a symbolic link named \fB/dev/tape\fP that points
+to the preferred unit and mode.
+.SS OPTIONS
+The following parameters can be specified on the
+.IR insmod (1)
+command line when the driver is loaded.
+.TP
+\fBdma=\fInum[,num,...]\fP
+Specify the DMA channels used by ISA cards --- one entry per card.  Early
+versions of the card could only use DMA channel 1.  Later versions could be
+jumpered to channel 1 or 3 and were shipped with a factory default of 3.
+.TP
+\fBioport=\fInum[,num,...]\fP
+Specify the I/O ports used by ISA cards --- one entry per card.  Cards were
+shipped with a factory default setting of 0x300.
+.TP
+\fBtimeout=\fInum\fP
+Specify the operation timeout in seconds.  A reasonable value is 10
+seconds;  it should probably not be set below 4.
+.PP
+If DMA channels and I/O ports are given then the same number of each must
+be given;  extra values for either one will be discarded.  Backer cards can
+share a DMA channel but then only one of the cards can be used at a time.
+It is not possible for ISA cards to share an I/O port and the driver will
+discard duplicate entries.  The command line options are intended to be
+used as a backup in the event that autoprobing does not work on a
+particular system.  To facilitate this, the driver will not probe for the
+presence of Backer devices at the specified locations so if they are not
+correct then I/O operations will fail.
 .SH DESCRIPTION
 .SS GENERAL
-The driver presents the Backer device as a set of character device special
+The driver presents each Backer device as a set of character device special
 files, one for each available format, that try to behave somewhat like tape
 devices.  It is not possible to provide a fully functional tape interface
 because the tape transport itself (your VCR) is not under computer control.
@@ -99,12 +130,12 @@ or
 .IR write (2)
 and stopped by
 .IR close (2).
-For obvious practical reasons, only one transfer can occur at a time so
-once a transfer has been started on a file descriptor, all other reads and
-writes on all other descriptors will fail.  Since the hardware is not full
-duplex, if a device is opened with mode \fBO_RDWR\fP the first read or
-write call selects the transfer direction and any subsequent calls in the
-other direction fail.
+For obvious practical reasons, only one transfer can occur at a time on
+each unit so once a transfer has been started on a file descriptor, all
+other reads and writes on all other descriptors corresponding to the same
+unit will fail.  Since the hardware is not full duplex, if a device is
+opened with mode \fBO_RDWR\fP the first read or write call selects the
+transfer direction and any subsequent calls in the other direction fail.
 .PP
 Data written to and read from the non-raw files is clean, synchronous and
 commensurate:  it will be retrieved error-free (within limits);  the, say,
@@ -126,15 +157,22 @@ higher bandwidth modes.  See
 for more information on using this feature.
 .SS "STATUS INFORMATION"
 Hardware and driver status information is provided through the \fB/proc\fP
-file system by the file \fB /proc/driver/backer\fP.  The meaning of each
-field in this file is given below and indicated after each field heading is
-the transfer direction in which the field is meaningful.  For example, a
-field marked ``reading'' does not have meaning during write operations.
-Between transfers, all fields will retain their values from the end of the
-last transfer.  The information is displayed in unsigned decimal format and
-the meaning of the fields is as follows.
+file system by the file \fB /proc/driver/backer\fP.  For each device in the
+system, a sequence of data fields is displayed starting with the device
+number.
+.PP
+The meaning of each field in this file is given below and indicated after
+each field heading is the transfer direction in which the field is
+meaningful.  For example, a field marked ``reading'' does not have meaning
+during write operations.  Between transfers, all fields will retain their
+values from the end of the last transfer.  The information is displayed in
+unsigned decimal format and the meaning of the fields is as follows.
 .TP
-\fBOperating Mode\fP (reading/writing)
+\fBUnit\fP (reading/writing)
+The unit number to which the following fields apply and that unit's
+operating state:  reading, writing, stopped or suspended.
+.TP
+\fBCurrent Mode\fP (reading/writing)
 A number indicating the video mode, bit density and data format of the
 current transfer.  The masks and flags used to interpret this number can be
 found in the header file, \fBbacker.h\fP.
@@ -144,22 +182,22 @@ The current sector number being transfered to/from user space.  The DMA
 buffer introduces a delay between this and the sector being transfered
 to/from the tape.
 .TP
-\fBTotal Errors Corrected\fP (reading)
+\fBByte Errors\fP (reading)
 Shows the total number of bad symbols that have been successfully corrected
 since the current read operation started.
 .TP
-\fBErrors in Worst Block\fP (reading)
+\fBIn Worst Block\fP (reading)
 The first field shows the largest number of bad symbols that have been
 detected in any one block of data since the current read operation started.
 The second field is the number of Reed-Solomon parity symbols in each
 block.  If the number of errors in a block exceeds 1/2 the number of parity
 symbols then the block cannot be corrected.
 .TP
-\fBRecent Errors\fP (reading)
+\fBRecently\fP (reading)
 Shows the largest number of bad symbols that have been detected in any one
 block of data since the last time the \fB/proc\fP file was read.
 .TP
-\fBUncorrectable Blocks\fP (reading)
+\fBBad Blocks\fP (reading)
 The number of blocks which the Reed-Solomon decoder detected could not be
 corrected.  Not all uncorrectable blocks can be detected (imagine errors
 occurring in such a way that they make the block look like another valid or
@@ -177,7 +215,7 @@ The number of times the sector sequence number skipped in the positive
 direction indicating that the incoming video data filled the DMA buffer and
 the computer could not keep up.
 .TP
-\fBUnderflows Detected\fP (reading)
+\fBUnderflows\fP (reading)
 The number of times the sector sequence number skipped in the negative
 direction indicating repeated sectors on the tape.  This indicates that
 when the data was written, the computer could not generate it as fast as it
@@ -206,7 +244,7 @@ field shows the size of the DMA buffer.  Ideally the buffer will be kept
 completely full whilst writing and completely empty whilst reading.
 .PP
 The worst key and closest non-key must have a comfortable margin between
-them if one is going to be able to identify sector keys in the data stream.
+them if one is going to uniquely identify sector keys in the data stream.
 The difference between the least and most skipped numbers shows the
 variability in the number of lines generated by a VCR during playback.
 .SH EXAMPLES
@@ -219,12 +257,12 @@ To save a file to tape, press Record and type
 cat \fIfilename\fP > /dev/tape
 .sp
 .RE
-When the recording first starts you will see the beginning-of-record (BOR)
-mark which consists of vertical bars and will last for several seconds.
-That will be followed by what, for the most part, is random noise until the
-recording ends with the end-of-record (EOR) mark.  To verify the recording,
-rewind to the beginning (before or during the BOR mark is OK), press Play
-and type
+On your television, when the recording first starts, you will see the
+beginning-of-record (BOR) mark which consists of vertical bars and will
+last for several seconds.  That will be followed by what, for the most
+part, is random noise until the recording ends with the end-of-record (EOR)
+mark.  To verify the recording, rewind to the beginning (before or during
+the BOR mark is OK), press Play and type
 .RS
 .sp
 cmp /dev/tape \fIfilename\fP
@@ -324,11 +362,8 @@ drive and driver status.  The structure's fields are filled as follows:
 Set to \fBMT_ISUNKNOWN\fP.
 .TP
 \fBmt_dsreg\fP (device dependent status bits)
-Set to the current mode.  See \fBbacker.h\fP for information on the flags
-used for this.  The ``current mode'' is the mode in which the current
-transfer is being performed.  This may or may not match the mode
-represented by the file on which this ioctl is performed and is not
-meaningful unless a transfer is actually taking place.
+Set to the mode represented by the device file on which the ioctl is
+performed.  See \fBbacker.h\fP for information on the flags used for this.
 .TP
 \fBmt_gstat\fP (device independent status bits)
 The \fBGMT_ONLINE\fP bit is set.
@@ -352,9 +387,11 @@ Accepts a pointer to an \fBmtpos\fP structure which is filled with the
 current sector number.
 .IP \fBBKRIOCGETFORMAT\fP
 Accepts a pointer to a \fBbkrformat\fP structure which is filled with
-information describing the current format.  This is intended for use with
-external applications which wish to interact with the data stream at a
-``low level''.  For example,
+information describing the format in which the current transfer is occuring
+or, if no transfer is taking place, the format represented by the file on
+which the ioctl is performed (in which case the buffer size field will not
+be accurate).  This is intended for use with external applications which
+wish to interact with the data stream at a ``low level''.  For example,
 .IR bkrcheck (8)
 needs to know how many bytes to generate in order to get a stable test
 pattern on the television screen.
@@ -362,6 +399,11 @@ pattern on the television screen.
 For the definitions of the structures mentioned above or for more
 information generally on these calls see \fBsys/mtio.h\fP and
 \fBbacker.h\fP.
+.PP
+The ``block'' (sector) numbers returned by \fBMTIOCGET\fP and
+\fBMTIOCPOS\fP are numbered from 0 starting with the first sector in the
+recording which is the start of the BOR mark.  The first data sector will
+have some later number.
 .SH ERRORS
 The following is a list of the error codes that can be generated by the
 driver and the reasons for them.
@@ -378,14 +420,11 @@ The current operation would block and non-blocking I/O has been selected.
 .RS +0.5i
 .TP 2
 o
-The I/O port could not be reserved at module load time.
-.TP 2
-o
 An attempt was made to start a transfer or change the direction of a
-transfer while one was already in progress.
+transfer while one was already in progress on the same unit.
 .TP 2
 o
-The DMA channel could not be reserved on I/O.
+The unit's DMA channel could not be reserved on I/O.
 .RE
 .PD 1
 .IP \fBEINTR\fP
@@ -431,9 +470,19 @@ The device is not seekable.
 .RS +0.5i
 .TP 2
 o
-A data block was read from tape and the Reed-Solomon decoder detected that it
-could not correct the errors in it.  The entire sector in which this occurs is
-discarded.
+The current sector is irrecoverable.  Each irrecoverable sector is
+discarded from the data stream and exactly one ENODATA is returned in its
+place.   A sector is labeled as irrecoverable if the Reed-Solomon error
+correction system detects that a block within the sector cannot be
+corrected or if the sector is lost in a buffer overrun.
+.RE
+.PD 1
+.IP \fBENODEV\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+No devices could be found at module load time.
 .RE
 .PD 1
 .IP \fBENOMEM\fP
@@ -441,7 +490,7 @@ discarded.
 .RS +0.5i
 .TP 2
 o
-The DMA buffer could not be allocated at module load time.
+A unit's DMA buffer could not be allocated at module load time.
 .TP 2
 o
 Some internal structures could not be allocated on device open.
@@ -467,25 +516,32 @@ experimental work, however, and generally speaking \fBRECORDING DATA IN EP
 MODE IS NOT RELIABLE!\fP  Feel free to try it out and see what sort of
 performance you get.  I, personally, have been able to store and retrieve
 files this way but I would not (yet) use an EP recording for anything
-important and it might not work at all on different equipment.
+important and it might not work at all on different equipment.  On my own
+equipment it seems to work better if my VCR has been ``warmed up'' by being
+used for a while.
 .SS "TAPE CARE"
 VCRs are not as gentle with their tapes as data grade transports are
 designed to be.  In particular, VCRs have a tendency to stretch tapes when
-starting and stopping them.  To improve the reliability of backups, try to
-avoid as many start/stop cycles for each tape as reasonably possible.
+starting and stopping them as the trasport mechanism unspools and spools
+the tape from the casette.  To improve the reliability of backups, try to
+avoid as many start/stop cycles for each tape as is reasonably possible.
 Especially avoid using the visual search functions of the VCR with any tape
-that will be used to store data.
+that will be used to store data.  I should stress the word ``reasonably'',
+though, since there's no need to be overly cautious --- I have actually
+safely recovered data from visibly damaged tapes.
 .SH FILES
 .IP /dev/backer/*/*
 The device file names.
 .IP /proc/driver/backer
 Driver and hardware status information.
 .SH BUGS
-Sometimes, when writing to tape, the hardware skips the first line of data
-in the DMA buffer.  This shifts the video image up one line and makes it
-hard for the driver to stop the card at a proper frame boundary.  The cause
-of this is unknown and the tape format is designed to work around the
-problem.
+Sometimes, when writing to tape, the Backer hardware skips the first line
+of data in the DMA buffer.  This shifts the video image up one line and
+makes it hard for the driver to stop the card at a proper frame boundary.
+The cause of this is unknown and the tape format is designed to work around
+the problem.
+.PP
+The /proc interface only provides status info for unit 0.
 .SH "SEE ALSO"
 .IR bkrcheck (8),
 .IR bkrencode (8),
@@ -495,8 +551,8 @@ problem.
 .SH AUTHOR
 Kipp Cannon (kcannon@users.sourceforge.net).
 .SH AVAILABILITY
-The most recent stable and developmental versions of the driver and
-utilities can be found on SourceForge at:
+The most recent version of the driver and utilities can be found on
+SourceForge at:
 .RS
 .sp
 http://www.sourceforge.net/projects/linbacker
@@ -510,7 +566,8 @@ Date	Event	Version
 _
 2000/10/10	First public release	0.2
 2001/01/13	First stable release	1.0
-2001/04/12	Second stable release	2.0
-2001/04/29	Third stable release	2.1
-2001/06/02	Fourth stable release	3.0
+2001/04/12	Stable release	2.0
+2001/04/29	Stable release	2.1
+2001/06/02	Stable release	3.0
+2001/06/24	Stable release	3.1
 .TE

@@ -1,3 +1,18 @@
+3.1 (2001/6/24)
+	Changed the error exit codes from -1 (255) to 1.
+
+	Added the bkrenhanced utility as a further step towards making EP
+	recordings as reliable as SP/LP.  This is still experimental,
+	however.
+
+	Fixed the way bkrcheck determines the size of a file:  I hadn't
+	known there was such a thing as the stat() function :-).
+
+	Brought stdio_dev.c and bkrencode.c in line with the changes to the
+	driver sources caused by the addition of multiple device support.
+
+	Updated bkrmonitor for the new proc interface.
+
 3.0 (2001/6/2)
 	Brought stdio_dev.c and bkrencode.c in line with the changes to the
 	driver sources caused by the addition of power management.

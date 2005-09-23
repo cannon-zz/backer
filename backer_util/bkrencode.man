@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrencode 8 "June 2, 2001" "Linux" "Backer"
+.TH bkrencode 8 "June 24, 2001" "Linux" "Backer"
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
@@ -114,6 +114,7 @@ be irrecoverable.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),
+.IR bkrenhanced (8),
 .IR bkrmonitor (8)
 .SH AUTHOR
 Kipp Cannon (kcannon@users.sourceforge.net).

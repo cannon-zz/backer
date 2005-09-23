@@ -26,7 +26,29 @@
 
 #include "backer.h"
 #include "backer_device.h"
-#include "backer_fmt.h"
+
+
+/*
+ * space_in_buffer(), bytes_in_buffer()
+ *
+ * Return the space and bytes available in the device I/O buffer.  Note
+ * that space_in_buffer() + bytes_in_buffer() == device.size - 1.
+ */
+
+unsigned int space_in_buffer(bkr_device_t *device)
+{
+	if(device->tail > device->head)
+		return(device->tail - device->head - 1);
+	return(device->tail+device->size - device->head - 1);
+}
+
+unsigned int bytes_in_buffer(bkr_device_t *device)
+{
+	if(device->tail > device->head)
+		return(device->head+device->size - device->tail);
+	return(device->head - device->tail);
+}
+
 
 /*
  * The read function ensures that the "DMA" buffer is about 1/2 full while
@@ -36,63 +58,63 @@
  * These functions pass on any error codes returned by the file system.
  */
 
-int bkr_device_reset(int mode, bkr_state_t direction)
+int bkr_device_reset(bkr_device_t *device, bkr_state_t direction)
 {
-	if(BKR_DENSITY(mode) == BKR_HIGH)
-		device.bytes_per_line = BYTES_PER_LINE_HIGH;
+	if(BKR_DENSITY(device->mode) == BKR_HIGH)
+		device->bytes_per_line = BYTES_PER_LINE_HIGH;
 	else
-		device.bytes_per_line = BYTES_PER_LINE_LOW;
+		device->bytes_per_line = BYTES_PER_LINE_LOW;
 
-	if(BKR_VIDEOMODE(mode) == BKR_NTSC)
-		device.frame_size = device.bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
+	if(BKR_VIDEOMODE(device->mode) == BKR_NTSC)
+		device->frame_size = device->bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
 	else
-		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
+		device->frame_size = device->bytes_per_line * LINES_PER_FIELD_PAL * 2;
 
-	device.size = BKR_BUFFER_SIZE;
-	if(direction == WRITING)
-		device.size -= BKR_BUFFER_SIZE % device.frame_size;
+	device->size = BKR_BUFFER_SIZE;
+	if(direction == BKR_WRITING)
+		device->size -= BKR_BUFFER_SIZE % device->frame_size;
 
 	return(0);
 }
 
 
-int bkr_device_start_transfer(bkr_state_t direction, jiffies_t bailout)
+int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction, jiffies_t bailout)
 {
-	device.state = direction;
-	device.head = 0;
-	device.tail = 0;
-	memset(device.buffer, 0, BKR_BUFFER_SIZE);
+	device->state = direction;
+	device->head = 0;
+	device->tail = 0;
+	memset(device->buffer, 0, BKR_BUFFER_SIZE);
 	return(0);
 }
 
 
-void bkr_device_stop_transfer(void)
+void bkr_device_stop_transfer(bkr_device_t *device)
 {
-	device.state = STOPPED;
+	device->state = BKR_STOPPED;
 	return;
 }
 
 
-int bkr_device_read(unsigned int length)
+int bkr_device_read(bkr_device_t *device, unsigned int length)
 {
 	int  tmp, desired;
 
-	desired = device.size / 2 - bytes_in_buffer();
+	desired = device->size / 2 - bytes_in_buffer(device);
 	if((int) desired <= 0)
 		return(0);
 
-	if(device.head + desired > device.size)
+	if(device->head + desired > device->size)
 		{
-		tmp = fread(device.buffer + device.head, 1, device.size - device.head, stdin);
-		device.head += tmp;
-		if(device.head != 0)
+		tmp = fread(device->buffer + device->head, 1, device->size - device->head, stdin);
+		device->head += tmp;
+		if(device->head != 0)
 			goto done;
 		desired -= tmp;
 		}
-	device.head += fread(device.buffer + device.head, 1, desired, stdin);
+	device->head += fread(device->buffer + device->head, 1, desired, stdin);
 
 	done:
-	if(bytes_in_buffer() >= length)
+	if(bytes_in_buffer(device) >= length)
 		return(0);
 	if(feof(stdin))
 		return(-EPIPE);
@@ -102,19 +124,19 @@ int bkr_device_read(unsigned int length)
 }
 
 
-int bkr_device_write(unsigned int length)
+int bkr_device_write(bkr_device_t *device, unsigned int length)
 {
-	if(device.tail + bytes_in_buffer() >= device.size)
+	if(device->tail + bytes_in_buffer(device) >= device->size)
 		{
-		device.tail += fwrite(device.buffer + device.tail, 1, device.size - device.tail, stdout);
-		if(device.tail < device.size)
+		device->tail += fwrite(device->buffer + device->tail, 1, device->size - device->tail, stdout);
+		if(device->tail < device->size)
 			goto done;
-		device.tail = 0;
+		device->tail = 0;
 		}
-	device.tail += fwrite(device.buffer + device.tail, 1, bytes_in_buffer(), stdout);
+	device->tail += fwrite(device->buffer + device->tail, 1, bytes_in_buffer(device), stdout);
 
 	done:
-	if(space_in_buffer() >= length)
+	if(space_in_buffer(device) >= length)
 		return(0);
 	if(ferror(stdout))
 		return(-errno);
@@ -122,9 +144,9 @@ int bkr_device_write(unsigned int length)
 }
 
 
-int bkr_device_flush(void)
+int bkr_device_flush(bkr_device_t *device)
 {
-	bkr_device_write(0);
+	bkr_device_write(device, 0);
 	fflush(stdout);
 	return(0);
 }

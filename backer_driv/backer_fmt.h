@@ -11,7 +11,7 @@
  *
  * Do some pre-cleaning.
  *
- *	device.state = STOPPED;
+ *	device.state = BKR_STOPPED;
  *	device.buffer = (allocate a buffer here)
  *	sector.buffer = NULL;
  *
@@ -45,10 +45,10 @@
  *
  * Note:  In order to support multiple formats, reading and writing is done
  * via function pointers in the sector structure.  The pointers are set
- * according to the mode passed to bkr_format_reset().  During formated
- * writes, the first calls to write are directed to the BOR mark generator
- * until after the BOR has been fully written after which calls are
- * directed to the normal sector writer.
+ * according to the mode passed to bkr_format_reset() in the device
+ * structure.  During formated writes, calls to write are directed to the
+ * BOR mark generator until the BOR has been fully written after which
+ * calls are directed to the normal sector writer.
  *
  *
  * Copyright (C) 2000,2001  Kipp C. Cannon
@@ -230,21 +230,66 @@ typedef struct
 
 #endif /* __BYTE_ORDER */
 
+
+/*
+ * Types
+ */
+
 typedef enum
 	{
 	NRZ = 0,                        /* Non-return to zero */
 	GCR                             /* Group code record */
 	} modulation_t;
 
+typedef struct
+	{
+	unsigned int  symbol;
+	unsigned int  recent_symbol;
+	unsigned int  block;
+	unsigned int  frame;
+	unsigned int  overrun;
+	unsigned int  underflow;
+	} bkr_errors_t;
 
-/*
- * Data exported by formating layer
- */
+#define  BKR_ERRORS_INITIALIZER  ((bkr_errors_t) {0, 0, 0, 0, 0, 0})
 
-struct bkrerrors errors;                /* error counts */
-struct bkrhealth health;                /* health indicators */
+typedef struct
+	{
+	unsigned int  total_errors;
+	unsigned int  worst_key;
+	unsigned int  best_nonkey;
+	unsigned int  least_skipped;
+	unsigned int  most_skipped;
+	} bkr_health_t;
 
-struct
+#define  BKR_HEALTH_INITIALIZER  ((bkr_health_t) { 0, ~0, 0, ~0, 0})
+
+typedef struct
+	{
+	unsigned int  video_size;
+        unsigned int  leader;
+        unsigned int  trailer;
+	unsigned int  active_size;
+	unsigned int  key_interval;
+	unsigned int  key_length;
+	modulation_t  modulation;
+	unsigned int  modulation_pad;
+	unsigned int  buffer_size;
+	unsigned int  interleave;
+        unsigned int  parity;
+	} bkr_format_info_t;
+
+#define BKR_FORMAT_INFO_INITIALIZER                                                        \
+	{ { 1012,  32,  28,  952,  45, 21, NRZ,  21,  931,  7,  8 },    /* LOW  NTSC SP */ \
+	  { 1012,  40,  32,  940,  42, 22, GCR, 124,  816, 12,  8 },    /* LOW  NTSC EP */ \
+	  { 1220,  40,  36, 1144,  47, 24, NRZ,  24, 1120,  8,  8 },    /* LOW  PAL  SP */ \
+	  { 1220,  48,  36, 1136,  39, 29, GCR, 152,  984, 12,  8 },    /* LOW  PAL  EP */ \
+	  { 2530,  80,  70, 2380, 119, 20, NRZ,  20, 2360, 20,  8 },    /* HIGH NTSC SP */ \
+	  { 2530, 100,  70, 2360,  81, 29, GCR, 288, 2072, 28,  8 },    /* HIGH NTSC EP */ \
+	  { 3050, 100,  90, 2860, 130, 22, NRZ,  22, 2838, 22,  8 },    /* HIGH PAL  SP */ \
+	  { 3050, 120,  90, 2840,  88, 32, GCR, 344, 2496, 26,  8 } };  /* HIGH PAL  EP */
+
+struct bkr_sector_t
 	{
 	unsigned char  *buffer;         /* uninterleaved data buffer */
 	unsigned char  *offset;         /* location of next byte to be read/written */
@@ -265,23 +310,42 @@ struct
 	int  need_sequence_reset;       /* sector number needs to be reset */
 	int  found_data;                /* have found first valid data sector */
 	int  op_count;                  /* counter for misc operations */
-	int  mode;                      /* current mode (see backer.h) */
 	bkr_sector_header_t  header;    /* sector header copy */
-	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
-	int  (*read)(void);             /* sector read function */
-	int  (*write)(void);            /* sector write function */
-	} sector;
+	rs_format_t  rs_format;         /* Reed-Solomon format description */
+	int  (*read)(bkr_device_t *, struct bkr_sector_t *);   /* read function */
+	int  (*write)(bkr_device_t *, struct bkr_sector_t *);  /* write function */
+	bkr_errors_t  errors;           /* error counts */
+	bkr_health_t  health;           /* health indicators */
+	};
+
+typedef struct bkr_sector_t bkr_sector_t;
 
 
 /*
  * Functions exported by formating layer.  The read and write functions are
- * accessed through the pointers in the sector data structure.
+ * accessed through pointers in the sector data structure.
  */
 
-int           bkr_format_reset(int, bkr_state_t);
-int           bkr_sector_write_eor(void);
-unsigned int  space_in_buffer(void);
-unsigned int  bytes_in_buffer(void);
+int  bkr_format_reset(bkr_device_t *, bkr_sector_t *);
+int  bkr_sector_write_eor(bkr_device_t *, bkr_sector_t *);
+
+
+/*
+ * Macros
+ */
+
+static inline int bkr_mode_to_format(int mode)
+{
+	return(((BKR_DENSITY(mode) == BKR_HIGH)  << 2) |
+	       ((BKR_VIDEOMODE(mode) == BKR_PAL) << 1) |
+	       (BKR_FORMAT(mode) == BKR_EP));
+}
+
+static inline int bkr_sector_capacity(bkr_format_info_t *fmt)
+{
+	return( ((fmt->buffer_size / fmt->interleave) - fmt->parity) *
+	        fmt->interleave - sizeof(bkr_sector_header_t) );
+}
 
 
 #endif /* BACKER_FMT_H */

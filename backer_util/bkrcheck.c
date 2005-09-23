@@ -27,8 +27,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <malloc.h>
+
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
+#include <sys/stat.h>
 #include <sys/termios.h>
 
 #include "backer.h"
@@ -48,10 +50,13 @@ void  gen_raw(void);
  * To hell with it... just make stuff global.
  */
 
-unsigned int  length;
+int  length;
+int  sector_capacity;
+int  bytes_per_line;
 unsigned char  *data;
-struct mtget mtget;
-struct bkrformat format;
+struct mtget  mtget;
+bkr_format_info_t  format_info[] = BKR_FORMAT_INFO_INITIALIZER;
+bkr_format_info_t  *fmt = NULL;
 char  *devname = DEFAULT_DEVICE;
 
 
@@ -59,7 +64,7 @@ int main(int argc, char *argv[])
 {
 	int  i;
 	struct termios oldterm, newterm;
-	long  size = -1;
+	struct stat stats = { st_size : -1 };
 	double  time;
 	int  term, outfile;
 
@@ -88,20 +93,15 @@ int main(int argc, char *argv[])
 	"	-f devname   Use device devname (default " DEFAULT_DEVICE ")\n" \
 	"	-h           Display usage\n" \
 	"	filename     Calculate tape required for filename (incl. BOR + EOR)");
-			exit(-1);
+			exit(1);
 			break;
 			}
 	if(optind < argc)
-		{
-		outfile = open(argv[optind], O_RDONLY);
-		if(outfile < 0)
+		if(stat(argv[optind], &stats) < 0)
 			{
 			perror(PROGRAM_NAME);
-			exit(-1);
+			exit(1);
 			}
-		size = lseek(outfile, 0, SEEK_END);
-		close(outfile);
-		}
 
 	/*
 	 * Open device and retrieve current mode and format
@@ -111,10 +111,27 @@ int main(int argc, char *argv[])
 	if(outfile < 0)
 		{
 		perror(PROGRAM_NAME);
-		exit(-1);
+		exit(1);
 		}
 	ioctl(outfile, MTIOCGET, &mtget);
-	ioctl(outfile, BKRIOCGETFORMAT, &format);
+
+	if(BKR_DENSITY(mtget.mt_dsreg) == BKR_HIGH)
+		bytes_per_line = BYTES_PER_LINE_HIGH;
+	else
+		bytes_per_line = BYTES_PER_LINE_LOW;
+
+	if(BKR_FORMAT(mtget.mt_dsreg) == BKR_RAW)
+		{
+		fmt = &format_info[bkr_mode_to_format((mtget.mt_dsreg & ~BKR_FORMAT(-1)) | BKR_SP)];
+		fmt->video_size *= 2;
+		if(BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC)
+			fmt->video_size += bytes_per_line;
+		}
+	else
+		{
+		fmt = &format_info[bkr_mode_to_format(mtget.mt_dsreg)];
+		sector_capacity = bkr_sector_capacity(fmt);
+		}
 
 	puts("\nCurrent Device Mode:");
 	bkr_display_mode(mtget.mt_dsreg);
@@ -123,17 +140,20 @@ int main(int argc, char *argv[])
 	 * If we are checking a transfer time, do so and quit.
 	 */
 
-	if(size >= 0)
+	if(stats.st_size != -1)
 		{
 		if(BKR_FORMAT(mtget.mt_dsreg) == BKR_RAW)
-			i = format.video_size/2;
+			{
+			i = fmt->video_size/2;
+			time = 0;
+			}
 		else
-			i = format.sector_capacity;
+			{
+			i = sector_capacity;
+			time = BOR_LENGTH + EOR_LENGTH;
+			}
 
-		time = rint((double) size / i / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
-
-		if(BKR_FORMAT(mtget.mt_dsreg) != BKR_RAW)
-			time += BOR_LENGTH + EOR_LENGTH;
+		time += rint((double) stats.st_size / i / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
 
 		printf("\n%s will occupy %dh:", argv[optind], (int) floor(time / 3600.0));
 		time = fmod(time, 3600.0);
@@ -150,7 +170,7 @@ int main(int argc, char *argv[])
 	if((term = open("/dev/tty", O_RDWR)) < 0)
 		{
 		perror(PROGRAM_NAME": /dev/tty");
-		exit(-1);
+		exit(1);
 		}
 	ioctl(term, TCGETS, &oldterm);
 	newterm = oldterm;
@@ -162,16 +182,10 @@ int main(int argc, char *argv[])
 	 * Generate test pattern
 	 */
 
-	switch(BKR_FORMAT(mtget.mt_dsreg))
-		{
-		case BKR_RAW:
+	if(BKR_FORMAT(mtget.mt_dsreg) == BKR_RAW)
 		gen_raw();
-		break;
-
-		default:
+	else
 		gen_formated();
-		break;
-		}
 
 	/*
 	 * Dump data until 'q' is pressed.
@@ -188,6 +202,7 @@ int main(int argc, char *argv[])
 	 * Clean up and quit
 	 */
 
+	puts("Please wait...");
 	ioctl(term, TCSETS, &oldterm);
 	close(term);
 	close(outfile);
@@ -203,24 +218,18 @@ int main(int argc, char *argv[])
 void gen_formated()
 {
 	printf("\nFormat Parameters:\n" \
-	       "\tBuffer usage:      %u bytes (%u frames)\n" \
+	       "\tBuffer capacity:   %u frames\n" \
 	       "\tVideo field size:  %u bytes\n" \
-	       "\tInterleave ratio:  %u:1\n" \
-	       "\tBlock size:        %u bytes\n" \
-	       "\tParity bytes:      %u (max %u errors per block)\n" \
 	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
 	       "\tData rate:         %u bytes/second\n\n" \
 	       "Writing '\\0's to %s...  ",
-	       format.buffer_size, format.buffer_size/format.video_size/2,
-	       format.video_size,
-	       format.interleave,
-	       format.block_size,
-	       format.block_parity, format.block_parity/2,
-	       format.sector_capacity, 100.0*format.sector_capacity/format.video_size,
-	       format.sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50),
+	       65536/fmt->video_size/2,
+	       fmt->video_size,
+	       sector_capacity, 100.0*sector_capacity/fmt->video_size,
+	       sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50),
 	       devname);
 
-	length = format.sector_capacity;
+	length = sector_capacity;
 	data = (unsigned char *) malloc(length);
 	memset(data, 0, length);
 }
@@ -233,20 +242,14 @@ void gen_formated()
 void gen_raw(void)
 {
 	int i, j;
-	int  bytes_per_line;
-
-	if(BKR_DENSITY(mtget.mt_dsreg) == BKR_HIGH)
-		bytes_per_line = BYTES_PER_LINE_HIGH;
-	else
-		bytes_per_line = BYTES_PER_LINE_LOW;
 
 	printf("\nFormat Parameters:\n" \
-	       "\tBuffer usage:      %u bytes (%u frames)\n" \
+	       "\tBuffer capacity:   %u frames\n" \
 	       "\tVideo frame size:  %u bytes\n",
-	       format.buffer_size, format.buffer_size/format.video_size,
-	       format.video_size);
+	       65536/fmt->video_size,
+	       fmt->video_size);
 
-	length = format.video_size;
+	length = fmt->video_size;
 	data = (unsigned char *) malloc(length);
 	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
 		{

@@ -20,11 +20,12 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrmonitor 8 "June 2, 2001" "Linux" "Backer"
+.TH bkrmonitor 8 "June 24, 2001" "Linux" "Backer"
 .SH NAME
 bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
-\fBbkrmonitor\fP [\fB\-h\fP] [\fB\-t\fP \fIinterval\fP]
+\fBbkrmonitor\fP [\fB-d\fP \fIdevice\fP] [\fB\-h\fP]
+[\fB\-t\fP \fIinterval\fP]
 .SH DESCRIPTION
 The \fBbkrmonitor\fP utility is a GTK+ application for monitoring the
 status of the
@@ -37,6 +38,9 @@ See
 for information on the meaning of the information displayed.
 .SS OPTIONS
 .TP
+\fB\-d\fP \fIdevice\fP
+Monitor device number \fIdevice\fP.  The default is 0.
+.TP
 \fB\-h\fP
 Print a usage message.
 .TP
@@ -45,7 +49,8 @@ Set the update interval to \fIinterval\fP milliseconds.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),
-.IR bkrencode (8)
+.IR bkrencode (8),
+.IR bkrenhanced (8)
 .SH BUGS
 The decay of the recent error indicator graph is keyed to increments in the
 sector number so if the number stops changing for some reason then the

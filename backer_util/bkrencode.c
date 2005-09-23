@@ -62,23 +62,25 @@ int main(int argc, char *argv[])
 	int  skip_bad = 0;
 	bkr_state_t  direction;
 	char  *devname = DEFAULT_DEVICE;
-	struct mtget  mtget;
+	struct mtget  mtget = { mt_dsreg : DEFAULT_MODE };
+	bkr_device_t  device;
+	bkr_sector_t  sector;
 
 	/*
 	 * Some setup stuff
 	 */
 
-	device.state = STOPPED;
+	device.state = BKR_STOPPED;
+	device.hrdwr.type = BKR_STDIO_DEVICE;
 	sector.buffer = NULL;
-	direction = WRITING;
-	mtget.mt_dsreg = DEFAULT_MODE;
+	direction = BKR_WRITING;
 
 	device.buffer = (unsigned char *) malloc(BKR_BUFFER_SIZE);
 	if(device.buffer == NULL)
 		{
 		errno = ENOMEM;
 		perror(PROGRAM_NAME);
-		exit(-1);
+		exit(1);
 		}
 
 	/*
@@ -99,7 +101,7 @@ int main(int argc, char *argv[])
 			break;
 
 			case 'u':
-			direction = READING;
+			direction = BKR_READING;
 			break;
 
 			case 'D':
@@ -170,39 +172,39 @@ int main(int argc, char *argv[])
 	"	-h        Display usage message\n" \
 	"	-s        Skip bad sectors\n" \
 	"	-u        Unencode tape data (default is to encode)\n", stderr);
-			exit(-1);
+			exit(1);
 			}
 
 	/*
 	 * Do more setup stuff.
 	 */
 
-	setbuf(stderr, NULL);
 	if(mtget.mt_dsreg == -1)
 		{
 		if((tmp = open(devname, O_RDONLY)) < 0)
 			{
 			perror(PROGRAM_NAME);
-			exit(-1);
+			exit(1);
 			}
 		if(ioctl(tmp, MTIOCGET, &mtget) < 0)
 			{
 			perror(PROGRAM_NAME);
-			exit(-1);
+			exit(1);
 			}
 		close(tmp);
 		}
+	device.mode = mtget.mt_dsreg;
 
 	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
-	        (direction == READING) ? "DECODING" : "ENCODING");
-	bkr_display_mode(mtget.mt_dsreg);
+	        (direction == BKR_READING) ? "DECODING" : "ENCODING");
+	bkr_display_mode(device.mode);
 
 	/*
 	 * Grab interrupt signal so we can write a nice EOR before exiting
 	 * on SIGINT.
 	 */
 
-	if(direction == WRITING)
+	if(direction == BKR_WRITING)
 		{
 		signal(SIGINT, sigint_handler);
 		got_sigint = 0;
@@ -212,16 +214,16 @@ int main(int argc, char *argv[])
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
-	bkr_device_reset(mtget.mt_dsreg, direction);
-	bkr_format_reset(mtget.mt_dsreg, direction);
-	bkr_device_start_transfer(direction, 0);
+	bkr_device_reset(&device, direction);
+	bkr_format_reset(&device, &sector);
+	bkr_device_start_transfer(&device, direction, 0);
 	switch(direction)
 		{
-		case READING:
+		case BKR_READING:
 		while(1)
 			{
 			errno = 0;
-			result = sector.read();
+			result = sector.read(&device, &sector);
 			if(result > 0)
 				{
 				/* FIXME: some hacks to let us concat data streams
@@ -242,7 +244,7 @@ int main(int argc, char *argv[])
 					}
 				errno = -result;
 				perror(PROGRAM_NAME": stdin");
-				exit(-1);
+				exit(1);
 				}
 			while(sector.offset < sector.end)
 				{
@@ -250,14 +252,14 @@ int main(int argc, char *argv[])
 				if(ferror(stdout))
 					{
 					perror(PROGRAM_NAME": stdout");
-					exit(-1);
+					exit(1);
 					}
 				}
 			}
 		fflush(stdout);
 		break;
 
-		case WRITING:
+		case BKR_WRITING:
 		while(!feof(stdin) & !got_sigint)
 			{
 			errno = 0;
@@ -267,29 +269,29 @@ int main(int argc, char *argv[])
 				if(ferror(stdin))
 					{
 					perror(PROGRAM_NAME": stdin");
-					exit(-1);
+					exit(1);
 					}
 				}
-			result = sector.write();
+			result = sector.write(&device, &sector);
 			if(result < 0)
 				{
 				errno = -result;
 				perror(PROGRAM_NAME": stdout");
-				exit(-1);
+				exit(1);
 				}
 			}
 		do
-			result = bkr_sector_write_eor();
+			result = bkr_sector_write_eor(&device, &sector);
 		while(result == -EAGAIN);
 		do
-			result = bkr_device_flush();
+			result = bkr_device_flush(&device);
 		while(result == -EAGAIN);
 		break;
 
 		default:
 		break;
 		}
-	bkr_device_stop_transfer();
+	bkr_device_stop_transfer(&device);
 
 	exit(0);
 }

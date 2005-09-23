@@ -5,8 +5,6 @@
 #    DEV_DIR               : the /dev directory on your system
 #    MAN_DIR               : the man page goes in $(MAN_DIR)/man4/
 #    MODULES_DIR           : install directory for the driver
-#    CONFIG_BACKER_IOPORT  : Backer's I/O port
-#    CONFIG_BACKER_DMA     : Backer's DMA channel
 #    CONFIG_BACKER_TIMEOUT : operation timeout in seconds.
 #
 # Major numbers that your system is probably not using (because they are
@@ -24,8 +22,6 @@ BKR_MAJOR             = 60
 DEV_DIR               = /dev
 MAN_DIR               = /usr/man
 MODULES_DIR           = /lib/modules/misc
-CONFIG_BACKER_IOPORT  = 0x300
-CONFIG_BACKER_DMA     = 3
 CONFIG_BACKER_TIMEOUT = 10
 
 
@@ -54,14 +50,12 @@ CONFIG_BACKER_TIMEOUT = 10
 CC = gcc
 INCLUDE_DIR = /usr/include
 CONFIGFLAGS = -DBKR_MAJOR=$(BKR_MAJOR) \
-              -DCONFIG_BACKER_IOPORT=$(CONFIG_BACKER_IOPORT) \
-              -DCONFIG_BACKER_DMA=$(CONFIG_BACKER_DMA) \
               -DCONFIG_BACKER_TIMEOUT=$(CONFIG_BACKER_TIMEOUT)
 KERNELFLAGS  = -D__KERNEL__ -DMODULE
 KERNELFLAGS += -DMODVERSIONS -include $(INCLUDE_DIR)/linux/modversions.h
 CFLAGS = -O3 -Wall -Wstrict-prototypes -I$(INCLUDE_DIR) $(KERNELFLAGS) $(CONFIGFLAGS)
 LDFLAGS = -r
-INSMODFLAGS = dma=1
+INSMODFLAGS =
 
 .PHONY : all install devs uninstall clean realclean load unload
 

@@ -1,3 +1,58 @@
+3.1 (2001/6/24)
+	*** INCOMPATIBLE TAPE FORMAT CHANGE (EP modes only) ***
+
+	Documentation updates.
+
+	Driver now returns -ENODATA exactly once for each irrecoverable
+	sector i.e. sectors for which error correction fails and sectors
+	that get overrun.  This has allowed for the creation of the
+	bkrenhanced utility.
+
+	With the addition of the bkrenhanced utility, the number of parity
+	bytes used by EP modes has been reduced introducing an incompatible
+	format change.  I chose to not increase the version major number,
+	though, since this only affects EP modes which are to be considered
+	experimental anyway.
+
+	Fixed a harmless (yes, really) buffer overflow in the DMA flushing
+	routine (only overran the part in use, not the buffer's allocated
+	size).
+
+	House-cleaned the header files.
+
+	Replaced tape format parameter computations in backer_fmt.c with a
+	look-up table.  A Gnumeric spread sheet has been included in the
+	(new) EXTRAS directory for computing the parameters and producing
+	valid look-up tables.
+
+	Elliminated the BKRIOCGETFORMAT ioctl.  The information provided by
+	that ioctl is now (mostly) available as a look-up table in
+	bkr_format.h.
+
+	Added autoprobing and made it the default behaviour.  Hardware
+	settings can no longer be compiled in to the driver;  if
+	autoprobing does not work, you must specify parameters on the
+	insmod command line.
+
+	Fixed an I/O port bug:  the port was not being referenced via the
+	device info structure but by the insmod parameter.
+
+	Did some SMP related fixes including fixing a potential power
+	management deadlock.
+
+	Fixed bug in GCR modulation on machines that don't have rolw
+	assembly op-code.
+
+	Added multiple device support.  This has changed the format of the
+	/proc/driver/backer file by now outputing multiple sets of info,
+	one for each device, and with each set having a "Unit" number field
+	added to it.
+
+	Changed the semantics of the MTIOCGET ioctl:  the mt_dsreg field
+	now always indicates the mode represented by the file on which the
+	ioctl is performed rather than the current transfer mode if one is
+	occuring on that device.
+
 3.0 (2001/6/2)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
 

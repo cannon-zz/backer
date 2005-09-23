@@ -156,7 +156,7 @@ static void generate_GF(int p)
  * compute them in polynomial form and convert them afterwards.
  */
 
-static void generate_poly(struct rs_format_t *rs_format)
+static void generate_poly(rs_format_t *rs_format)
 {
 	int  i, j;
 
@@ -214,7 +214,7 @@ static void generate_poly(struct rs_format_t *rs_format)
  *	7.  The remainder forms the parity symbols.
  */
 
-void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_format)
+void reed_solomon_encode(data_t *parity, data_t *data, rs_format_t *rs_format)
 {
 	data_t  *d;                     /* current data symbol */
 	data_t  *b;                     /* current remainder symbol */
@@ -267,7 +267,7 @@ void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_fo
  * error magnitudes.
  */
 
-int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, struct rs_format_t *rs_format)
+int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, rs_format_t *rs_format)
 {
 	int  i, j, k;                   /* general purpose loop indecies */
 	gf  *x, *y;                     /* general purpose loop pointers */
@@ -561,7 +561,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
  * generators are added be sure to edit the range check for MM in rs.h
  */
 
-int reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_format)
+int reed_solomon_init(unsigned int n, unsigned int k, rs_format_t *rs_format)
 {
 	int p =
 #if   (MM == 2)

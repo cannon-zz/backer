@@ -72,13 +72,13 @@
 
 static bkr_format_info_t format_info[] = BKR_FORMAT_INFO_INITIALIZER;
 
-static unsigned char  key[] =                   /* sector key sequence */
+static unsigned char  key[] =           /* sector key sequence */
 	{ 0xd4, 0x7c, 0xb1, 0x93, 0x66, 0x65, 0x6a, 0xb5,
 	  0x63, 0xe4, 0x56, 0x59, 0x6c, 0xbe, 0xc5, 0xca,
 	  0xf4, 0x9c, 0xa3, 0xac, 0x6d, 0xb3, 0xd2, 0x7e,
 	  0x74, 0xa6, 0xe1, 0xa9, 0x5c, 0x9a, 0x4b, 0x5d };
 
-static u_int16_t  gcr_encode[] =                /* 8/9 (0,4/4) GCR modulation */
+static u_int16_t  gcr_encode[] =        /* GCR modulation table */
 	{ 0x089, 0x08a, 0x08b, 0x08c, 0x08d, 0x08e, 0x091, 0x092,
 	  0x093, 0x094, 0x095, 0x096, 0x099, 0x09a, 0x09b, 0x09c,
 	  0x09d, 0x09e, 0x0a2, 0x0a3, 0x0a4, 0x0a5, 0x0a6, 0x0a9,
@@ -112,7 +112,7 @@ static u_int16_t  gcr_encode[] =                /* 8/9 (0,4/4) GCR modulation */
 	  0x1db, 0x1dc, 0x1dd, 0x1de, 0x1e1, 0x1e2, 0x1e3, 0x1e4,
 	  0x1e5, 0x1e6, 0x1e9, 0x1ea, 0x1eb, 0x1ec, 0x1ed, 0x1ee };
 
-static unsigned char gcr_decode[512];           /* GCR demodulation table */
+static unsigned char gcr_decode[512];   /* GCR demodulation table */
 
 
 /*
@@ -356,13 +356,27 @@ static void bkr_sector_randomize(u_int32_t *location, int count, u_int32_t seed)
 		history[index] = seed;
 		}
 
-	for(count = (count+3) >> 2; count; count--)
+	/* FIXME: switch to ">= 0" version for 4.0 */
+#if 0
+	for(count = (count-1) >> 2; count >= 0; count--)
 		{
 		seed = 1664525 * seed + 1013904223;
 		index = seed >> 30;
 		location[count] ^= __cpu_to_le32(history[index]);
 		history[index] = seed;
 		}
+#else
+	seed = 1664525 * seed + 1013904223;
+	index = seed >> 30;
+	history[index] = seed;
+	for(count = (count-1) >> 2; count; count--)
+		{
+		seed = 1664525 * seed + 1013904223;
+		index = seed >> 30;
+		location[count] ^= __cpu_to_le32(history[index]);
+		history[index] = seed;
+		}
+#endif
 }
 
 

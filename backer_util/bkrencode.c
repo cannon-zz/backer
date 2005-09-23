@@ -59,7 +59,7 @@ unsigned int  got_sigint;
 int main(int argc, char *argv[])
 {
 	int  tmp, result;
-	int  skip_bad = 0;
+	int  skip_bad = 0, dump_status = 0;
 	bkr_state_t  direction;
 	char  *devname = DEFAULT_DEVICE;
 	struct mtget  mtget = { mt_dsreg : DEFAULT_MODE };
@@ -71,7 +71,6 @@ int main(int argc, char *argv[])
 	 */
 
 	device.state = BKR_STOPPED;
-	device.hrdwr.type = BKR_STDIO_DEVICE;
 	sector.buffer = NULL;
 	direction = BKR_WRITING;
 
@@ -90,6 +89,10 @@ int main(int argc, char *argv[])
 	while((result = getopt(argc, argv, "D:F:f::hsuV:")) != EOF)
 		switch(result)
 			{
+			case 'd':
+			dump_status = 1;
+			break;
+
 			case 'f':
 			mtget.mt_dsreg = -1;
 			if(optarg != NULL)
@@ -167,6 +170,9 @@ int main(int argc, char *argv[])
 	"	-D <h/l>  Set the data rate to high or low\n" \
 	"	-F <s/e>  Set the data format to SP or EP\n" \
 	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
+	/*
+	"	-d        Dump status info to stderr (unencoding only)\n" \
+	*/
 	"	-f [dev]  Get the format to use from the Backer device dev\n" \
 	"                  (default " DEFAULT_DEVICE ")\n" \
 	"	-h        Display usage message\n" \
@@ -195,9 +201,12 @@ int main(int argc, char *argv[])
 		}
 	device.mode = mtget.mt_dsreg;
 
-	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
-	        (direction == BKR_READING) ? "DECODING" : "ENCODING");
-	bkr_display_mode(device.mode);
+	if(!dump_status)
+		{
+		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
+		        (direction == BKR_READING) ? "DECODING" : "ENCODING");
+		bkr_display_mode(device.mode);
+		}
 
 	/*
 	 * Grab interrupt signal so we can write a nice EOR before exiting
@@ -226,12 +235,41 @@ int main(int argc, char *argv[])
 			result = sector.read(&device, &sector);
 			if(result > 0)
 				{
-				/* FIXME: some hacks to let us concat data streams
-				sector.need_sequence_reset = 1;
-				sector.found_data = 0;
-				continue;
-				*/
+				/* EOF */
 				break;
+				}
+			if(dump_status)
+				{
+				fprintf(stderr, "Unit            : 0 (reading)\n"
+				                "Current Mode    : %u\n"
+				                "Sector Number   : %u\n"
+				                "Byte Errors     : %u\n"
+				                "In Worst Block  : %u / %u\n"
+				                "Recently        : %u\n"
+				                "Bad Blocks      : %u\n"
+				                "Framing Errors  : %u\n"
+				                "Overrun Errors  : %u\n"
+				                "Underflows      : %u\n"
+				                "Worst Key       : %u\n"
+				                "Closest Non-Key : %u\n"
+				                "Least Skipped   : %u\n"
+				                "Most Skipped    : %u\n"
+				                "DMA Buffer      : %u / %u\n",
+				                device.mode,
+				                sector.header.number,
+				                sector.health.total_errors,
+				                sector.errors.symbol, sector.rs_format.parity,
+				                sector.errors.recent_symbol,
+				                sector.errors.block,
+				                sector.errors.frame,
+				                sector.errors.overrun,
+				                sector.errors.underflow,
+				                sector.health.worst_key,
+				                sector.health.best_nonkey,
+				                sector.health.least_skipped,
+				                sector.health.most_skipped,
+				                bytes_in_buffer(&device), device.size);
+				sector.errors.recent_symbol = 0;
 				}
 			if(result < 0)
 				{

@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrcheck 8 "June 26, 2001" "Linux" "Backer"
+.TH bkrcheck 8 "July 5, 2001" "Linux" "Backer"
 .SH NAME
 bkrcheck \- Backer device I/O testing tool.
 .SH SYNOPSIS
@@ -34,8 +34,9 @@ file name is given then \fBbkrcheck\fP computes the length of tape required
 to store the file using the format of one of the device files.  In both
 cases, a particular device file can be specified with the \fB-f\fP option.
 .PP
-When computing the length of tape, the mode can be retrieved from
-a backer device even if a transfer is in progress as the format retrieval
+The tape length computation can be performed irregardless of whether or not
+a data transfer is in progress on the specified device file since the
+format retrieval
 .IR ioctl (2)
 does not interfere with tape I/O.
 .SS OPTIONS

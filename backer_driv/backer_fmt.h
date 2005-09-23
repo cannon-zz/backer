@@ -235,12 +235,6 @@ typedef struct
  * Types
  */
 
-typedef enum
-	{
-	NRZ = 0,                        /* Non-return to zero */
-	GCR                             /* Group code record */
-	} modulation_t;
-
 typedef struct
 	{
 	unsigned int  symbol;
@@ -263,6 +257,12 @@ typedef struct
 	} bkr_health_t;
 
 #define  BKR_HEALTH_INITIALIZER  ((bkr_health_t) { 0, ~0, 0, ~0, 0})
+
+typedef enum
+	{
+	NRZ = 0,                        /* Non-return to zero */
+	GCR                             /* Group code record */
+	} modulation_t;
 
 typedef struct
 	{
@@ -300,10 +300,10 @@ struct bkr_sector_t
 	unsigned int  interleave;       /* block interleave */
 	unsigned int  key_interval;     /* key byte spacing */
 	unsigned int  key_length;       /* number of key bytes */
-	modulation_t  modulation;       /* modulation type */
 	unsigned int  video_size;       /* see diagram above */
 	unsigned int  active_size;      /* see diagram above */
 	unsigned int  buffer_size;      /* see diagram above */
+	modulation_t  modulation;       /* modulation type */
 	unsigned int  modulation_pad;   /* extra space for modulation overhead */
 	unsigned int  data_size;        /* see diagram above */
 	unsigned int  parity_size;      /* see diagram above */

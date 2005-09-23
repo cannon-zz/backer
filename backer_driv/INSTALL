@@ -35,11 +35,10 @@ which is in one of the blocks of numbers set aside for ``experimental and
 local use''.  You only need to change it if you already have something
 using 60 or will want to use 60 for something else.  (NOTE:  a trick that
 you might opt for is to set this to 0 which will result in an unused number
-being assigned automatically when the driver is loaded, but I don't
-recommend this because the kernel doesn't know ahead of time which major
-numbers might be requested later by other drivers).
+being assigned automatically when the driver is loaded).
 
-DEV_DIR is the root directory of the device file hierarchy.
+DEV_DIR is the root directory of the device file hierarchy and will be used
+to make the device inodes if you are not using devfs.
 
 MAN_DIR is the top of the man page hierarchy.  The man page is put in
 MAN_DIR/man4/.
@@ -99,7 +98,7 @@ page) since the driver might require those names in the future.
 standard magnetic tape drive and if you want to use your Backer as your
 default tape device then you should create a symbolic link called /dev/tape
 that points to your preferred device.  This is done by typing something
-like (using nhs as an example)
+like (using the nhs format as an example)
 
 	ln -s backer/0/nhs /dev/tape
 

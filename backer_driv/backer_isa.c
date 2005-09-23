@@ -61,14 +61,14 @@
  */
 
 #define  BKR_NAME               "backer"
-#define  BKR_VERSION            "3.2"
+#define  BKR_VERSION            "3.3"
 #define  BKR_MINOR_BASE         0       /* first minor number */
 #define  BKR_PROC_NAME          "driver/"BKR_NAME
 
 #define  MAX_RETRY_FREQ         50      /* max blocked retry rate in Hz */
 #define  BKR_MAX_TIMEOUT        30      /* seconds */
 
-#define  BKR_MAX_DEVICES  3             /* init_module()'s limit is 9 */
+#define  BKR_MAX_DEVICES        3       /* init_module()'s limit is 9 */
 
 #if (MAX_UPDATE_FREQ > HZ)
 #error "MAX_UPDATE_FREQ is too high"
@@ -105,14 +105,15 @@ MODULE_PARM_DESC(timeout, "Timeout (seconds)");
 
 typedef struct
 	{
+	spinlock_t  *lock;              /* unit state lock */
 	bkr_device_t  *device;          /* device state descriptor */
 	bkr_sector_t  *sector;          /* format state descriptor */
 	struct pm_dev  *pm_handle;      /* power management handle */
 	int  mode;                      /* this device file's mode */
 	int  last_error;                /* Pending error code if != 0 */
-	} bkr_private_t;                /* per file descriptor info */
+	} bkr_private_t;                /* per-file-descriptor info */
 
-#define  PRIVATE_INITIALIZER  ((bkr_private_t) { NULL, NULL, NULL, 0, 0 })
+#define  PRIVATE_INITIALIZER  ((bkr_private_t) { NULL, NULL, NULL, NULL, 0, 0 })
 
 typedef struct
 	{
@@ -195,18 +196,19 @@ static bkr_modes_t bkr_modes[] =
  * Device and software state descriptions.
  */
 
-static int bkr_num_devices = 0;
-static bkr_device_t bkr_device[BKR_MAX_DEVICES] = { };
-static bkr_sector_t bkr_sector[BKR_MAX_DEVICES] = { };
+static int  bkr_num_devices = 0;
+static spinlock_t  bkr_lock[BKR_MAX_DEVICES];
+static bkr_device_t  bkr_device[BKR_MAX_DEVICES];
+static bkr_sector_t  bkr_sector[BKR_MAX_DEVICES];
 
 /*
  * devfs handles for directory and device files, proc handle and power
  * management handles.
  */
 
-static devfs_handle_t  dev_directory = NULL;
-static devfs_handle_t  dev_entry[BKR_MAX_DEVICES * NUM_MODES] = { };
-static struct proc_dir_entry  *proc_entry = NULL;
+static devfs_handle_t  bkr_dev_directory;
+static devfs_handle_t  bkr_dev_entry[BKR_MAX_DEVICES * NUM_MODES] = { };
+static struct proc_dir_entry  *bkr_proc_entry;
 static struct pm_dev  *bkr_pm_handle[BKR_MAX_DEVICES] = { };
 
 
@@ -242,19 +244,22 @@ int __init init_module(void)
 	 */
 
 	for(unit = 0; unit < BKR_MAX_DEVICES; unit++)
-		if((dma[unit] != 0) && (ioport[unit] != 0))
+		{
+		if((dma[unit] == 0) || (ioport[unit] == 0))
+			continue;
+		if(check_region(ioport[unit], 1) < 0)
+			continue;
+		if(request_region(ioport[unit], 1, BKR_NAME) < 0)
 			{
-			if(request_region(ioport[unit], 1, BKR_NAME) < 0)
-				{
-				printk(KERN_INFO BKR_NAME ": I/O port %#x not available\n", ioport[unit]);
-				continue;
-				}
-			bkr_device[bkr_num_devices].hrdwr.type = BKR_ISA_DEVICE;
-			bkr_device[bkr_num_devices].hrdwr.isa.dma = dma[unit];
-			bkr_device[bkr_num_devices].hrdwr.isa.ioport = ioport[unit];
-			printk(KERN_INFO BKR_NAME ": unit%u: using dma=%u ioport=%#x\n", bkr_num_devices, dma[unit], ioport[unit]);
-			bkr_num_devices++;
+			printk(KERN_INFO BKR_NAME ": I/O port %#x not available\n", ioport[unit]);
+			continue;
 			}
+		bkr_device[bkr_num_devices].hrdwr.type = BKR_ISA_DEVICE;
+		bkr_device[bkr_num_devices].hrdwr.isa.dma = dma[unit];
+		bkr_device[bkr_num_devices].hrdwr.isa.ioport = ioport[unit];
+		printk(KERN_INFO BKR_NAME ": unit%u: using dma=%u ioport=%#x\n", bkr_num_devices, dma[unit], ioport[unit]);
+		bkr_num_devices++;
+		}
 	bkr_num_devices += bkr_isa_probe(bkr_device, bkr_num_devices);
 	if(bkr_num_devices == 0)
 		{
@@ -281,14 +286,14 @@ int __init init_module(void)
 		printk(KERN_INFO BKR_NAME ": can't register device\n");
 		goto cant_register_chrdev;
 		}
-	dev_directory = devfs_mk_dir(NULL, BKR_NAME, NULL);
-	if(dev_directory == NULL)
+	bkr_dev_directory = devfs_mk_dir(NULL, BKR_NAME, NULL);
+	if(bkr_dev_directory == NULL)
 		{
 		printk(KERN_INFO BKR_NAME ": can't register device\n");
 		result = -ENODEV;
 		goto cant_register_directory;
 		}
-	proc_entry = create_proc_read_entry(BKR_PROC_NAME, 0, 0, bkr_read_proc, NULL);
+	bkr_proc_entry = create_proc_read_entry(BKR_PROC_NAME, 0, 0, bkr_read_proc, NULL);
 
 	/*
 	 * Grab per-unit resources.
@@ -296,7 +301,7 @@ int __init init_module(void)
 
 	for(unit = 0; unit < bkr_num_devices; unit++)
 		{
-		spin_lock_init(&bkr_device[unit].lock);
+		spin_lock_init(&bkr_lock[unit]);
 
 		bkr_device[unit].buffer = (unsigned char *) pci_alloc_consistent(NULL, BKR_BUFFER_SIZE, &bkr_device[unit].hrdwr.isa.phys_addr);
 		if(bkr_device[unit].buffer == NULL)
@@ -305,27 +310,29 @@ int __init init_module(void)
 			result = -ENOMEM;
 			goto cant_init_unit;
 			}
+
 		for(mode = 0; mode < NUM_MODES; mode++)
 			{
 			if(bkr_modes[mode].mode < 0)
 				continue;
 			sprintf(name, "%1u/%3s", unit, bkr_modes[mode].name);
 			minor = unit * NUM_MODES + mode;
-			dev_entry[minor] =
-				devfs_register(dev_directory, name, DEVFS_FL_DEFAULT,
+			bkr_dev_entry[minor] =
+				devfs_register(bkr_dev_directory, name, DEVFS_FL_DEFAULT,
 				   BKR_MAJOR, BKR_MINOR_BASE + minor,
 				   S_IFCHR | S_IRUGO | S_IWUGO, &file_ops[BKR_STOPPED],
 				   NULL);
-			if(dev_entry[minor] == NULL)
+			if(bkr_dev_entry[minor] == NULL)
 				{
 				printk(KERN_INFO BKR_NAME ": unit%u: can't register device\n", unit);
 				result = -ENODEV;
 				goto cant_init_unit;
 				}
 			}
+
 		bkr_pm_handle[unit] = pm_register(PM_ISA_DEV, PM_SYS_UNKNOWN, bkr_pm_callback);
 		if(bkr_pm_handle[unit] != NULL)
-			bkr_pm_handle[unit]->data = &bkr_device[unit];
+			bkr_pm_handle[unit]->data = (void *) unit;
 		}
 
 	/*
@@ -341,12 +348,12 @@ int __init init_module(void)
 	cant_init_unit:
 		pm_unregister_all(bkr_pm_callback);
 		for(minor = 0; minor < bkr_num_devices * NUM_MODES; minor++)
-			devfs_unregister(dev_entry[minor]);
+			devfs_unregister(bkr_dev_entry[minor]);
 		for(unit = 0; unit < bkr_num_devices; unit++)
 			if(bkr_device[unit].buffer != NULL)
 				pci_free_consistent(NULL, BKR_BUFFER_SIZE, bkr_device[unit].buffer, bkr_device[unit].hrdwr.isa.phys_addr);
 		remove_proc_entry(BKR_PROC_NAME, NULL);
-		devfs_unregister(dev_directory);
+		devfs_unregister(bkr_dev_directory);
 	cant_register_directory:
 		devfs_unregister_chrdev(BKR_MAJOR, BKR_NAME);
 	cant_register_chrdev:
@@ -359,11 +366,11 @@ int __init init_module(void)
 
 void __exit cleanup_module(void)
 {
-	int i;
+	int  i;
 
 	pm_unregister_all(bkr_pm_callback);
 	for(i = 0; i < bkr_num_devices * NUM_MODES; i++)
-		devfs_unregister(dev_entry[i]);
+		devfs_unregister(bkr_dev_entry[i]);
 	for(i = 0; i < bkr_num_devices; i++)
 		{
 		if(bkr_device[i].buffer != NULL)
@@ -372,7 +379,7 @@ void __exit cleanup_module(void)
 		kfree(bkr_sector[i].buffer);
 		}
 	remove_proc_entry(BKR_PROC_NAME, NULL);
-	devfs_unregister(dev_directory);
+	devfs_unregister(bkr_dev_directory);
 	devfs_unregister_chrdev(BKR_MAJOR, BKR_NAME);
 }
 
@@ -383,15 +390,15 @@ void __exit cleanup_module(void)
  *                            FILE OPERATIONS
  *
  * ========================================================================
- */
-
-/*
- * open() --- Arbitrate device open requests.
  *
  * Access to the data stream is only granted once on a first-come /
  * first-serve basis across all descriptors.  A data transfer is started
  * when the first call to a read() or write() method is made after which
  * all read/write attempts from other descriptors fail.
+ */
+
+/*
+ * open() --- Arbitrate device open requests.
  */
 
 static int open(struct inode *inode, struct file *filp)
@@ -407,13 +414,23 @@ static int open(struct inode *inode, struct file *filp)
 	if((unit >= bkr_num_devices) || (mode < 0))
 		return(-ENODEV);
 
-	filp->private_data = kmalloc(sizeof(bkr_private_t), GFP_KERNEL);
-	if(filp->private_data == NULL)
-		return(-ENOMEM);
+	/*
+	 * kmalloc() can sleep so we need to lock the module before calling
+	 * it to make sure we don't get removed half way through allocating
+	 * some memory.
+	 */
 
 	MOD_INC_USE_COUNT;
 
+	filp->private_data = kmalloc(sizeof(bkr_private_t), GFP_KERNEL);
+	if(filp->private_data == NULL)
+		{
+		MOD_DEC_USE_COUNT;
+		return(-ENOMEM);
+		}
+
 	*PRIVATE_PTR(filp) = PRIVATE_INITIALIZER;
+	PRIVATE_PTR(filp)->lock = &bkr_lock[unit];
 	PRIVATE_PTR(filp)->device = &bkr_device[unit];
 	PRIVATE_PTR(filp)->sector = &bkr_sector[unit];
 	PRIVATE_PTR(filp)->pm_handle = bkr_pm_handle[unit];
@@ -433,10 +450,10 @@ static int open(struct inode *inode, struct file *filp)
 static int stop_release(struct inode *inode, struct file *filp)
 {
 	jiffies_t  bailout;
-	bkr_device_t *device = PRIVATE_PTR(filp)->device;
-	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
+	bkr_device_t  *device = PRIVATE_PTR(filp)->device;
+	bkr_sector_t  *sector = PRIVATE_PTR(filp)->sector;
 
-	spin_lock(&device->lock);
+	spin_lock(PRIVATE_PTR(filp)->lock);
 
 	if(device->state == BKR_WRITING)
 		{
@@ -450,7 +467,7 @@ static int stop_release(struct inode *inode, struct file *filp)
 				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(HZ/MAX_RETRY_FREQ);
 				}
-			while(jiffies < bailout);
+			while(time_before(jiffies, bailout));
 			}
 		do
 			{
@@ -459,13 +476,13 @@ static int stop_release(struct inode *inode, struct file *filp)
 			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(HZ/MAX_RETRY_FREQ);
 			}
-		while(jiffies < bailout);
+		while(time_before(jiffies, bailout));
 		}
 
 	bkr_device_stop_transfer(device);
 	pm_dev_idle(PRIVATE_PTR(filp)->pm_handle);
 
-	spin_unlock(&device->lock);
+	spin_unlock(PRIVATE_PTR(filp)->lock);
 
 	return(release(inode, filp));
 }
@@ -490,8 +507,8 @@ static int release(struct inode *inode, struct file *filp)
 
 static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long argument)
 {
-	int result;
-	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
+	int  result;
+	bkr_sector_t  *sector = PRIVATE_PTR(filp)->sector;
 	union
 		{
 		struct mtop  mtop;
@@ -557,10 +574,11 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 static ssize_t start_common(struct file *filp, bkr_state_t direction)
 {
 	ssize_t  result;
-	bkr_device_t *device = PRIVATE_PTR(filp)->device;
-	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
+	spinlock_t  *lock = PRIVATE_PTR(filp)->lock;
+	bkr_device_t  *device = PRIVATE_PTR(filp)->device;
+	bkr_sector_t  *sector = PRIVATE_PTR(filp)->sector;
 
-	spin_lock(&device->lock);
+	spin_lock(lock);
 
 	if(device->state != BKR_STOPPED)
 		result = -EBUSY;
@@ -586,7 +604,7 @@ static ssize_t start_common(struct file *filp, bkr_state_t direction)
 		while(0);
 		}
 
-	spin_unlock(&device->lock);
+	spin_unlock(lock);
 	return(result);
 }
 
@@ -627,10 +645,11 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 	unsigned int  moved = 0;
 	unsigned int  chunk_size;
 	jiffies_t  bailout;
-	bkr_device_t *device = PRIVATE_PTR(filp)->device;
-	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
+	spinlock_t  *lock = PRIVATE_PTR(filp)->lock;
+	bkr_device_t  *device = PRIVATE_PTR(filp)->device;
+	bkr_sector_t  *sector = PRIVATE_PTR(filp)->sector;
 
-	spin_lock(&device->lock);
+	spin_lock(lock);
 
 	if(PRIVATE_PTR(filp)->last_error != 0)
 		{
@@ -654,7 +673,11 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 			count -= chunk_size;
 
 			if(count == 0)
+				{
+				/* done */
+				result = moved;
 				break;
+				}
 
 			result = sector->read(device, sector);
 			if(result == 0)
@@ -662,32 +685,43 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 			if(result > 0)
 				{
 				/* EOF */
-				result = 0;
+				result = moved;
 				break;
 				}
-			if((result != -EAGAIN) || (filp->f_flags & O_NONBLOCK))
-				break;
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule_timeout(HZ/MAX_RETRY_FREQ);
-			if(jiffies >= bailout)
-				{
+
+			/* can't read data */
+			if(time_after_eq(jiffies, bailout))
 				result = -ETIMEDOUT;
-				break;
-				}
-			if(signal_pending(current))
+			if(result != -EAGAIN)
 				{
-				result = -EINTR;
+				/* error */
+				if(moved)
+					{
+					/* save for later */
+					PRIVATE_PTR(filp)->last_error = result;
+					result = moved;
+					}
 				break;
 				}
-			}
-		if(moved)
-			{
-			PRIVATE_PTR(filp)->last_error = result;
-			result = moved;
+
+			/* operation needs to block */
+			if(!(filp->f_flags & (O_NONBLOCK | O_NDELAY)))
+				{
+				set_current_state(TASK_INTERRUPTIBLE);
+				schedule_timeout(HZ/MAX_RETRY_FREQ);
+
+				if(!signal_pending(current))
+					continue;
+				result = -EINTR;
+				}
+			/* non-blocking I/O */
+			if(moved || !(filp->f_flags & O_NONBLOCK))
+				result = moved;
+			break;
 			}
 		}
 
-	spin_unlock(&device->lock);
+	spin_unlock(lock);
 	return(result);
 }
 
@@ -697,10 +731,11 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 	unsigned int  moved = 0;
 	unsigned int  chunk_size;
 	jiffies_t  bailout;
-	bkr_device_t *device = PRIVATE_PTR(filp)->device;
-	bkr_sector_t *sector = PRIVATE_PTR(filp)->sector;
+	spinlock_t  *lock = PRIVATE_PTR(filp)->lock;
+	bkr_device_t  *device = PRIVATE_PTR(filp)->device;
+	bkr_sector_t  *sector = PRIVATE_PTR(filp)->sector;
 
-	spin_lock(&device->lock);
+	spin_lock(lock);
 
 	if(PRIVATE_PTR(filp)->last_error != 0)
 		{
@@ -724,29 +759,49 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 			count -= chunk_size;
 
 			if(count == 0)
+				{
+				/* done */
+				result = moved;
 				break;
+				}
 
 			result = sector->write(device, sector);
 			if(result == 0)
 				continue;
-			if((result != -EAGAIN) || (filp->f_flags & O_NONBLOCK))
-				break;
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule_timeout(HZ/MAX_RETRY_FREQ);
-			if(jiffies >= bailout)
-				{
+
+			/* can't write data */
+			if(time_after_eq(jiffies, bailout))
 				result = -ETIMEDOUT;
+			if(result != -EAGAIN)
+				{
+				/* error */
+				if(moved)
+					{
+					/* save for later */
+					PRIVATE_PTR(filp)->last_error = result;
+					result = moved;
+					}
 				break;
 				}
-			}
-		if(moved)
-			{
-			PRIVATE_PTR(filp)->last_error = result;
-			result = moved;
+
+			/* operation needs to block */
+			if(!(filp->f_flags & (O_NONBLOCK | O_NDELAY)))
+				{
+				set_current_state(TASK_INTERRUPTIBLE);
+				schedule_timeout(HZ/MAX_RETRY_FREQ);
+
+				if(!signal_pending(current))
+					continue;
+				result = -EINTR;
+				}
+			/* non-blocking I/O */
+			if(moved || !(filp->f_flags & O_NONBLOCK))
+				result = moved;
+			break;
 			}
 		}
 
-	spin_unlock(&device->lock);
+	spin_unlock(lock);
 	return(result);
 }
 
@@ -782,34 +837,35 @@ static int bkr_read_proc(char *page, char **start, off_t off, int count, int *eo
 
 	for(unit = 0; unit < bkr_num_devices; unit++)
 		{
+		spin_lock(&bkr_lock[unit]);
 		device = &bkr_device[unit];
 		sector = &bkr_sector[unit];
 
-		pos += sprintf(pos, "Unit            : %u (", unit);
+		pos += sprintf(pos, "Unit            : %u ", unit);
 		switch(device->state)
 			{
 			case BKR_READING:
 			bkr_device_read(device, 0);
-			pos += sprintf(pos, "reading");
+			pos += sprintf(pos, "READING");
 			break;
 
 			case BKR_WRITING:
 			bkr_device_write(device, 0);
-			pos += sprintf(pos, "writing");
+			pos += sprintf(pos, "WRITING");
 			break;
 
 			case BKR_STOPPED:
-			pos += sprintf(pos, "stopped");
+			pos += sprintf(pos, "STOPPED");
 			break;
 
 			case BKR_SUSPENDED:
-			pos += sprintf(pos, "suspended");
+			pos += sprintf(pos, "SUSPENDED");
 			break;
 			}
 
-		pos += sprintf(pos, ")\n"
+		pos += sprintf(pos, "\n"
 		                    "Current Mode    : %u\n"
-		                    "Sector Number   : %lu\n"
+		                    "Sector Number   : %u\n"
 		                    "Byte Errors     : %u\n"
 		                    "In Worst Block  : %u / %u\n"
 		                    "Recently        : %u\n"
@@ -837,6 +893,7 @@ static int bkr_read_proc(char *page, char **start, off_t off, int count, int *eo
 		                    sector->health.most_skipped,
 			            bytes_in_buffer(device), device->size);
 		sector->errors.recent_symbol = 0;
+		spin_unlock(&bkr_lock[unit]);
 		}
 
 	*start = page + off;
@@ -858,9 +915,10 @@ static int bkr_read_proc(char *page, char **start, off_t off, int count, int *eo
 static int  bkr_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
 	int  result = 0;
-	bkr_device_t *device = (bkr_device_t *) dev->data;
+	spinlock_t  *lock = &bkr_lock[(int) dev->data];
+	bkr_device_t  *device = &bkr_device[(int) dev->data];
 
-	spin_lock(&device->lock);
+	spin_lock(lock);
 	switch(rqst)
 		{
 		case PM_SUSPEND:
@@ -879,7 +937,7 @@ static int  bkr_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 		default:
 		break;
 		}
-	spin_unlock(&device->lock);
+	spin_unlock(lock);
 
 	return(result);
 }
@@ -901,7 +959,7 @@ static int  bkr_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 #define  DMA_MEM_TO_IO          0x18    /* dmand transf, inc addr, auto-init */
 #define  DMA_HOLD_OFF           786     /* min abs(head-tail) */
 
-#define  MIN_UPDATE_FREQ        3       /* min DMA update rate in Hz */
+#define  MIN_UPDATE_FREQ        15      /* min DMA update rate in Hz */
 #define  MIN_SYNC_FREQ          50      /* min sync frequency in Hz */
 
 #if (MIN_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
@@ -957,11 +1015,11 @@ static int update_dma_offset(bkr_device_t *device, bkr_offset_t *offset)
 	bailout = jiffies + HZ/MIN_SYNC_FREQ;
 
 	while(!get_dreq_status(device->hrdwr.isa.dma))
-		 if(jiffies >= bailout)
+		 if(time_after_eq(jiffies, bailout))
 			return(-EIO);
 
 	while(get_dreq_status(device->hrdwr.isa.dma))
-		if(jiffies >= bailout)
+		if(time_after_eq(jiffies, bailout))
 			return(-EIO);
 
 	flags = claim_dma_lock();
@@ -1123,7 +1181,7 @@ int bkr_device_read(bkr_device_t *device, unsigned int length)
 
 	length += DMA_HOLD_OFF;
 
-	if((jiffies - device->hrdwr.isa.last_update < HZ/MIN_UPDATE_FREQ) &&
+	if(time_before(jiffies, device->hrdwr.isa.last_update + HZ/MIN_UPDATE_FREQ) &&
 	   (bytes_in_buffer(device) >= length))
 		return(0);
 
@@ -1152,7 +1210,7 @@ int bkr_device_write(bkr_device_t *device, unsigned int length)
 
 	length += DMA_HOLD_OFF;
 
-	if((jiffies - device->hrdwr.isa.last_update < HZ/MIN_UPDATE_FREQ) &&
+	if(time_before(jiffies, device->hrdwr.isa.last_update + HZ/MIN_UPDATE_FREQ) &&
 	   (space_in_buffer(device) >= length))
 		return(0);
 
@@ -1254,10 +1312,7 @@ static int __init bkr_isa_probe(bkr_device_t *device, int start)
 
 	for(ioport = 0x300; (ioport <= 0x33c) && (count < BKR_MAX_DEVICES); ioport += 4)
 		{
-		for(i = 0; i < start; i++)
-			if(device[i].hrdwr.isa.ioport == ioport)
-				break;
-		if(i < start)
+		if(check_region(ioport, 1) < 0)
 			continue;
 		if(request_region(ioport, 1, BKR_NAME) < 0)
 			continue;
@@ -1275,7 +1330,7 @@ static int __init bkr_isa_probe(bkr_device_t *device, int start)
 				count++;
 				break;
 				}
-			if(jiffies >= bailout)
+			if(time_after_eq(jiffies, bailout))
 				{
 				if(++i >= num_dma)
 					{

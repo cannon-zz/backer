@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrencode 8 "June 26, 2001" "Linux" "Backer"
+.TH bkrencode 8 "July 5, 2001" "Linux" "Backer"
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
@@ -69,8 +69,8 @@ Set the video mode to format the data for to NTSC (\fBn\fP) or PAL
 (\fBp\fP).
 .TP
 \fB\-f\fP [\fIdevname\fP]
-Retrieve the mode to use from a Backer device file.  If specified,
-\fIdevname\fP is used otherwise the mode is retrieved from
+Retrieve the mode to use from a Backer device file.  If \fIdevname\fP is
+provided then that file is used, otherwise the mode is retrieved from
 \fBDEVICE_NAME\fP.
 .TP
 \fB\-h\fP

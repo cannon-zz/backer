@@ -72,16 +72,24 @@ static inline int min(int a, int b)
  */
 
 #if   (LOG_BETA==1)              /* conventional Reed-Solomon */
+
 #define Ldec  1
+static void gen_ldec(void) { }
+
 #elif (LOG_BETA==11) && (MM==8)  /* CCSDS Reed-Solomon */
+
 #define Ldec  116
+static void gen_ldec(void) { }
+
 #else                            /* anything else */
+
 static int Ldec;
 static void gen_ldec(void)
 {
 	for(Ldec = 1; (Ldec % LOG_BETA) != 0; Ldec += NN);
 	Ldec /= LOG_BETA;
 }
+
 #endif /* LOG_BETA */
 
 
@@ -508,7 +516,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 *
 	 * see Blahut section 7.5
 	 *
-	 * num = omega(X_l^-1) * (X_l^-1)^(J0-1) (huh?) and
+	 * num = omega(X_l^-1) * (X_l^-1)^(J0-1) and  <--- ** huh? **
 	 * den = lambda'(X(l)^-1).
 	 */
 
@@ -606,9 +614,7 @@ int reed_solomon_init(unsigned int n, unsigned int k, rs_format_t *rs_format)
 	generate_GF(p);
 	generate_poly(rs_format);
 
-	#if LOG_BETA != 1
 	gen_ldec();
-	#endif
 
 	return(0);
 }

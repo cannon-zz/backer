@@ -41,18 +41,19 @@
  */
 
 gint  update_status(gpointer);
-void  read_proc(void);
+void  read_proc(FILE *);
 
 
 /*
  * Global data
  */
 
-FILE  *procfile;
+FILE  *procfile = NULL;
 int  update_interval = -1;
-int  monitor_device;
+int  monitor_device = 0;
 struct
 	{
+	GtkWidget  *state;
 	GtkWidget  *vmode, *density, *format;
 	GtkWidget  *sector;
 	GtkWidget  *total;
@@ -68,6 +69,7 @@ struct
 	} error_rate;
 struct
 	{
+	char  state[sizeof("suspended")];
 	unsigned int   mode;
 	unsigned long  sector_number;
 	unsigned int   total_errors;
@@ -94,6 +96,7 @@ struct
 int main(int argc, char *argv[])
 {
 	int  i;
+	char  message[50];
 	GtkWidget  *window;
 	GtkWidget  *vbox, *hbox;
 	GtkWidget  *table;
@@ -108,7 +111,16 @@ int main(int argc, char *argv[])
 		switch(i)
 			{
 			case 'd':
-			monitor_device = atoi(optarg);
+			if(optarg[0] == 's')
+				{
+				procfile = stdin;
+				monitor_device = 0;
+				}
+			else
+				{
+				procfile = NULL;
+				monitor_device = atoi(optarg);
+				}
 			break;
 
 			case 't':
@@ -120,7 +132,7 @@ int main(int argc, char *argv[])
 			puts(
 	"Usage:  " PROGRAM_NAME " [options]\n" \
 	"the following options are recognized:\n" \
-	"       -d num      Monitor device num (default 0)\n" \
+	"       -d num      Monitor device num (default 0, \"s\" = stdin)\n" \
 	"       -t num      Set the update interval to num milliseconds\n" \
 	"       -h          Display usage");
 			exit(1);
@@ -132,13 +144,14 @@ int main(int argc, char *argv[])
 	 * Open proc file and get initial data.
 	 */
 
-	procfile = fopen(PROC_ENTRY, "r");
+	if(procfile == NULL)
+		procfile = fopen(PROC_ENTRY, "r");
 	if(procfile == NULL)
 		{
 		perror(PROGRAM_NAME " : " PROC_ENTRY);
 		exit(1);
 		}
-	read_proc();
+	read_proc(procfile);
 
 	/*
 	 * Create the program's window
@@ -148,7 +161,8 @@ int main(int argc, char *argv[])
 
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_policy(GTK_WINDOW(window), FALSE, FALSE, TRUE);
-	gtk_window_set_title(GTK_WINDOW(window), "Backer Monitor");
+	sprintf(message, "Backer Monitor (Unit %u)", monitor_device);
+	gtk_window_set_title(GTK_WINDOW(window), message);
 	gtk_container_set_border_width(GTK_CONTAINER(window), 7);
 	gtk_signal_connect(GTK_OBJECT(window), "destroy", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 	gtk_signal_connect(GTK_OBJECT(window), "delete_event", GTK_SIGNAL_FUNC(gtk_exit), NULL);
@@ -157,6 +171,16 @@ int main(int argc, char *argv[])
 	gtk_container_add(GTK_CONTAINER(window), vbox);
 
 	/* Mode indicators */
+
+	hbox = gtk_hbox_new(TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
+
+	widget = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
+	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
+
+	widgets.state = gtk_label_new(NULL);
+	gtk_container_add(GTK_CONTAINER(widget), widgets.state);
 
 	hbox = gtk_hbox_new(TRUE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
@@ -300,7 +324,9 @@ gint update_status(gpointer data)
 {
 	char  text[20];
 
-	read_proc();
+	read_proc(procfile);
+
+	gtk_label_set_text(GTK_LABEL(widgets.state), proc_data.state);
 
 	switch(BKR_VIDEOMODE(proc_data.mode))
 		{
@@ -399,28 +425,28 @@ gint update_status(gpointer data)
  * Parse the contents of the /proc file.
  */
 
-void read_proc(void)
+void read_proc(FILE *file)
 {
 	int unit;
 
-	fseek(procfile, 0L, SEEK_SET);
-	while(!feof(procfile) & !ferror(procfile))
+	while(!feof(file) && !ferror(file))
 		{
-		fscanf(procfile, "%*17c%u %*s\n", &unit);
-		fscanf(procfile, "%*17c%u\n"
-		                 "%*17c%lu\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u / %u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u\n"
-		                 "%*17c%u / %u\n",
+		fscanf(file, "%*17c%u %s\n"
+		             "%*17c%u\n"
+		             "%*17c%lu\n"
+		             "%*17c%u\n"
+		             "%*17c%u / %u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u\n"
+		             "%*17c%u / %u\n",
+		       &unit, proc_data.state,
 		       &proc_data.mode,
 		       &proc_data.sector_number,
 		       &proc_data.total_errors,
@@ -438,6 +464,7 @@ void read_proc(void)
 		if(unit == monitor_device)
 			break;
 		}
+	fseek(file, 0L, SEEK_SET);
 
 	return;
 }

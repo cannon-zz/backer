@@ -12,7 +12,7 @@
 # will be automatically pasted into the man pages.
 #
 
-DRIVER_DIR   = ../backer-driv-3.2
+DRIVER_DIR   = ../backer-driv-3.3
 PREFIX       = /usr/local
 DEVICE_NAME  = /dev/tape
 DEFAULT_MODE = (BKR_NTSC | BKR_HIGH | BKR_SP)

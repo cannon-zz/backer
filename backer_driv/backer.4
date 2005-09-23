@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH Backer 4 "June 26, 2001" "Linux" "Special Files"
+.TH Backer 4 "July 5, 2001" "Linux" "Special Files"
 .SH NAME
 backer \- Backer video tape based storage device.
 .SH INTRODUCTION
@@ -78,12 +78,12 @@ The following parameters can be specified on the
 command line when the driver is loaded.
 .TP
 \fBdma=\fInum[,num,...]\fP
-Specify the DMA channels used by ISA cards --- one entry per card.  Early
+Specify the DMA channels used by ISA cards, one entry per card.  Early
 versions of the card could only use DMA channel 1.  Later versions could be
 jumpered to channel 1 or 3 and were shipped with a factory default of 3.
 .TP
 \fBioport=\fInum[,num,...]\fP
-Specify the I/O ports used by ISA cards --- one entry per card.  Cards were
+Specify the I/O ports used by ISA cards, one entry per card.  Cards were
 shipped with a factory default setting of 0x300.
 .TP
 \fBtimeout=\fInum\fP
@@ -169,7 +169,8 @@ unsigned decimal format and the meaning of the fields is as follows.
 .TP
 \fBUnit\fP (reading/writing)
 The unit number to which the following fields apply and that unit's
-operating state:  reading, writing, stopped or suspended.
+operating state:  \fBreading\fP, \fBstopped\fP, \fBsuspended\fP or
+\fBwriting\fP.
 .TP
 \fBCurrent Mode\fP (reading/writing)
 A number indicating the video mode, bit density and data format of the
@@ -260,8 +261,8 @@ On your television, when the recording first starts, you will see the
 beginning-of-record (BOR) mark which consists of vertical bars and will
 last for several seconds.  That will be followed by what, for the most
 part, is random noise until the recording ends with the end-of-record (EOR)
-mark.  To verify the recording, rewind to the beginning (before or during
-the BOR mark is OK), press Play and type
+mark.  To verify the recording, rewind to the beginning just before the
+BOR mark, press Play and when the BOR mark becomes visible type
 .RS
 .sp
 cmp /dev/tape \fIfilename\fP
@@ -274,6 +275,13 @@ above and type
 cat /dev/tape > \fIfilename\fP
 .sp
 .RE
+With earlier versions of the driver, it was possible to begin retrieval
+before the BOR mark was visible --- the driver would simply wait until data
+started and time out if it took too long.  Somewhere along the line that
+capability was lost and the current version will report an I/O error if a
+proper signal is not present when you begin data recovery.  Unfortunately,
+restoring the old, more convenient, behaviour is not a high priority.
+.PP
 If the computer isn't fast enough to process the data in real time then
 buffer over- and underflows will be seen.  In this case it will be necessary
 to use off-line processing.  See
@@ -300,7 +308,7 @@ solution is to set the record size to the minimum of 1 block.  This not
 only solves the through-put problem but also seems to result in smaller
 archive files.
 .PP
-The record size is adjusted with the \fB-b\fP option.  An example of
+The record size is adjusted with tar's \fB-b\fP option.  An example of
 making a backup using
 .IR gzip (1)
 compression is
@@ -444,7 +452,7 @@ driver is not configured for the correct I/O port or DMA channel or perhaps
 the VCR is not connected.
 .RE
 .PD 1
-.IP \fBEISPIPE\fP
+.IP \fBESPIPE\fP
 .PD 0
 .RS +0.5i
 .TP 2
@@ -506,29 +514,30 @@ particularly reliable.  With the addition of the
 utility in version 3.1 and a new sector key locator algorithm in version
 3.2, it became possible to reliably record data in EP modes.  Overall, EP
 recordings to not offer significantly higher capacity than LP recordings
-for their longer record times are partially offset by lower data rates.
-If, however, your VCR is like mine and does not have an LP mode then an EP
-recording is your only choice if you want the higher capacity.
+made on the same tape because the longer length of an EP recording is
+partially offset its lower data rate.  If, however, your VCR is like mine
+and does not have an LP mode then an EP recording is your only choice if
+you want the higher capacity.
 .SS "RECORDING LONGEVITY"
 Backer's don't seem to be able to recover their data from tapes that have
 been sitting for a long time.  My one data point in this matter is a tape
-that I recorded and then tried to recover data from after it had sat on a
-shelf for two years.  For the most part the tape could be recovered except
-for one file which could not be.  The conclusion I have drawn from this is
-that this technology is not well suited to the long-term archival of data.
-It is, however, quite well suited for the use it is meant for:  backing up
-a hard disk.
+that I recorded at low density (with Danmere's Windows software) and then
+tried to recover data from after it had sat on a shelf for two years.  For
+the most part the tape could be recovered except for one file which could
+not be.  The conclusion I have drawn from this is that this technology is
+not well suited to the long-term archival of data.  It is, however, quite
+well suited for the use it is meant for:  backing up a hard disk.
 .PP
 If you make regular backups then you will probably not need any one tape to
 be readable beyond several months.  Over this period you should find you
 have no problems at all with tape stability since even after several years
-tapes would seem to be mostly recoverable.  Obviously the stability of the
+I was able to mostly recover a recording.  Obviously the stability of the
 data on a tape can be improved by doing anything that will reduce the
 likelihood of magnetic domains flipping.  This means keeping the tape away
 from sources of heat and magnetic fields.  Don't leave tapes near furnace
 grates, near radiators, sitting in the sun or even sitting in a room that
 is excessively warmed by the sun.  Do not leave tapes near television sets,
-near stereo speakers, near electric motors, etc..
+near speakers, near electric motors, etc..
 .PP
 It is reasonable to expect EP recordings to be less stable than SP/LP
 recordings.  If you do not make frequent backups, it is probably a better
@@ -544,6 +553,14 @@ Especially avoid using the visual search functions of the VCR with any tape
 that will be used to store data.  I should stress the word ``reasonably'',
 though, since there's no need to be overly cautious --- I have actually
 safely recovered data from visibly damaged tapes.
+.SS "I/O SYMANTICS"
+The POSIX standard does not specify the result if, when working with
+special files, a byte count of 0 is passed to the
+.IR write (2)
+system call.  For this device driver, a byte count of 0 is a normal write
+operation with all of the usual side effects but no data is transfered.  In
+other words, this will start a tape data transfer if one has not yet been
+started then it will return 0 or the last error code is one is pending.
 .SH FILES
 .IP /dev/backer/*/*
 The device file names.
@@ -580,9 +597,6 @@ Date	Event	Version
 _
 2000/10/10	First public release	0.2
 2001/01/13	First stable release	1.0
-2001/04/12	Stable release	2.0
-2001/04/29	Stable release	2.1
-2001/06/02	Stable release	3.0
-2001/06/24	Stable release	3.1
-2001/06/26	Stable release	3.2
+2001/04/12	First 2.x stable release	2.0
+2001/06/02	First 3.x stable release	3.0
 .TE

@@ -20,16 +20,14 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrenhanced 8 "June 26, 2001" "Linux" "Backer"
+.TH bkrenhanced 8 "July 5, 2001" "Linux" "Backer"
 .SH NAME
 bkrenhanced \- Backer enhanced redundancy filter.
 .SH SYNOPSIS
-\fBbkrenhanced\fP [\fB\-D\fP \fBh\fP|\fBl\fP] [\fB\-F\fP \fBe\fP|\fBs\fP]
-[\fB\-V\fP \fBn\fP|\fBp\fP] [\fB\-f\fP [\fIdevname\fP]] [\fB\-h\fP]
-[\fB\-u\fP]
+\fBbkrenhanced\fP [\fB\-f\fP [\fIdevname\fP]] [\fB\-h\fP] [\fB\-u\fP]
 .SH DESCRIPTION
-\fBbkrenhanced\fP is a filter for providing additional error control coding for
-the
+\fBbkrenhanced\fP is a filter for providing additional error control coding
+for the
 .IR backer (4)
 device driver.  It works in conjunction with the driver's own error
 correction abilities in order to implement a burst error correcting system
@@ -57,29 +55,11 @@ driver almost always detects the problem and signals user space with
 of bad symbols in each block.  Knowing the locations of the errors doubles
 the correction capacity of the error control code making for very efficient
 use of bandwidth.
-.PP
-In normal use, \fBbkrenhanced\fP will be used directly with the device
-driver and it will automatically retrieve the tape format parameters via an
-.IR ioctl (2).
-If \fBbkrenhanced\fP is not used with the driver directly then it will be
-necessary to either specify the tape format with command line options or
-give the name of a Backer device file to retrieve the format from.  There
-is no compiled-in default mode.
 .SS OPTIONS
 .TP
-\fB\-D\fP \fBh\fP|\fBl\fP
-Set the density to format the data for to high (\fBh\fP) or low (\fBl\fP).
-.TP
-\fB\-F\fP \fBe\fP|\fBs\fP
-Set the tape speed to format the data for to EP (\fBe\fP) or SP (\fBs\fP).
-.TP
-\fB\-V\fP \fBn\fP|\fBp\fP
-Set the video mode to format the data for to NTSC (\fBn\fP) or PAL
-(\fBp\fP).
-.TP
 \fB\-f\fP [\fIdevname\fP]
-Retrieve the mode to use from a Backer device file.  If specified,
-\fIdevname\fP is used, otherwise the mode is retrieved from
+Retrieve the mode to use from a Backer device file.  If \fIdevname\fP is
+provided then that file is used, otherwise the mode is retrieved from
 \fBDEVICE_NAME\fP.
 .TP
 \fB\-h\fP
@@ -104,25 +84,20 @@ bkrenhanced -u < /dev/backer/0/nhe > \fIfilename\fP
 .sp
 .RE
 .SH NOTES
-It is essential that \fBbkrenhanced\fP be set to the same format as the
-device driver otherwise the information provided by the driver regarding
-the location of bad sectors will be misinterpreted and that would put
-\fBbkrenhanced\fP's ability to be of any use at all in question.  For this
-reason, it is recommended that the \fB-f\fP option \fInever\fP be used if
-\fBbkrenhanced\fP is communicating directly with the device driver since
-the format is most reliably retrieved directly from the driver.
-.PP
-If \fBbkrenhanced\fP is not communicating directly with the device driver
-(if, for example, it is decoding data out of a file on disk) then it will
-not have access to the \fBENODATA\fP markers from the sector decoder.  The
-data stream can still be corrected but the number of lost sectors that can
-be replaced in each sector group is reduced by a factor of 2 and overruns
-cannot be corrected at all.
+\fBbkrenhanced\fP can really only be used directly with the device driver
+since only in that way can it be provided with the \fB-ENODATA\fP error
+codes needed for it's operation.  The device driver drops all irrecoverable
+sectors from the data stream so the resulting output, if dumped to disk,
+does not retain enough information to even allow regular error correction
+to be performed on it.  The data formating and processing performed by this
+utility might, one day, be migrated into the real formating code.  When
+(if) that occurs, the features provided by this utility will then appear
+natively within both the driver and \fBbkrencode\fP.
 .PP
 Finally, while the motivation for the development of \fBbkrenhanced\fP has
-been the improvment of the reliability of EP recordings, it is perfectly
-fine to use \fBbkrenhanced\fP with non-EP modes as well and the paranoid
-may wish to do so for extra piece of mind.
+been the improvment of the reliability of EP recordings, \fBbkrenhanced\fP
+will function with non-EP modes as well and the paranoid may wish to do so
+for extra piece of mind.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),

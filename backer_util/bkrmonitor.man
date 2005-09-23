@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrmonitor 8 "June 26, 2001" "Linux" "Backer"
+.TH bkrmonitor 8 "July 5, 2001" "Linux" "Backer"
 .SH NAME
 bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
@@ -30,8 +30,8 @@ bkrmonitor \- Backer tape I/O monitor.
 The \fBbkrmonitor\fP utility is a GTK+ application for monitoring the
 status of the
 .IR backer (4)
-driver.  When running, it repeatedly parses the contents of
-\fB/proc/driver/backer\fP and displays the information graphically.
+driver.  It works by repeatedly parsing the contents of
+\fB/proc/driver/backer\fP and displaying the information graphically.
 .PP
 See
 .IR backer (4)
@@ -39,7 +39,9 @@ for information on the meaning of the information displayed.
 .SS OPTIONS
 .TP
 \fB\-d\fP \fIdevice\fP
-Monitor device number \fIdevice\fP.  The default is 0.
+Monitor device number \fIdevice\fP.  The default is 0.  If \fIdevice\fP is
+"s" then program input is read from stdin rather than from
+\fB/proc/driver/backer\fP.  At the moment this has no use.
 .TP
 \fB\-h\fP
 Print a usage message.

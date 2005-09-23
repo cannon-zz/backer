@@ -1,3 +1,15 @@
+3.3 (2001/7/5)
+	Documentation updates and fixes.
+
+	bkrmonitor is now able to retrieve its input from stdin.
+
+	Cleaned up bkrenhanced a bit:  realized there is no way for it to
+	operate without communicating directly with the driver so I removed
+	all of the formatting options and other things related to its use
+	without the driver.
+
+	Added state display to bkrmonitor.
+
 3.2 (2001/6/26)
 	Fixed a bug in bkrmonitor that prevented it from properly parsing
 	/proc/driver/backer if there were multiple devices listed.  Also

@@ -1,11 +1,53 @@
+3.100 (?)
+	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
+
+	The randomizer no longer skips the first 4 bytes of each sector.
+
+3.3 (2001/7/5)
+	Reworked some code to get rid of a few goto's (yuck).
+
+	Fixed a buffer overflow in the data randomizer.  This bug was also
+	causing the randomizer to miss the first 4 bytes of each sector but
+	fixing that would be a format change and so will have to wait until
+	4.0.  For now, the code emulates the bug-induced format.
+
+	Added some more SMP locking.  Probably not needed but what the
+	hell.
+
+	Made all uses of jiffies safe against wrap-around.
+
+	Removed parentheses from around unit state in proc output.
+
+	Removed some unnecessary data initializers to reduce image size.
+
+	Fixed some behaviour for read() and write():  -EAGAIN and -EINTR
+	(read) will now only be returned if the "error" occurs before any
+	data is transfered otherwise a short count is returned but no other
+	action is taken.  Previously, like all other errors, these codes
+	were stored and returned on the next call if data had been
+	transfered.  (got my hands on some POSIX specifications)
+
+	Increased the minimum DMA buffer update frequency from 3 Hz to 15
+	Hz for safer operation in high data rate modes.
+
+	Another POSIX fix for read() and write():  added support for
+	O_NDELAY flag.  At this point in history, on all Linux platforms
+	except the Sparc64, O_NDELAY implies O_NONBLOCK so this fix is,
+	essentially, irrelevant because O_NDELAY behaviour should only
+	differ from O_NONBLOCK behaviour when it is specified alone.
+
+	write() will now generate the -EINTR result if a signal arrives
+	while it's blocked.  There was a reason it didn't before but I
+	can't remember what it was and it seems to work now...
+
 3.2 (2001/6/26)
 	Documentation corrections and updates.
 
 	On single CPU machines, the read() and write() methods have been,
-	essentially, re-entrant safe since version 2.1 so I elliminated the
-	kludgy mechanism for preventing re-entrance.  There can still be
-	problems on SMP machines, though, so locking was added to
-	completely prevent re-entrance in that case.
+	essentially, re-entrance safe since version 2.1 so I elliminated
+	the kludgy mechanism for preventing re-entrance.  There can still
+	be problems on SMP machines, though, so locking was added to
+	properly prevent re-entrance in that case.
 
 	New sector key locator algorithm:  require any n symbols to match
 	rather than n in a row.
@@ -20,6 +62,7 @@
 
 	Device level stuff now monitors DMA activity via the DMA
 	controller's DREQ bit rather than the Backer hardware's DREQ bit.
+	A little safer in the event there isn't actually hardware present.
 
 3.1 (2001/6/24)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE (EP modes only) ***

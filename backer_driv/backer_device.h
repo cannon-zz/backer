@@ -60,7 +60,7 @@
 #else
 
 #include <sys/types.h>
-typedef int spinlock_t;
+typedef int  dma_addr_t;
 
 #endif
 
@@ -68,7 +68,7 @@ typedef int spinlock_t;
  * Types
  */
 
-typedef  unsigned long  jiffies_t;      /* type for jiffies */
+typedef unsigned long  jiffies_t;       /* type for jiffies */
 
 typedef u_int16_t  bkr_offset_t;        /* unsigned 16 bit integer */
 
@@ -85,13 +85,12 @@ typedef enum                            /* hardware state */
 typedef enum
 	{
 	BKR_ISA_DEVICE = 0,
-	BKR_PARPORT_DEVICE,
-	BKR_STDIO_DEVICE
+	BKR_PARPORT_DEVICE
 	} bkr_device_type_t;
 
 typedef struct
 	{
-	unsigned char *buffer;          /* location of I/O buffer */
+	unsigned char  *buffer;         /* location of I/O buffer */
 	unsigned int  size;             /* amount of buffer in use */
 	bkr_offset_t  head;             /* offset of next write transfer */
 	bkr_offset_t  tail;             /* offset of next read transfer */
@@ -99,11 +98,9 @@ typedef struct
 	unsigned int  frame_size;       /* bytes in a full video frame */
 	int  mode;                      /* mode (see backer.h) */
 	bkr_state_t  state;             /* current device state */
-	spinlock_t  lock;               /* spinlock for SMP machines */
 	union
 		{
 		bkr_device_type_t  type;
-#ifdef __KERNEL__
 		struct
 			{
 			bkr_device_type_t  type;
@@ -117,7 +114,6 @@ typedef struct
 			{
 			bkr_device_type_t  type;
 			} parport;
-#endif
 		} hrdwr;
 	} bkr_device_t;
 

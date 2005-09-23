@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 			}
 
 	/*
-	 * Open device and retrieve current mode and format
+	 * Open device and retrieve mode
 	 */
 
 	outfile = open(devname, O_WRONLY);
@@ -133,11 +133,11 @@ int main(int argc, char *argv[])
 		sector_capacity = bkr_sector_capacity(fmt);
 		}
 
-	puts("\nCurrent Device Mode:");
+	puts("\nDevice Mode:");
 	bkr_display_mode(mtget.mt_dsreg);
 
 	/*
-	 * If we are checking a transfer time, do so and quit.
+	 * If we are computing a tape length, do so and quit.
 	 */
 
 	if(stats.st_size != -1)
@@ -193,10 +193,15 @@ int main(int argc, char *argv[])
 
 	puts("Press 'q' to quit.");
 	do
+		{
 		i = write(outfile, data, length);
-	while((i >= 0) && (fgetc(stdin) != 'q'));
-	if(i < 0)
-		perror(PROGRAM_NAME);
+		if(i < 0)
+			{
+			perror(PROGRAM_NAME);
+			break;
+			}
+		}
+	while(fgetc(stdin) != 'q');
 
 	/*
 	 * Clean up and quit

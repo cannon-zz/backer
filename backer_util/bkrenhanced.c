@@ -127,11 +127,10 @@ int main(int argc, char *argv[])
 	 * Process command line options
 	 */
 
-	while((i = getopt(argc, argv, "D:F:f::huV:")) != EOF)
+	while((i = getopt(argc, argv, "f:hu")) != EOF)
 		switch(i)
 			{
 			case 'f':
-			mtget.mt_dsreg = -1;
 			if(optarg != NULL)
 				devname = optarg;
 			else
@@ -142,69 +141,12 @@ int main(int argc, char *argv[])
 			direction = READING;
 			break;
 
-			case 'D':
-			if(mtget.mt_dsreg == -1)
-				break;
-			mtget.mt_dsreg &= ~BKR_DENSITY(-1);
-			switch(tolower(optarg[0]))
-				{
-				case 'h':
-				mtget.mt_dsreg |= BKR_HIGH;
-				break;
-				case 'l':
-				mtget.mt_dsreg |= BKR_LOW;
-				break;
-				default:
-				mtget.mt_dsreg |= BKR_DENSITY(DEFAULT_MODE);
-				break;
-				}
-			break;
-
-			case 'F':
-			if(mtget.mt_dsreg == -1)
-				break;
-			mtget.mt_dsreg &= ~BKR_FORMAT(-1);
-			switch(tolower(optarg[0]))
-				{
-				case 's':
-				mtget.mt_dsreg |= BKR_SP;
-				break;
-				case 'e':
-				mtget.mt_dsreg |= BKR_EP;
-				break;
-				default:
-				mtget.mt_dsreg |= BKR_FORMAT(DEFAULT_MODE);
-				break;
-				}
-			break;
-
-			case 'V':
-			if(mtget.mt_dsreg == -1)
-				break;
-			mtget.mt_dsreg &= ~BKR_VIDEOMODE(-1);
-			switch(tolower(optarg[0]))
-				{
-				case 'n':
-				mtget.mt_dsreg |= BKR_NTSC;
-				break;
-				case 'p':
-				mtget.mt_dsreg |= BKR_PAL;
-				break;
-				default:
-				mtget.mt_dsreg |= BKR_VIDEOMODE(DEFAULT_MODE);
-				break;
-				}
-			break;
-
 			case 'h':
 			default:
 			fputs(
 	"Backer enhance redundancy filter.\n" \
 	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
-	"	-D <h/l>  Set the data rate to high or low\n" \
-	"	-F <s/e>  Set the data format to SP or EP\n" \
-	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
 	"	-f [dev]  Get the format to use from the Backer device dev\n" \
 	"                  (default " DEFAULT_DEVICE ")\n" \
 	"	-h        Display usage message\n" \
@@ -216,31 +158,29 @@ int main(int argc, char *argv[])
 	 * Get sector capacity and allocate buffers.
 	 */
 
-	if(mtget.mt_dsreg == -1)
+	if(devname != NULL)
 		{
-		if(devname != NULL)
-			{
-			if((i = open(devname, O_RDONLY)) < 0)
-				{
-				perror(PROGRAM_NAME);
-				exit(1);
-				}
-			}
-		else
-			{
-			if(direction == READING)
-				i = STDIN_FILENO;
-			else
-				i = STDOUT_FILENO;
-			}
-		if(ioctl(i, MTIOCGET, &mtget) < 0)
+		if((i = open(devname, O_RDONLY)) < 0)
 			{
 			perror(PROGRAM_NAME);
 			exit(1);
 			}
-		if(devname != NULL)
-			close(i);
 		}
+	else
+		{
+		if(direction == READING)
+			i = STDIN_FILENO;
+		else
+			i = STDOUT_FILENO;
+		}
+	if(ioctl(i, MTIOCGET, &mtget) < 0)
+		{
+		perror(PROGRAM_NAME);
+		exit(1);
+		}
+	if(devname != NULL)
+		close(i);
+
 	sector_capacity = bkr_sector_capacity(&format_info[bkr_mode_to_format(mtget.mt_dsreg)]);
 
 	group_data_size = sector_capacity * (BLOCK_SIZE - PARITY);
@@ -448,7 +388,6 @@ void *encoding_write(void *arg)
 	while(1)
 		{
 		sync_gate(&io_gate, 2);
-
 		fwrite(io_buffer[current_buffer], sector_capacity, BLOCK_SIZE, stdout);
 		current_buffer ^= 1;
 		}

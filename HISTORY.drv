@@ -1,3 +1,83 @@
+3.102 (2002/11/23)
+	So much has changed in this release that the driver is almost a
+	complete rewrite from the last version.  Here's a summary.
+
+	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
+
+	Fixed re-entrance safety in the Reed-Solomon decoder.  (this
+	actually hasn't been a problem due to re-entrace prevention at the
+	kernel interface level).
+
+	Added locking to the unit list.  The driver should *now* be
+	SMP-safe.
+
+	Some documentation corrections and updates.
+
+	In the tape data processing code, in the event that a sector is
+	corrupted irrecoverably a test is now done to see if the sector
+	header, at least, can be extracted intact (but nothing is yet done
+	with this information).
+
+	Fixed a bug in the logic for determining how many ENODATAs to
+	return that could cause an incorrect number of them in the event
+	that bad blocks occur at the same time as a buffer over-run or
+	under-run.  In fixing this, it is no longer possible to identify
+	buffer over-runs, instead a count of the number of contiguous
+	groups of lost sectors (called a "bad sector run") is recorded.
+
+	Implemented code word symbol interleaving directly within the
+	Reed-Solomon coder/decoder eliminating the need to do it "manually"
+	by shuffling bytes around when writing them into the I/O buffer.
+	This has reduced the complexity of the sector encoding and decoding
+	code in the formating layer and has opened up the way for some
+	reductions in CPU overhead down the road.  It has also resulted in
+	an incompatible tape format change since data from user space is
+	now written sequentially into the tape I/O buffer rather than being
+	interleaved along with the ECC.
+
+	For performance reasons, the key bytes have been shifted so that
+	the first byte of the active region is always a key byte.  This
+	allowed a change in the key byte spacing which should marginally
+	improve the data processing code's signal-to-noise ratio.  During
+	these modifications, a bug was discovered in the sector
+	encoding/decoding logic that could have resulted in problems for
+	users experimenting with custom format parameters.
+
+	Eliminated the stream ID from the sector header when I realized
+	there would be no way to ever make use of it without causing
+	serious problems with the reliability of lost sector counting.
+	This allowed the sector number to be expanded to 28 bits --- over
+	1200 hours of NTSC data before a sector number repeats.  However...
+	sector number -1 is now reserved for possible future use in storing
+	per-record meta data.
+
+	Implemented a ring buffer type abstraction.  This has resulted in
+	a tremendous simplification of the sector encoding/decoding code
+	and relaxed the need for the various buffers to be powers of 2 in
+	size.  It has also inexplicably improved encoder/decoder
+	performance by about 10%.  Odd... maybe its a cache issue.
+
+	A BIG round of clean-ups and performance improvements in the
+	Reed-Solomon encoder/decoder.
+
+	Bought an external Backer!  Began working on external Backer
+	support.  In doing so I have found and fixed some bugs in
+	backer_parport's option parsing logic, and found and fixed a bug in
+	the ring buffer abstraction.
+
+	Did, essentially, a complete rewrite of the data processing
+	``layering'' mechanism to convert it into a fully modular
+	architecture.  The goal here is to allow several things to be
+	achieved: (i) move the functionality of bkrenhanced into the
+	formating code; (ii) turn the tape data processing code into
+	separate modules so only the format that's being used (if any)
+	needs to be loaded into memory; (iii) reduce CPU overhead by
+	eliminating unneccessary data copies; (iv) turn the driver into a
+	one-stop video-based data storage solution.
+
+	Merged the driver and utilities into a single source tree and
+	converted the configuration mechanism over to GNU autoconf.
+
 3.101 (2001/12/30)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
 

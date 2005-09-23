@@ -2,64 +2,56 @@
                                ============
 
 A Linux 2.4.x device driver for the Backer tape backup devices manufactured
-by Danmere Technologies Inc. (now 4-TV).
+by Danmere Technologies Ltd. (now 4-TV Ltd.).
 
 
 
                           WORKING WITH THE DRIVER
                           =======================
 
-See INSTALL for instructions on compiling, installing and loading the
-driver.
+See INSTALL for instructions on compiling and installing the driver and
+utilities
 
-See the man pages in DOCUMENTATION/ for information about the driver
-itself.  Note that you can view a specific man page by naming the file on
-the command line eg.
+See the man pages in drivers/DOCUMENTATION/ and utilties/ for information
+about the driver and utilities.  Note that you can view a man page file by
+giving the full path on the command line eg.
 
-	$ man ./backer.4
-
-NOTE:  ALTHOUGH THE backer_parport MODULE IS DISTRIBUTED WITH THIS PACKAGE
-AND THE DOCUMENTATION DESCRIBES ITS USE, IT HAS NOT BEEN TESTED AND
-PROBABLY DOES NOT WORK.
+	$ man drivers/DOCUMENTATION/backer.4
 
 
 TROUBLESHOOTING
 ---------------
 
-WON'T COMPILE.  Well... it compiles just fine on my own machine so it would
-help if you could find the problem and let me know what it was.  Otherwise
-you'd better just contact me and we'll have to sort it out.
+WON'T COMPILE (PROPERLY).  Well... it compiles just fine on my own machine
+so it would help if you could find the problem and let me know what it is
+so I can make any improvements to the configure mechanism and Makefiles
+that might be warranted.  Of course, please feel free to contact me for
+assistance in tracking down whatever problem you're having.
 
 
 DRIVER WON'T LOAD.  Be sure you are logged in as root.  Check
 /var/log/messages for complaints about unavailable resources.  If there's a
 problem reserving a DMA buffer, try freeing some memory or rebooting your
-system and loading the driver soon after start-up.
+system and loading the driver soon after start-up.  On x86 based systems,
+DMA buffers must be located at low addresses in physical memory due to
+limitations of the DMA hardware.  Even if you have lots of memory
+available, you might not have any available in the range of physical
+addresses needed by the driver.  If the problem seems to be with kernel
+symbol versioning (you see error messages about unresolved symbols, etc.),
+it means the driver didn't get compiled for your kernel properly;  see
+above.
 
 
 DRIVER LOADS BUT YOU CAN'T OPEN THE DEVICE FILES.  If the error message is
-"Permission denied" then check the permissions of the /dev entries.  They
+``Permission denied'' then check the permissions of the /dev entries.  They
 must allow you to access them.  Be sure that at least one of the low-level
-modules is loaded.  Make sure that the minor numbers for the device files
-correspond to the correct unit number (see the man page for the mapping of
-minor numbers to unit numbers).
-
-
-YOU CAN OPEN THE DEVICE BUT YOU CAN'T TRANSFER DATA.  As above, make sure
-the minor numbers for the device files actually correspond to a valid unit.
-Do the following test to see what error message you see
-
-	$ cat /dev/zero > /dev/tape
-
-If you see "Device or resource busy" then check to see that no other
-process is transferring data and that the DMA channel is available (check
-/proc/dma).  If you see "Out of memory" then your system has run out of
-memory.
+modules is loaded (eg. backer_isa).  Make sure that the minor numbers for the
+device files correspond to a valid unit number (see the man page for the
+mapping of minor numbers to unit numbers).
 
 
 YOU GET MANY ERRORS WHEN READING TAPES.  Here are some common causes of
 read errors:
-
 	-Poor quality, worn, or damaged video tape.  Try using a good
 	 quality, never-before-used, tape and see if that improves things.
 	-Dirty video heads.  This can be checked by playing a commercial
@@ -67,29 +59,36 @@ read errors:
 	 high-quality video signal recorded on it.  If the picture looks
 	 crisp and clear then the heads are clean.
 	-Poor quality video cables.  Make sure you are using real video
-	 cables and not audio cables (both use the same RCA connectors).
-	 Generally video cables are thicker and consist of a single
-	 cylindrical wire while audio cables might have two wires (bonded
-	 together) coming out of *each* plug.  Also, for some reason the
-	 video cables I've seen tend to have the colour yellow involved one
-	 way or another while audio cables have the colours red and white.
+	 cables and not audio cables (both use the same RCA connectors!).
+	 Generally video cables are thicker and are surrounded by a single
+	 cylindrical insulator while audio cables come in pairs or have two
+	 insulated wires coming out of each plug.  Also, video cables tend
+	 to have yellow markings on them in one way or another while audio
+	 cables tend to have red and white markings.
 	-Power line noise.  Spikes on the power line will propogate through
-	 the VCR and be recorded as a horizontal bar in the video image.
-	 They will also corrupt the signal during playback.  Do not engage
-	 or disengage heavy duty electrical equipment on the same circuit
-	 that your VCR and computer are plugged into.  Especially do not
-	 turn on or off any device with electric motors or large
-	 transformers on the same circuit (these include electric fans,
-	 television sets, and flourescent lights).  Note that the problem
-	 is only in turning them on and off --- it is find to have them
-	 plugged into the same circuit and even to use them.
+	 a VCR's power supply and be recorded as a horizontal line in the
+	 video image.  They will also similarly interfer with playback.
+	 Avoid engaging or disengaging heavy duty electrical equipment on
+	 the same circuit that your VCR and computer are plugged into.
+	 Especially avoid turning on or off large inductive loads on the
+	 same circuit.  That would mean any device with large electric
+	 motors or transformers such as bathroom fans, television sets, and
+	 flourescent lights.  Note that the problem is only in turning them
+	 on and off --- it is fine to have such items in continuous use
+	 during record and playback.
 	-Static discharge.  As above, static discharges in the vicinity of
-	 the computer or VCR can interfere with the video signal.  It helps
-	 to have both the computer and VCR plugged into the same outlet and
-	 to have as short a video cable connecting them as possible.
+	 the computer or VCR can result in spikes that find their way into
+	 the video signal.  It helps to have both the computer and VCR
+	 plugged into the same outlet and to have as short a video cable
+	 connecting them as possible.  Try to ground yourself before
+	 touching the VCR or computer if you have been walking around the
+	 room.
 
 If you have assured yourself that none of these problems apply to you, it
 is possible that the video format used by this software is not suitable for
 your video equipment.  I have only my own equipment to test the software
 with and my equipment might not be representative.  Please contact me and
-we can discuss the problem.
+we can discuss the problem.  As an interim solution, you might find that
+using bkrenhanced solves the problem;  it should not be necessary, however,
+to use bkrenhanced under normal circumstances so do please let me know so
+the problem can be fixed properly.

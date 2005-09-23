@@ -2,119 +2,150 @@
                            =========================
 
 
-HARDWARE
---------
+HARDWARE INSTALLATION
+---------------------
 
-You have probably had your Backer working under Windows in which case you
-already have it installed and know there are no hardware conflicts.
+You have probably had your Backer working under Microsoft Windows in which
+case you already have it installed and know there are no hardware
+conflicts.
 
-If you are installing an internal version of the device for the first time
-then you should first check to see which I/O ports and DMA channels are
-being used by taking a look at the two files /proc/ioports and /proc/dma.
-Set your Backer to a free I/O port and free DMA channel or a DMA channel
-used by a device you know you will never want to use along with the Backer.
-Then, follow the installation instructions that came with the card.
+If you are installing an internal (ISA) version of the device for the first
+time then you should first check to see which I/O ports and DMA channels
+are being used in your system by taking a look at the two files
+/proc/ioports and /proc/dma.  Set the jumpers on your Backer to a free I/O
+port and free DMA channel or at least a DMA channel used by a device you
+know you will never want to use at the same time as the Backer.  Then
+follow the installation instructions that came with the card.
 
 The external version plugs into a parallel port.  Before you can use this
 driver to interface with your external Backer, however, you will first need
-to make sure your kernel's parallel port subsystem is properly configured.
-Specifically, you need to do the following:
+to make sure your Linux kernel's parallel port subsystem is properly
+configured.  Specifically, you need to do the following:
 
-	-insure that you have a PC-style ECP parallel port
-	-insure the Linux parport driver is installed
-	-insure the parport driver recognizes the port as a PC-style ECP
-	 port
+	-insure the Linux parport driver is installed and recognizes your
+	 parallel port as a PC-style ECP port
 	-insure the parport driver knows the port's interrupt line number
 	-insure the parport driver knows the port's DMA channel number
 
-To check the last three points, look at the files
+To check these points, look at the files
 
 	/proc/sys/dev/parport/<port name>/modes
 	/proc/sys/dev/parport/<port name>/irq
 	/proc/sys/dev/parport/<port name>/dma
 
 where <port name> is the name of the parallel port to which your Backer is
-attached (eg. ``parport0'').  In the modes file you must see "PCSPP", "ECP"
-and "DMA" all listed and the two files irq and dma must contain the correct
-numbers for the port.
+attached (eg. ``parport0'').  In the modes file you must see ``PCSPP'',
+``ECP'' and ``DMA'' all listed and the two files irq and dma must contain
+the correct numbers for the port.
 
 
-SOFTWARE
---------
+SOFTWARE INSTALLATION:  Expert Instructions
+-------------------------------------------
 
-Here are the steps for installing the Backer device driver.
+To configure, compile, and install the driver and utilities, the following
+should work.
 
-1.  Configure the Makefile for your system.  The parameters that should be
-set are:
+	$ ./configure ; make ; make install [install-devs]
 
-	Parameter	Default Setting
-	---------------------------------
-	BKR_MAJOR  	60
-	DEV_DIR    	/dev
-	MAN_DIR    	/usr/man
-	MODULES_DIR	/lib/modules/misc
+where the install-devs target should be added if your system is not using
+devfs.
 
-BKR_MAJOR is the major number the device inodes will have.  You can set
-this to anything your system isn't using.  It currently defaults to 60
-which is in one of the blocks of numbers set aside for ``experimental and
-local use''.  You only need to change it if you already have something
-using 60 or will want to use 60 for something else.  (NOTE:  a trick that
-you might opt for if you are using the device file system is to set this to
-0 which will result in an unused number being assigned automatically when
-the driver is loaded).
+A .spec file is also provided that can be used to build .rpm's of the
+drivers, device inodes and utilities.  If you know what you are doing, you
+can take a look at the .spec file and tune it to your needs;  you know what
+to do after that.  If you don't know what you're doing and still want a
+.rpm, try
 
-DEV_DIR is the root directory of the device file hierarchy.  This is only
-used by the install script and only when making the device inodes if you
-are not using devfs.
+	$ rpmbuild -ta backer-*.tar.gz
 
-MAN_DIR is the top of the man page hierarchy.  The install script will
-place the man pages in MAN_DIR/man4/.
-
-MODULES_DIR is the directory where the compiled driver modules will be
-installed.
+Who knows, it might even work.  My goal is for this to work so if it
+doesn't, let me know and I'll help you out.
 
 
-2.  Compile the driver by typing
+SOFTWARE INSTALLATION:  Detailed Instructions
+---------------------------------------------
+
+Here are the steps for installing the Backer device driver and utilities.
+
+1.  Configure the source tree for your system by typing
+
+	$ ./configure [options]
+
+from the top-level directory in the source tree.  Use --help to get a list
+of options.  In addition to the standard GNU configure options, like
+--prefix, the following are available:
+
+  --with-kernel-version=ver
+
+	If you have multiple Linux kernel source trees installed, you can
+	use this option to select the one to compile the driver against.
+
+  --with-kernel-headers=dir
+
+	Use this option if configure cannot find your kernel source
+	headers.
+
+  --with-modulesdir=dir
+
+	This option sets the directory in which the modules will be
+	installed.
+
+  --with-backer-major=number
+
+	The driver has not been assigned an official character device major
+	number but is shipped with 60 set as the default.  This is in one
+	of the blocks of numbers reserved for ``experimental and local
+	use'' and so should be fine.  If this choice conflicts with some
+	other driver already in your system, use this option to select a
+	different major number for the driver.  NOTE:  a trick that might
+	work for you if you are using the device file system (devfs) is to
+	set the major number to 0 which will result in an unused number
+	being assigned automatically when the driver is loaded.
+
+  --with-default-dev=device
+
+	Many of the utilities have a compiled-in default device file name
+	to use on various occasions when a specific one is not provided by
+	the user.  Normally ``/dev/tape'' is used as the default name.  Use
+	this option to set a different device name to compile in as the
+	default.
+
+
+2.  Compile the driver and utilities by typing
 
 	$ make
 
-
-3.  Install the drivers, device inodes and man pages by typing
-
-	$ make install
-
-This puts the driver modules into MODULES_DIR and runs depmod -a to rebuild
-the module dependency database.  Then it checks to see if devfs is in use
-and if not it creates the device inodes in DEV_DIR.  Finally it installs
-and gzips the man pages.
-
-If devfs is not being used but the install script can't determine that fact
-then you will have to manually instruct make to create the device inodes by
-typing
-
-	$ make devs
-
-Note:  the Makefile does not know how many Backer devices you have
-installed in your system so it assumes you have just one when creating the
-device inodes.  If you have more than one then you will need to create the
-additional inodes yourself.  See the man page for the minor numbers they
-should have.  This only applies if you are not using devfs.  If you are
-using devfs then all device files will be created automatically when the
-driver is loaded.
-
-Note:  the goofs in charge of Linux kernel development are having
-themselves some kind of a spat regarding the use of major and minor
-numbers.  This means their proper use is somewhat undefined.  It is
-possible, however, that in the future major and minor numbers will cease to
-be manifested in user space which means the actual name of the device file
-will be its only identification.  For this reason, people who do not use
-devfs are encouraged to adhere to the names generated by the Makefile (and
-found in the man page) since the driver might require those names in the
-future.
+When compilation is complete, the driver modules will be found in the
+drivers/ subdirectory and the utilitis in the utilities/ subdirectory.
 
 
-4.  Specify the low-level module(s) that should be used by adding the
-following line to /etc/modules.conf
+3.  Install the drivers, utilities, and man pages by typing
+
+	$ make install [DESTDIR=dir]
+
+If the optional DESTDIR variable is set then that directory is used as the
+root of the install tree.  If the DESTDIR variable is not set then after
+the drivers are installed depmod is run in order to rebuild your system's
+module dependancy database.
+
+If you are using devfs then skip to the next step.  If you are not using
+devfs then you will also need to install device inodes to access the
+driver.  Do this by typing
+
+	$ make install-devs [DESTDIR=dir]
+
+which will create the inodes for Backer units 0, 1 and 2.  If your system
+has more than three Backers installed then you will have to manually create
+the inodes for the additional units.  See the driver man pages for the
+correct minor numbers to use.  If the optional DESTDIR variable is set then
+that directory is used as the root of the install tree.
+
+
+POST-INSTALL CONFIGURATION
+--------------------------
+
+1.  OPTIONAL.  Specify the low-level module(s) that should be automatically
+loaded by adding the following line to /etc/modules.conf
 
 	probeall backer_lowlevel <modules...>
 
@@ -125,29 +156,33 @@ module(s).  For example,
 
 would cause the ISA interface module to be loaded.  If you need to specify
 options for the low-level module(s), add whichever of the following lines
-you need to /etc/modules.conf
+are appropriate to /etc/modules.conf
 
 	options backer_isa <options...>
 	options backer_parport <options...>
 
-See the man pages for available options.
+See the man pages for available options.  When finished, re-read the config
+file by doing
+
+	$ depmod -a
 
 
-5.  OPTIONAL.  Create /dev/tape link.  The driver is designed to imitate a
-standard magnetic tape drive and if you want to use your Backer as your
-default tape device then you should create a symbolic link called /dev/tape
-that points to your preferred device.  This is done by typing something
-like
+2.  OPTIONAL.  Create /dev/tape link.  The driver is designed to imitate a
+standard magnetic tape drive.  Many applications assume that if a system
+has a tape drive installed, it can be accessed as /dev/tape.  If you want
+to use your Backer as your default tape device then you should create a
+symbolic link called /dev/tape that points to your preferred Backer device.
+This is done by typing something like
 
 	$ ln -s backer/0/nhs /dev/tape
 
 which would select high density NTSC in SP mode as the default tape format.
 
-If you are using the device file system then you will have to create this
-link every time the system reboots.  This can be taken care of for you if
-you are running devfsd.  To configure devfsd to automatically create and
-remove the /dev/tape link as the driver is loaded and unloaded, add
-something like the following lines to your /etc/devfsd.conf
+If you are using devfs then you will have to create this link every time
+the system reboots.  This can be done automatically if you are running
+devfsd.  To configure devfsd to automatically create and remove the
+/dev/tape link as the driver is loaded and unloaded, add something like the
+following lines to your /etc/devfsd.conf
 
 REGISTER        ^backer/0/nhs$  CFUNCTION GLOBAL symlink $devname tape
 UNREGISTER      ^backer/0/nhs$  CFUNCTION GLOBAL unlink tape
@@ -156,16 +191,18 @@ and then tell devfsd to re-read its config file by doing
 
 	$ killall -HUP devfsd
 
+See the documentation for devfsd for more information on devfs management.
 
-6.  OPTIONAL.  To let your system take care of automatically loading and
-unloading the driver add things like the following lines to
-/etc/modules.conf
+
+3.  OPTIONAL.  To let your system take care of automatically loading and
+unloading the driver when the device is accesed add something like the
+following lines to /etc/modules.conf
 
 	alias /dev/backer backer
 	alias /dev/tape backer
 
-The second line should, obviously, only be added if /dev/tape is a link to
-a backer device.  Re-read the config file by doing
+The second line should, obviously, only be added if you will be using
+/dev/tape as a link to a backer device.  Re-read the config file by doing
 
 	$ depmod -a
 
@@ -174,46 +211,18 @@ a backer device.  Re-read the config file by doing
 LOADING/UNLOADING THE DRIVER
 ----------------------------
 
-To load the driver manually, login as root and type
+The driver can be loaded manually by loading the main module followed by
+any necessary low-level modules.  For example,
 
 	$ insmod backer
+	$ insmod backer_isa
 
-If you need to pass options to the hardware support modules, then you must
-either put the options in /etc/modules.conf or you must first load the
-driver, then unload the hardware module in question and reload it with the
-desired options.  Read the man page for details.  Here's an example load
-sequence:
+Alternatively, by using modprobe you can request the low-level module
+alone.
 
-	$ insmod backer
-	$ rmmod backer_isa
-	$ insmod backer_isa isa=0x304:1
+	$ modprobe backer_isa
 
-You'll get an error message if the driver couldn't be loaded.  If that
-happens, check /var/log/messages to see what the problem was.  The driver
-will have printed a little banner and will have complained if it couldn't
-reserve a particular resource.  Note that to allow DMA channels to be
-shared, the driver modules will only request access to them when the device
-in question is actually in use so successfully loading the driver does not
-guarantee that there are no resource conflicts.
-
-To test the driver type
-
-	$ cat /dev/zero > /dev/tape
-
-(or the appropriate device file for your system) to verify that data is
-being written to video.  On your television set you should see a stable
-pattern consisting mostly of vertical bars followed, a few seconds later,
-by what looks like noise or ``snow''.  Press CTRL-C to stop the test and be
-patient for several seconds while the buffers are cleared.
-
-
-To unload the module you need to first unload the low-level module(s)
-followed by the main module by typing
-
-	$ rmmod <low-level modules...> backer
-
-For example, type
-
-	$ rmmod backer_isa backer_parport backer
-
-to unload everything.
+The main backer module will be automatically loaded first in order to
+satisfy inter-module dependancies.  See the documentation for insmod,
+rmmod, modprobe and modinfo for more information on kernel module
+management.

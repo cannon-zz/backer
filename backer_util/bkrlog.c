@@ -144,7 +144,8 @@ int main(int argc, char *argv[])
 			intext = (char *) realloc(intext, insize << 1);
 			if(intext == NULL)
 				{
-				/* FIXME: display memory error */
+				errno = ENOMEM;
+				perror(PROGRAM_NAME);
 				exit(-1);
 				}
 			fgets(intext+insize, insize, stdin);

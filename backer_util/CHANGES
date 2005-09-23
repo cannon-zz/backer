@@ -1,3 +1,16 @@
+0.12 (2000/12/11)
+	The mode indicators in bkrmonitor now indicate the mode and are
+	disabled in order to discourage people from trying to click them.
+	(this looks stupid but it's good enough for now).
+
+	bkrlog now prints an error message before exiting if it runs out of
+	memory.
+
+	Fixed a bug in bkrencode:  while encoding it could get hung on EOF.
+
+	Expanded bkrencode's error reporting to include errors from the
+	file system.
+
 0.11 (2000/11/26)
 	Re-release to keep the version number in step with the driver.
 

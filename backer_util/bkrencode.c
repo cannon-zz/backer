@@ -41,14 +41,14 @@
  * Function prototypes
  */
 
-void interrupt_handler(int);
+void sigint_handler(int);
 
 
 /*
  * Global data
  */
 
-unsigned int  got_interrupt;
+unsigned int  got_sigint;
 
 
 /*
@@ -205,20 +205,21 @@ int main(int argc, char *argv[])
 	 * Grab interrupt signal so we can write a nice EOR before exiting.
 	 */
 
-	signal(SIGINT, interrupt_handler);
-	got_interrupt = 0;
+	/*signal(SIGINT, sigint_handler);*/
+	got_sigint = 0;
 
 	/*
 	 * Transfer data one block at a time until EOF is reached.
 	 */
 
+	setbuf(stderr, NULL);
 	switch(device.direction)
 		{
 		case O_RDONLY:
 		while(!feof(stdin))
 			{
 			tmp = block.read(0, 1);
-			if(tmp == EOR_BLOCK)
+			if(tmp == 0)
 				break;
 			if(tmp < 0)
 				errno = -tmp;
@@ -234,9 +235,9 @@ int main(int argc, char *argv[])
 
 		case O_WRONLY:
 		bkr_write_bor(1);
-		while(!feof(stdin) & !got_interrupt)
+		while(!feof(stdin) & !got_sigint)
 			{
-			while(block.offset < block.end)
+			while((block.offset < block.end) && !feof(stdin))
 				block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
 			tmp = block.write(0, 1);
 			if(tmp < 0)
@@ -257,14 +258,14 @@ int main(int argc, char *argv[])
 
 
 /*
- * interrupt_handler()
+ * sigint_handler()
  *
- * Interrupt handler for cleanly terminating a recording.
+ * SIGINT handler for cleanly terminating a recording.
  */
 
-void interrupt_handler(int num)
+void sigint_handler(int num)
 {
-	got_interrupt = 1;
+	got_sigint = 1;
 }
 
 
@@ -281,22 +282,28 @@ void interrupt_handler(int num)
  * flush function function must ensure the buffer has been completely
  * commited to the output stream.
  *
- * These functions always return success.
+ * These functions pass on any error codes returned by the file system.
  */
 
 int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 {
+	int  result;
+
 	if(bytes_in_buffer() >= length)
 		return(0);
 	length -= bytes_in_buffer();
 
 	if(device.head + length >= device.size)
 		{
-		fread(device.buffer + device.head, 1, device.size - device.head, stdin);
+		result = fread(device.buffer + device.head, 1, device.size - device.head, stdin);
+		if(result < device.size - device.head)
+			return(-errno);
 		length -= device.size - device.head;
 		device.head = 0;
 		}
-	fread(device.buffer + device.head, 1, length, stdin);
+	result = fread(device.buffer + device.head, 1, length, stdin);
+	if(result < length)
+		return(-errno);
 	device.head += length;
 
 	return(0);
@@ -304,16 +311,22 @@ int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 {
+	int  result;
+
 	if(bytes_in_buffer() < length)
 		length = bytes_in_buffer();
 
 	if(device.tail + length >= device.size)
 		{
-		fwrite(device.buffer + device.tail, 1, device.size - device.tail, stdout);
+		result = fwrite(device.buffer + device.tail, 1, device.size - device.tail, stdout);
+		if(result < device.size - device.tail)
+			return(-errno);
 		length -= device.size - device.tail;
 		device.tail = 0;
 		}
-	fwrite(device.buffer + device.tail, 1, length, stdout);
+	result = fwrite(device.buffer + device.tail, 1, length, stdout);
+	if(result < length)
+		return(-errno);
 	device.tail += length;
 
 	return(0);

@@ -6,6 +6,39 @@
 	If needed, BKRIOCGETSTATUS will now update the DMA offset before
 	computing the number of bytes in the buffer.
 
+0.12(beta) (2000/12/11)
+	Fixed a bug in the low level write code:  in the event of an error,
+	update_device_offset() was still clearing the update interval timer
+	which would prevent retrys from actually retrying.  When propogated
+	out to the user's world this bug had the effect of occasionally
+	defeating the driver's ability to detect a missing video signal.
+	The truth is, though, that this should not have actually had any
+	effect.  Hmm....
+
+	Hmm is right!  Checking out how this "bug" managed to manifest
+	itself has led me to discover new properties of the hardware.  The
+	sync bit on the card's I/O port is actually only for the input
+	signal.  This is why the card had appeared to me to be unable to
+	generate output without a return signal from the VCR.  It turns out
+	that the card can indeed generate output without a return signal.
+	I won't go into details but what it boils down to is that in fact
+	the "bug" was in my misunderstanding of the function of the sync
+	bit.  So we're all happy now.  Although it's no longer necessary,
+	the driver still demands that a return video signal be present as a
+	check of the data path.
+
+	Solidified error reporting.  The driver had been a little relaxed
+	about getting error codes out to the kernel in that it was not
+	specifically retaining error codes for the purpose of reporting
+	them on a retry but was relying on the error recurring on the
+	retry.  Only in the case of an uncorrectable data block can the
+	error not occur on the retry and it's unlikely for one
+	uncorrectable block to be unacompanied so this wasn't really a
+	problem.  Anyway, now the driver makes a point of always returning
+	the last error code before proceding.
+
+	Code clean ups.
+
 0.11(beta) (2000/11/26)
 	Fixed minor bug in the read and write codes:  in the event of an
 	error, the wrong count of actual bytes moved was being returned to

@@ -56,7 +56,7 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.11(beta)"
+#define  BKR_VERSION           "0.12(beta)"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
@@ -66,8 +66,8 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
 #define  DEFAULT_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BKR_MAX_TIMEOUT       120          /* seconds */
 
-#define  DMA_IO_TO_MEM         0x14         /* demand transf, inc addr, auto-init */
-#define  DMA_MEM_TO_IO         0x18         /* demand transf, inc addr, auto-init */
+#define  DMA_IO_TO_MEM         0x14         /* demand transfer, inc addr, auto-init */
+#define  DMA_MEM_TO_IO         0x18         /* demand transfer, inc addr, auto-init */
 #define  DMA_HOLD_OFF          512          /* stay this far back from transfer point */
 
 #define  MIN_UPDATE_FREQ       3            /* minimum rate for DMA status updates in Hz */
@@ -162,7 +162,6 @@ struct bkrconfig                            /* Config structure (read/write) */
  */
 
 #define  TAPE_FORMAT           0            /* tape format version (not yet used!) */
-#define  CORR_THRESHOLD(x)     ((x)*8/5)    /* maximum number of bits allowed to be bad (20%) */
 #define  BKR_FILLER            0x33         /* filler for unused space */
 #define  KEY_LENGTH            28           /* bytes (must be a multiple of 2) */
 #define  BOR_LENGTH            4            /* seconds */
@@ -225,10 +224,6 @@ struct bkr_format
 
 #if (KEY_LENGTH & 1) != 0
 #error "KEY_LENGTH must be a multiple of 2"
-#endif
-
-#if EOR_BLOCK == 0
-#error "EOR_BLOCK must be non-zero"
 #endif
 
 #if (MIN_UPDATE_FREQ > HZ) || (MAX_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)

@@ -51,9 +51,13 @@ its internal buffer.
 
 When reading from the port this bit indicates the current status of the
 DREQ line with a 1 indicating an active DREQ and 0 indicating inactive
-DREQ.  Despite this, it is not safe to synchronize count and residue
-updates to this bit.  I have found that only the sync bit can be used for
-this purpose (see below).
+DREQ.
+
+I have found that occasionally there is not enough time to read both the
+high and low bytes when this bit goes to 0.  The work-around (to be sure
+you don't over write the current transfer point) is to not access memory
+within 256 bytes of the reported DMA transfer location (my device driver is
+written to always stay 512 bytes away just to be sure).
 
 It is convenient to configure the DMA controller to autoinitialize the
 channel that's being used.  This allows the card to generate a nice
@@ -76,19 +80,12 @@ the port fast enough to make use of this.
 Sync:
 -----
 
-This bit == 0 during sync intervals (horizontal AND vertical).  It is safe
-to read the DMA count and residue registers when this bit is 0.  By "safe"
-I mean that while this bit != 0 the card is actively transfering data so
-the residue/address read from the DMA controler is not guaranteed to
-correspond in any way at all to the true location of the current transfer.
-
-I have found that even this seems to not work too well and I'm fairly
-positive the problem lies with getting the numbers from the DMA controller
-before they change.  The symptom is that the low byte of the number read
-from the DMA controller seems to be, only _very_ occasionally, invalid so
-to be sure you don't over write the current transfer point you should not
-access memory within 256 bytes of the reported DMA transfer location (my
-device driver is written to always stay 512 bytes away just to be sure).
+This bit == 0 during sync intervals in the input signal (horizontal AND
+vertical).  It is (mostly) safe to read the DMA count and residue registers
+when this bit is 0.  By "safe" I mean that while this bit != 0 the card is
+actively transfering data so the residue/address read from the DMA
+controler is not guaranteed to correspond in any way at all to the true
+location of the current transfer.
 
 
 Frame Busy:
@@ -188,13 +185,13 @@ Hardware Response:
 
 The following are some tid-bits regarding the behaviour of the card.
 
-(i)  The card requires a video signal to be present on its input in order
-to generate an output signal.  This might be an intentional feature of the
-hardware designed to allow the presence of a VCR to be detected.  One can
-check to see if a video signal is present on the input by waiting for the
-sync bit to toggle within a period of time (it will be toggling about 15000
-times a second if a video signal is present so you don't have to wait too
-long to know that there's no signal there).
+(i)  The sync bit only indicates the status of the input signal, not the
+output signal.  Since the round-trip propogation delay through a VCR is
+quite low, however, one seems to be able to safetly use this bit as the
+sync indicator for the output signal as well.  So, the correct bit to use
+for synchronizing updates of the DMA offset is the DMA Request bit but by
+using the sync bit instead one effectively requires that a VCR be connected
+to both input and output and that it be turned on and switched to "line".
 
 (ii)  During playback, the card will (sometimes) skip over lines containing
 all 0's.  I do not yet know if there is a pattern to this behaviour.  For a

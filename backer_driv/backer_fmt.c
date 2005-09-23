@@ -50,23 +50,20 @@
 #include "backer_device.h"
 #include "backer_fmt.h"
 
-#define  BLOCKS_PER_SECOND  (device.bytes_per_line*2*(BKR_VIDEOMODE(device.mode)==BKR_PAL?50:60))
-#define  SECTOR_KEY_OFFSET  (sector.header_length+(block.parity+sizeof(header_t))*device.bytes_per_line)
-
 
 /*
  * Function prototypes
  */
 
-static int           bkr_block_read_fmt(f_flags_t, jiffies_t);
-static int           bkr_block_write_fmt(f_flags_t, jiffies_t);
-static int           bkr_block_read_raw(f_flags_t, jiffies_t);
-static int           bkr_block_write_raw(f_flags_t, jiffies_t);
-static void          bkr_block_randomize(__u32);
-static unsigned int  bkr_sector_blocks_remaining(void);
-static int           bkr_sector_read(f_flags_t, jiffies_t);
-static int           bkr_sector_write(f_flags_t, jiffies_t);
-static int           bkr_get_sector(f_flags_t, jiffies_t);
+static int   bkr_block_read_fmt(f_flags_t, jiffies_t);
+static int   bkr_block_write_fmt(f_flags_t, jiffies_t);
+static int   bkr_block_read_raw(f_flags_t, jiffies_t);
+static int   bkr_block_write_raw(f_flags_t, jiffies_t);
+static void  bkr_block_randomize(__u32);
+static int   bkr_sector_blocks_remaining(void);
+static int   bkr_sector_read(f_flags_t, jiffies_t);
+static int   bkr_sector_write(f_flags_t, jiffies_t);
+static int   bkr_find_sector(f_flags_t, jiffies_t);
 
 
 /*
@@ -76,6 +73,26 @@ static int           bkr_get_sector(f_flags_t, jiffies_t);
 static struct bkr_format  format[] = BKR_FORMATS;       /* format information */
 static unsigned char  key[] = KEY_INITIALIZER;          /* white noise */
 static unsigned char  weight[] = WEIGHT_INITIALIZER;    /* anti-correlation weights */
+
+
+/*
+ * Macros
+ */
+
+static inline int BLOCKS_PER_SECOND(void)
+{
+	return(device.bytes_per_line * 2 * (BKR_VIDEOMODE(device.mode) == BKR_PAL ? 50 : 60));
+}
+
+static inline int SECTOR_KEY_OFFSET(void)
+{
+	return(sector.header_length + (block.parity + sizeof(header_t)) * device.bytes_per_line);
+}
+
+static inline int CORR_THRESHOLD(int key_length)
+{
+	return(0.20 * (key_length << 3));
+}
 
 
 /*
@@ -171,7 +188,7 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 	free(sector.buffer);
 	free(block.buffer);
 	sector.buffer = (unsigned char *) malloc(sector.size);
-	block.buffer = (unsigned char *) malloc(((block.size + 1) >> 1) << 1);
+	block.buffer = (unsigned char *) malloc((block.size + 1) & ~1);
 	if((sector.buffer == NULL) || (block.buffer == NULL))
 		return(-ENOMEM);
 
@@ -295,7 +312,7 @@ int bkr_write_bor(jiffies_t bailout)
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= BOR_BLOCK;
 
-	for(i = BLOCKS_PER_SECOND * BOR_LENGTH; i && !result; i--)
+	for(i = BLOCKS_PER_SECOND() * BOR_LENGTH; i && !result; i--)
 		{
 		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
@@ -323,14 +340,14 @@ int bkr_write_eor(jiffies_t bailout)
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= EOR_BLOCK;
 
-	for(i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND * EOR_LENGTH; i && !result; i--)
+	for(i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND() * EOR_LENGTH; i && !result; i--)
 		{
 		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
 		result = bkr_block_write_fmt(0, bailout);
 		}
 
-	return(0);
+	return(result);
 }
 
 /*
@@ -340,7 +357,8 @@ int bkr_write_eor(jiffies_t bailout)
  * then the block sequence counter is reset and the block skipped.  If a
  * non-BOR block is found but it is out of sequence then it too is skipped.
  * Otherwise the block capacity is set appropriately and the block type
- * returned to the calling function.
+ * returned to the calling function.  Returns < 0 on error 1 on success and
+ * 0 on EOR.
  */
 
 static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
@@ -355,7 +373,7 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 
 		if(result < 0)
 			{
-			block.offset = block.end;
+			block.end = block.offset;
 			return(result);
 			}
 
@@ -363,8 +381,8 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 
 		if(result < 0)
 			{
+			block.end = block.offset;
 			errors.block++;
-			block.offset = block.end;
 			need_sequence_reset = 1;
 			return(-ENODATA);
 			}
@@ -414,7 +432,7 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 	if(BLOCK_TYPE(*block.header) == EOR_BLOCK)
 		{
 		block.end = block.offset;
-		return(EOR_BLOCK);
+		return(0);
 		}
 
 	block.end = block.buffer;
@@ -423,7 +441,7 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 	else
 		block.end += block.size;
 
-	return(0);
+	return(1);
 }
 
 /*
@@ -533,10 +551,7 @@ static int bkr_block_read_raw(f_flags_t f_flags, jiffies_t bailout)
 
 	result = bkr_device_read(block.size, f_flags, bailout);
 	if(result < 0)
-		{
-		block.offset = block.end;
 		return(result);
-		}
 
 	if(device.tail + block.size >= device.size)
 		{
@@ -548,9 +563,10 @@ static int bkr_block_read_raw(f_flags_t f_flags, jiffies_t bailout)
 	else
 		memcpy(block.buffer, device.buffer + device.tail, block.size);
 	device.tail += block.size;
+
 	block.offset = block.buffer;
 
-	return(0);
+	return(1);
 }
 
 static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
@@ -562,8 +578,6 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 	if(result < 0)
 		return(result);
 
-	block.offset = block.buffer;
-
 	if(device.head + block.size >= device.size)
 		{
 		count = device.size - device.head;
@@ -574,6 +588,8 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 	else
 		memcpy(device.buffer + device.head, block.buffer, block.size);
 	device.head += block.size;
+
+	block.offset = block.buffer;
 
 	return(0);
 }
@@ -597,7 +613,7 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
  * sector.
  */
 
-static unsigned int bkr_sector_blocks_remaining(void)
+static int bkr_sector_blocks_remaining(void)
 {
 	if(sector.block >= sector.footer)
 		return(sector.block - sector.footer + device.bytes_per_line);
@@ -619,9 +635,27 @@ static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 
 	if(sector.block == sector.aux)
 		{
-		result = bkr_get_sector(f_flags, bailout);
+		result = bkr_find_sector(f_flags, bailout);
 		if(result < 0)
 			return(result);
+		if(result > sector.footer_length+device.bytes_per_line)
+			errors.sector++;
+
+		result = bkr_device_read(sector.footer_offset, f_flags, bailout);
+		if(result < 0)
+			return(result);
+
+		if(device.tail + sector.footer_offset >= device.size)
+			{
+			count = device.size - device.tail;
+			memcpy(sector.buffer, device.buffer + device.tail, count);
+			memcpy(sector.buffer + count, device.buffer, sector.footer_offset - count);
+			device.tail -= device.size;
+			}
+		else
+			memcpy(sector.buffer, device.buffer + device.tail, sector.footer_offset);
+		device.tail += sector.footer_offset;
+
 		sector.block = sector.footer + device.bytes_per_line;
 		}
 	else if(sector.block == sector.footer)
@@ -683,7 +717,7 @@ static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
 
 
 /*
- * bkr_get_sector()
+ * bkr_find_sector()
  *
  * Finds the next sector in the data stream and updates the device tail
  * appropriately.  The search is done by computing a correlation
@@ -696,18 +730,18 @@ static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
  * block was found.
  */
 
-static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
+static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
 	unsigned int  i, j;
 	unsigned int  anti_corr;
 	unsigned int  skipped = -1;
 
-	result = bkr_device_read(SECTOR_KEY_OFFSET, f_flags, bailout);
+	result = bkr_device_read(SECTOR_KEY_OFFSET(), f_flags, bailout);
 	if(result < 0)
 		return(result);
 
-	device.tail += SECTOR_KEY_OFFSET - 1;
+	device.tail += SECTOR_KEY_OFFSET() - 1;
 	if(device.tail >= device.size)
 		device.tail -= device.size;
 
@@ -740,30 +774,9 @@ static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
 		}
 	while(anti_corr > CORR_THRESHOLD(KEY_LENGTH));
 
-	device.tail -= SECTOR_KEY_OFFSET;
+	device.tail -= SECTOR_KEY_OFFSET();
 	if((int) device.tail < 0)
 		device.tail += device.size;
-
-	if(result < 0)
-		return(result);
-
-	result = bkr_device_read(sector.footer_offset, f_flags, bailout);
-	if(result < 0)
-		return(result);
-
-	if(device.tail + sector.footer_offset >= device.size)
-		{
-		i = device.size - device.tail;
-		memcpy(sector.buffer, device.buffer + device.tail, i);
-		memcpy(sector.buffer + i, device.buffer, sector.footer_offset - i);
-		device.tail -= device.size;
-		}
-	else
-		memcpy(sector.buffer, device.buffer + device.tail, sector.footer_offset);
-	device.tail += sector.footer_offset;
-
-	if(skipped > sector.footer_length+device.bytes_per_line)
-		errors.sector++;
 
 	if(anti_corr > worst_match)
 		worst_match = anti_corr;
@@ -772,5 +785,7 @@ static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
 	if(skipped > most_skipped)
 		most_skipped = skipped;
 
+	if(result < 0)
+		return(result);
 	return(skipped);
 }

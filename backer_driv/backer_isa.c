@@ -260,6 +260,7 @@ int open(struct inode *inode, struct file *filp)
 			goto cant_write_bor;
 		}
 
+	filp->private_data = 0;	/* FIXME: find a better way */
 	return(0);
 
 	cant_write_bor:
@@ -462,9 +463,15 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 
 	if((filp->f_flags & O_ACCMODE) != O_RDONLY)
 		return(-EPERM);
+	if(filp->private_data != 0)	/* FIXME */
+		{
+		result = (int) filp->private_data;
+		filp->private_data = 0;
+		return(result);
+		}
 
 	bailout = jiffies + timeout;
-	for(moved = 0; count; count -= chunk_size, buff += chunk_size)
+	for(moved = 0; count; buff += chunk_size, count -= chunk_size)
 		{
 		chunk_size = block.end - block.offset;
 		if(chunk_size > count)
@@ -473,13 +480,16 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 		memcpy_tofs(buff, block.offset, chunk_size);
 
 		moved += chunk_size;
-		if((block.offset += chunk_size) == block.end)
+		block.offset += chunk_size;
+		if(block.offset == block.end)
 			{
 			result = block.read(filp->f_flags, bailout);
-			if(result < 0)
+			if(result <= 0)
+				{
+				if(moved)	/* FIXME */
+					filp->private_data = (void *) result;
 				return(moved ? moved : result);
-			if(result == EOR_BLOCK)
-				break;
+				}
 			}
 		}
 
@@ -493,9 +503,15 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 
 	if((filp->f_flags & O_ACCMODE) != O_WRONLY)
 		return(-EPERM);
+	if(filp->private_data != 0)	/* FIXME */
+		{
+		result = (int) filp->private_data;
+		filp->private_data = 0;
+		return(result);
+		}
 
 	bailout = jiffies + timeout;
-	for(moved = 0; count; count -= chunk_size, buff += chunk_size)
+	for(moved = 0; count; buff += chunk_size, count -= chunk_size)
 		{
 		chunk_size = block.end - block.offset;
 		if(chunk_size > count)
@@ -504,11 +520,16 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 		memcpy_fromfs(block.offset, buff, chunk_size);
 
 		moved += chunk_size;
-		if((block.offset += chunk_size) == block.end)
+		block.offset += chunk_size;
+		if(block.offset == block.end)
 			{
 			result = block.write(filp->f_flags, bailout);
 			if(result < 0)
+				{
+				if(moved)	/* FIXME */
+					filp->private_data = (void *) result;
 				return(moved ? moved : result);
+				}
 			}
 		}
 
@@ -558,7 +579,7 @@ int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 	result = update_dma_offset(&device.head);
 
-	if(((bytes_in_buffer() >= length) && (space_in_buffer() > DMA_HOLD_OFF)) || (result < 0))
+	if(((bytes_in_buffer() >= length) && (space_in_buffer() > DMA_HOLD_OFF)) || result)
 		return(result);
 	if(f_flags & O_NONBLOCK)
 		return(-EWOULDBLOCK);
@@ -602,7 +623,7 @@ int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 	result = update_dma_offset(&device.tail);
 
-	if(((space_in_buffer() >= length) && (bytes_in_buffer() > DMA_HOLD_OFF)) || (result < 0))
+	if(((space_in_buffer() >= length) && (bytes_in_buffer() > DMA_HOLD_OFF)) || result)
 		return(result);
 	if(f_flags & O_NONBLOCK)
 		return(-EWOULDBLOCK);
@@ -633,7 +654,9 @@ int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 int bkr_device_flush(jiffies_t bailout)
 {
-	int  result = 0;
+	int  result;
+
+	bkr_device_write(INTERNAL_BUFFER, 0, bailout);
 
 	device.head += INTERNAL_BUFFER;
 	if(device.head >= device.size)
@@ -656,7 +679,7 @@ int bkr_device_flush(jiffies_t bailout)
  * Retrieves the offset within the DMA buffer at which the next transfer
  * will occur.  During read operations this is the buffer's head; during
  * write operations it is the tail.  Returns 0 on success, -EIO if no video
- * signal is present.
+ * signal is present on the input.
  */
 
 static int update_dma_offset(unsigned int *offset)
@@ -666,8 +689,12 @@ static int update_dma_offset(unsigned int *offset)
 
 	bailout = jiffies + HZ/MIN_SYNC_FREQ;
 
-	while(!(inb(ioport) & BIT_SYNC) && (jiffies < bailout));
-	while((inb(ioport) & BIT_SYNC) && (jiffies < bailout));
+	while(~inb(ioport) & BIT_SYNC)
+		 if(jiffies >= bailout)
+			return(-EIO);
+	while(inb(ioport) & BIT_SYNC)
+		if(jiffies >= bailout)
+			return(-EIO);
 
 	save_flags(flags);
 	cli();
@@ -677,8 +704,6 @@ static int update_dma_offset(unsigned int *offset)
 
 	device.last_update = jiffies;
 
-	if(jiffies >= bailout)
-		return(-EIO);
 	return(0);
 }
 

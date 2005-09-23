@@ -1,3 +1,25 @@
+/*
+ * bkrmonitor
+ *
+ * Graphical display of Backer device driver status.
+ *
+ * Copyright (C) 2000  Kipp C. Cannon
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -126,6 +148,41 @@ int main(int argc, char *argv[])
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sp, 2, 3, 0, 1);
 	widgets.ep = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.sp)), "EP");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ep, 2, 3, 1, 2);
+
+	gtk_widget_set_sensitive(GTK_WIDGET(table), FALSE);
+
+	switch(BKR_VIDEOMODE(config.mode))
+		{
+		case BKR_NTSC:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ntsc), TRUE);
+		break;
+
+		case BKR_PAL:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.pal), TRUE);
+		break;
+		}
+
+	switch(BKR_DENSITY(config.mode))
+		{
+		case BKR_HIGH:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.high), TRUE);
+		break;
+
+		case BKR_LOW:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.low), TRUE);
+		break;
+		}
+
+	switch(BKR_SPEED(config.mode))
+		{
+		case BKR_SP:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.sp), TRUE);
+		break;
+
+		case BKR_EP:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ep), TRUE);
+		break;
+		}
 
 	/* Error counts */
 

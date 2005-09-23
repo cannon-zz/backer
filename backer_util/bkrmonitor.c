@@ -20,56 +20,35 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-#include <sys/mtio.h>
+#include <gtk/gtk.h>
 
 #include "backer.h"
 
 
-#ifdef GTK_CONFIG
-
-#include <gtk/gtk.h>
-void  create_gtk_window(void);
-#define  ONCE_INITIALIZER  0
-
-#else
-
-typedef  int  gint;
-typedef  void  *gpointer;
-typedef  void  GtkWidget;
-#define  gtk_init(x,y)           do { } while(0)
-#define  gtk_timeout_add(x,y,z)  do { } while(0)
-#define  gtk_main()              do { } while(0)
-#define  create_gtk_window()     do { } while(0)
-#define  TRUE   1
-#define  FALSE  0
-#define  ONCE_INITIALIZER  1
-
-#endif /* GTK_CONFIG */
-
-
 #define  PROGRAM_NAME    "bkrmonitor"
+#define  PROC_ENTRY      "/proc/driver/backer"
 #define  DEFAULT_UPDATE  50                     /* milliseconds */
-#define  MIN_UPDATE      10                     /* milliseconds */
+#define  MIN_UPDATE      20                     /* milliseconds */
 #define  DECAY_INTERVAL  60                     /* sectors */
+
 
 /*
  * Function prototypes
  */
 
 gint  update_status(gpointer);
+void  read_proc(void);
 
 
 /*
  * Global data
  */
 
-int  devfile;
-int  update_interval = MIN_UPDATE - 1;
+FILE  *procfile;
+int  update_interval = -1;
 struct
 	{
 	GtkWidget  *ntsc, *pal;
@@ -87,10 +66,25 @@ struct
 	int  rate;
 	int  last_block;
 	} error_rate;
-struct  bkrstatus  status;
-struct  bkrformat  format;
-struct  mtget      mtget;
-struct  mtpos      pos;
+struct
+	{
+	unsigned int   mode;
+	unsigned long  sector_number;
+	unsigned int   total_errors;
+	unsigned int   worst_block;
+	unsigned int   parity;
+	unsigned int   recent_block;
+	unsigned int   bad_blocks;
+	unsigned int   frame_errors;
+	unsigned int   overrun_errors;
+	unsigned int   underflow_errors;
+	unsigned int   worst_key;
+	unsigned int   best_nonkey;
+	unsigned int   least_skipped;
+	unsigned int   most_skipped;
+	unsigned int   bytes_in_buffer;
+	unsigned int   buffer_size;
+	} proc_data;
 
 
 /*
@@ -100,27 +94,21 @@ struct  mtpos      pos;
 int main(int argc, char *argv[])
 {
 	int  i;
-	int  once = ONCE_INITIALIZER;
-	char  *devname = DEFAULT_DEVICE;
+	GtkWidget  *window;
+	GtkWidget  *vbox;
+	GtkWidget  *table;
+	GtkWidget  *widget;
 
 	/*
 	 * Parse command line.
 	 */
 
 	gtk_init(&argc, &argv);
-	while((i = getopt(argc, argv, "f:hot:")) != EOF)
+	while((i = getopt(argc, argv, "ht:")) != EOF)
 		switch(i)
 			{
-			case 'f':
-			devname = optarg;
-			break;
-
 			case 't':
 			update_interval = atoi(optarg);
-			break;
-
-			case 'o':
-			once = 1;
 			break;
 
 			case 'h':
@@ -128,79 +116,28 @@ int main(int argc, char *argv[])
 			puts(
 	"Usage:  " PROGRAM_NAME " [options]\n" \
 	"the following options are recognized:\n" \
-	"       -f devname  Use device devname (default " DEFAULT_DEVICE ")\n" \
 	"       -t num      Set the update interval to num milliseconds\n" \
-	"       -o          Print status to stdout and quit\n" \
 	"       -h          Display usage");
-			exit(0);
+			exit(-1);
 			}
 	if(update_interval < MIN_UPDATE)
 		update_interval = DEFAULT_UPDATE;
 
 	/*
-	 * Open device file and get info.  If in once-only mode, print the
-	 * results and quit.
+	 * Open proc file and get initial data.
 	 */
 
-	devfile = open(devname, O_RDONLY);
-	if(devfile < 0)
+	procfile = fopen(PROC_ENTRY, "r");
+	if(procfile == NULL)
 		{
-		perror(PROGRAM_NAME);
+		perror(PROGRAM_NAME " : " PROC_ENTRY);
 		exit(-1);
 		}
-	ioctl(devfile, MTIOCGET, &mtget);
-	ioctl(devfile, BKRIOCGETFORMAT, &format);
-
-	if(once)
-		{
-		ioctl(devfile, MTIOCPOS, &pos);
-		ioctl(devfile, BKRIOCGETSTATUS, &status);
-		
-		printf("Current Status of %s\n", devname);
-		printf("Sector Number:  %lu\n", pos.mt_blkno);
-		printf("Total Errors Corrected:  %u\n", status.health.total_errors);
-		printf("Errors in Worst Block:   %u\n", status.errors.symbol);
-		printf("Uncorrectable Blocks:    %u\n", status.errors.block);
-		printf("Framing Errors:       %u\n", status.errors.frame);
-		printf("Overrun Errors:       %u\n", status.errors.overrun);
-		printf("Underflows Detected:  %u\n", status.errors.underflow);
-		printf("Worst Key:        %u\n", status.health.worst_key);
-		printf("Closest Non-Key:  %u\n", status.health.best_nonkey);
-		printf("Least Skipped:    %u\n", status.health.least_skipped);
-		printf("Most Skipped:     %u\n", status.health.most_skipped);
-		printf("DMA Buffer:  %u/%u\n", status.bytes, format.buffer_size);
-
-		exit(0);
-		}
+	read_proc();
 
 	/*
-	 * Create the window and go.
+	 * Create the program's window
 	 */
-
-	create_gtk_window();
-
-	gtk_timeout_add(update_interval, update_status, NULL);
-
-	error_rate.rate = 0;
-	error_rate.last_block = 0;
-
-	gtk_main();
-
-	exit(0);
-}
-
-
-/*
- * create_gtk_window()
- */
-
-#ifdef GTK_CONFIG
-void create_gtk_window(void)
-{
-	GtkWidget  *window;
-	GtkWidget  *vbox;
-	GtkWidget  *table;
-	GtkWidget  *widget;
 
 	/* window */
 
@@ -237,43 +174,6 @@ void create_gtk_window(void)
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ep, 2, 3, 2, 3);
 
 	gtk_widget_set_sensitive(GTK_WIDGET(table), FALSE);
-
-	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
-		{
-		case BKR_NTSC:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ntsc), TRUE);
-		break;
-
-		case BKR_PAL:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.pal), TRUE);
-		break;
-		}
-
-	switch(BKR_DENSITY(mtget.mt_dsreg))
-		{
-		case BKR_HIGH:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.high), TRUE);
-		break;
-
-		case BKR_LOW:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.low), TRUE);
-		break;
-		}
-
-	switch(BKR_FORMAT(mtget.mt_dsreg))
-		{
-		case BKR_RAW:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.raw), TRUE);
-		break;
-
-		case BKR_SP:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.sp), TRUE);
-		break;
-
-		case BKR_EP:
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ep), TRUE);
-		break;
-		}
 
 	/* Error counts */
 
@@ -355,10 +255,8 @@ void create_gtk_window(void)
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 
 	error_rate.widget = gtk_progress_bar_new();
-	gtk_progress_configure(GTK_PROGRESS(error_rate.widget), 0, 0, format.block_parity/2*DECAY_INTERVAL);
 	gtk_table_attach_defaults(GTK_TABLE(table), error_rate.widget, 1, 2, 0, 1);
 	widgets.buffer_status = gtk_progress_bar_new();
-	gtk_progress_configure(GTK_PROGRESS(widgets.buffer_status), 0, 0, format.buffer_size);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.buffer_status, 1, 2, 1, 2);
 
 	/* Close button */
@@ -370,8 +268,21 @@ void create_gtk_window(void)
 	/* Done */
 
 	gtk_widget_show_all(window);
+
+
+	/*
+	 * And away we go...
+	 */
+
+	error_rate.rate = 0;
+	error_rate.last_block = 0;
+
+	gtk_timeout_add(update_interval, update_status, NULL);
+
+	gtk_main();
+
+	exit(0);
 }
-#endif /* GTK_CONFIG */
 
 
 /*
@@ -382,56 +293,135 @@ gint update_status(gpointer data)
 {
 	char  text[20];
 
-	ioctl(devfile, MTIOCPOS, &pos);
-	ioctl(devfile, BKRIOCGETSTATUS, &status);
+	read_proc();
 
-	if(status.errors.recent_symbol != 0)
-		error_rate.rate = status.errors.recent_symbol * DECAY_INTERVAL;
+	switch(BKR_VIDEOMODE(proc_data.mode))
+		{
+		case BKR_NTSC:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ntsc), TRUE);
+		break;
+
+		case BKR_PAL:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.pal), TRUE);
+		break;
+		}
+
+	switch(BKR_DENSITY(proc_data.mode))
+		{
+		case BKR_HIGH:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.high), TRUE);
+		break;
+
+		case BKR_LOW:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.low), TRUE);
+		break;
+		}
+
+	switch(BKR_FORMAT(proc_data.mode))
+		{
+		case BKR_RAW:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.raw), TRUE);
+		break;
+
+		case BKR_SP:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.sp), TRUE);
+		break;
+
+		case BKR_EP:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ep), TRUE);
+		break;
+		}
+
+	gtk_progress_configure(GTK_PROGRESS(error_rate.widget), 0, 0, proc_data.parity/2*DECAY_INTERVAL);
+	gtk_progress_configure(GTK_PROGRESS(widgets.buffer_status), 0, 0, proc_data.buffer_size);
+
+	if(proc_data.recent_block != 0)
+		error_rate.rate = proc_data.recent_block * DECAY_INTERVAL;
 	else if(error_rate.rate > 0)
 		{
-		error_rate.rate -= pos.mt_blkno - error_rate.last_block;
+		error_rate.rate -= proc_data.sector_number - error_rate.last_block;
 		if(error_rate.rate < 0)
 			error_rate.rate = 0;
 		}
-	error_rate.last_block = pos.mt_blkno;
+	error_rate.last_block = proc_data.sector_number;
 
-#ifdef GTK_CONFIG
 	gtk_progress_set_value(GTK_PROGRESS(error_rate.widget), error_rate.rate);
-	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), status.bytes);
+	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), proc_data.bytes_in_buffer);
 
-	sprintf(text, "%lu", pos.mt_blkno);
+	sprintf(text, "%lu", proc_data.sector_number);
 	gtk_label_set_text(GTK_LABEL(widgets.sector), text);
 
-	sprintf(text, "%u", status.health.total_errors);
+	sprintf(text, "%u", proc_data.total_errors);
 	gtk_label_set_text(GTK_LABEL(widgets.total), text);
 
-	sprintf(text, "%u", status.errors.symbol);
+	sprintf(text, "%u", proc_data.worst_block);
 	gtk_label_set_text(GTK_LABEL(widgets.symbol), text);
 
-	sprintf(text, "%u", status.errors.block);
+	sprintf(text, "%u", proc_data.bad_blocks);
 	gtk_label_set_text(GTK_LABEL(widgets.block), text);
 
-	sprintf(text, "%u", status.errors.frame);
+	sprintf(text, "%u", proc_data.frame_errors);
 	gtk_label_set_text(GTK_LABEL(widgets.frame), text);
 
-	sprintf(text, "%u", status.errors.overrun);
+	sprintf(text, "%u", proc_data.overrun_errors);
 	gtk_label_set_text(GTK_LABEL(widgets.overrun), text);
 
-	sprintf(text, "%u", status.errors.underflow);
+	sprintf(text, "%u", proc_data.underflow_errors);
 	gtk_label_set_text(GTK_LABEL(widgets.underflow), text);
 
-	sprintf(text, "%u", status.health.worst_key);
+	sprintf(text, "%u", proc_data.worst_key);
 	gtk_label_set_text(GTK_LABEL(widgets.worst), text);
 
-	sprintf(text, "%u", status.health.best_nonkey);
+	sprintf(text, "%u", proc_data.best_nonkey);
 	gtk_label_set_text(GTK_LABEL(widgets.best), text);
 
-	sprintf(text, "%u", status.health.least_skipped);
+	sprintf(text, "%u", proc_data.least_skipped);
 	gtk_label_set_text(GTK_LABEL(widgets.least), text);
 
-	sprintf(text, "%u", status.health.most_skipped);
+	sprintf(text, "%u", proc_data.most_skipped);
 	gtk_label_set_text(GTK_LABEL(widgets.most), text);
-#endif  /* GTK_CONFIG */
 
 	return(TRUE);
+}
+
+
+/*
+ * read_proc()
+ *
+ * Parse the contents of the /proc file.
+ */
+
+void read_proc(void)
+{
+	fseek(procfile, 0L, SEEK_SET);
+	fscanf(procfile, "%*24c%u\n"
+	                 "%*24c%lu\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u / %u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u\n"
+	                 "%*24c%u / %u\n",
+	       &proc_data.mode,
+	       &proc_data.sector_number,
+	       &proc_data.total_errors,
+	       &proc_data.worst_block, &proc_data.parity,
+	       &proc_data.recent_block,
+	       &proc_data.bad_blocks,
+	       &proc_data.frame_errors,
+	       &proc_data.overrun_errors,
+	       &proc_data.underflow_errors,
+	       &proc_data.worst_key,
+	       &proc_data.best_nonkey,
+	       &proc_data.least_skipped,
+	       &proc_data.most_skipped,
+	       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
+
+	return;
 }

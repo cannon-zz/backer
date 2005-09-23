@@ -37,8 +37,6 @@
 #include "bkr_disp_mode.h"
 
 #define  PROGRAM_NAME    "bkrencode"
-#define  DEFAULT_MODE    (BKR_NTSC | BKR_LOW | BKR_SP)
-#define  BUFFER_SIZE     8192
 #define  BAILOUT         1
 
 /*
@@ -71,12 +69,11 @@ int main(int argc, char *argv[])
 	 */
 
 	device.direction = STOPPED;
-	device.alloc_size = BUFFER_SIZE;
 	sector.buffer = NULL;
 	direction = WRITING;
 	mtget.mt_dsreg = DEFAULT_MODE;
 
-	device.buffer = (unsigned char *) malloc(device.alloc_size);
+	device.buffer = (unsigned char *) malloc(BKR_BUFFER_SIZE);
 	if(device.buffer == NULL)
 		{
 		errno = ENOMEM;
@@ -88,7 +85,7 @@ int main(int argc, char *argv[])
 	 * Process command line options
 	 */
 
-	while((result = getopt(argc, argv, "aD:F:f:huV:")) != EOF)
+	while((result = getopt(argc, argv, "D:F:f::huV:")) != EOF)
 		switch(result)
 			{
 			case 'u':
@@ -100,7 +97,9 @@ int main(int argc, char *argv[])
 			break;
 
 			case 'f':
-			devname = optarg;
+			mtget.mt_dsreg = -1;
+			if(optarg != NULL)
+				devname = optarg;
 			break;
 
 			case 'D':
@@ -166,11 +165,11 @@ int main(int argc, char *argv[])
 	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
 	"	-D <h/l>  Set the data rate to high or low\n" \
 	"	-F <s/e>  Set the data format to SP or EP\n" \
-	"	-a        Get the format from the current mode of the Backer device\n" \
-	"	-f dev    Use device dev for the \"-a\" option (default " DEFAULT_DEVICE ")\n" \
+	"	-f [dev]  Get the format to use from the Backer device dev\n" \
+	"                  (default " DEFAULT_DEVICE ")\n" \
 	"	-u        Unencode tape data (default is to encode)\n" \
 	"	-h        Display usage message\n", stderr);
-			exit(0);
+			exit(-1);
 			}
 
 	/*
@@ -201,15 +200,18 @@ int main(int argc, char *argv[])
 	 * on SIGINT.
 	 */
 
-	signal(SIGINT, sigint_handler);
-	got_sigint = 0;
+	if(direction == WRITING)
+		{
+		signal(SIGINT, sigint_handler);
+		got_sigint = 0;
+		}
 
 	/*
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
 	setbuf(stderr, NULL);
-	bkr_device_reset(mtget.mt_dsreg);
+	bkr_device_reset(mtget.mt_dsreg, direction);
 	bkr_format_reset(mtget.mt_dsreg, direction);
 	bkr_device_start_transfer(direction, BAILOUT);
 	switch(direction)
@@ -218,13 +220,13 @@ int main(int argc, char *argv[])
 		while(1)
 			{
 			errno = 0;
-			result = sector.read(0, BAILOUT);
+			result = sector.read();
 			if(result == 0)
 				break;
 			if(result < 0)
 				{
 				errno = -result;
-				perror(PROGRAM_NAME);
+				perror(PROGRAM_NAME": stdin");
 				exit(-1);
 				}
 			while(sector.offset < sector.end)
@@ -232,7 +234,7 @@ int main(int argc, char *argv[])
 				sector.offset += fwrite(sector.offset, 1, sector.end - sector.offset, stdout);
 				if(ferror(stdout))
 					{
-					perror(PROGRAM_NAME);
+					perror(PROGRAM_NAME": stdout");
 					exit(-1);
 					}
 				}
@@ -241,7 +243,6 @@ int main(int argc, char *argv[])
 		break;
 
 		case WRITING:
-		bkr_write_bor(BAILOUT);
 		while(!feof(stdin) & !got_sigint)
 			{
 			errno = 0;
@@ -250,20 +251,24 @@ int main(int argc, char *argv[])
 				sector.offset += fread(sector.offset, 1, sector.end - sector.offset, stdin);
 				if(ferror(stdin))
 					{
-					perror(PROGRAM_NAME);
+					perror(PROGRAM_NAME": stdin");
 					exit(-1);
 					}
 				}
-			result = sector.write(0, BAILOUT);
+			result = sector.write();
 			if(result < 0)
 				{
 				errno = -result;
-				perror(PROGRAM_NAME);
+				perror(PROGRAM_NAME": stdout");
 				exit(-1);
 				}
 			}
-		bkr_write_eor(BAILOUT);
-		bkr_device_flush(BAILOUT);
+		do
+			result = bkr_sector_write_eor();
+		while(result == -EAGAIN);
+		do
+			result = bkr_device_flush();
+		while(result == -EAGAIN);
 		break;
 
 		default:

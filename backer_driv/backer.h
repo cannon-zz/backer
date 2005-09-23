@@ -80,13 +80,6 @@ struct bkrhealth
 
 #define  HEALTH_INITIALIZER  ((struct bkrhealth) { 0, ~0, 0, ~0, 0})
 
-struct bkrstatus                                /* Status structure (read only) */
-	{
-	unsigned int  bytes;                    /* in DMA buffer */
-	struct bkrerrors errors;
-	struct bkrhealth health;
-	};
-
 struct bkrformat                                /* Format structure (read only) */
 	{
 	unsigned int  buffer_size;              /* == bytes per frame * an integer */
@@ -97,7 +90,6 @@ struct bkrformat                                /* Format structure (read only) 
 	unsigned int  sector_capacity;          /* bytes */
 	};
 
-#define  BKRIOCGETSTATUS       _IOR('m', 10, struct bkrstatus)    /* get status */
 #define  BKRIOCGETFORMAT       _IOR('m', 12, struct bkrformat)    /* get format */
 
 

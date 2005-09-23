@@ -20,44 +20,43 @@ SOFTWARE
 
 Here are the steps for installing the driver.
 
-1.  Configure the driver parameters for your system.  The constants that
-should be set are:
-
-	In Makefile
+1.  Configure the Makefile for your system.  The parameters that should be
+set are:
 
 	BKR_MAJOR
+	DEV_DIR
+	MAN_DIR
 	MODULES_DIR
-	PREFIX
-
-	In backer_isa.c
-
 	CONFIG_BACKER_IOPORT
 	CONFIG_BACKER_DMA
 	CONFIG_BACKER_TIMEOUT
 
-In the Makefile, BKR_MAJOR is the major number the device inodes will have.
-You can set this to anything your system isn't using.  It currently
-defaults to 60 which is in one of the blocks of numbers set aside for
-``experimental and local use''.  You only need to change it if you already
-have something using 60.
+BKR_MAJOR is the major number the device inodes will have.  You can set
+this to anything your system isn't using.  It currently defaults to 60
+which is in one of the blocks of numbers set aside for ``experimental and
+local use''.  You only need to change it if you already have something
+using 60.
 
-MODULES_DIR is the directory the compiled driver will be placed in.  The
-default is /lib/modules/misc.
+DEV_DIR is the root directory of the device inode hierarchy.
 
-PREFIX is the top of the hierarchy in which the manual page will be placed.
-The man page is put in PREFIX/man/man4.
+MAN_DIR is the top of the man page hierarchy.  The man page is put in
+MAN_DIR/man4/.
 
-The parameters in backer_isa.c specify the hardware settings and the
-timeout.  These can all be set at module load time although you might as
-well configure them now in order to simplify things later.
+MODULES_DIR is the directory the compiled driver will be placed in.
 
-The timeout does not need to be adjusted unless you want to tweak the
-driver's behaviour to your own tastes.  It is the length of time the driver
-will wait for an operation to finish before deciding something's wrong and
-aborting.  It should not be less than the length of the BOR mark or the
-driver will timeout while waiting for data to start during playback.  It
-also must not be less than the time required to empty the DMA buffer or the
-driver will timeout while flushing its buffers at the end of a recording.
+The CONFIG_BACKER_IOPORT and CONFIG_BACKER_DMA parameters set the I/O port
+and DMA channel that your card is using.  These can be set at module load
+time but if you know them then you should set them now in order to simplify
+things later.
+
+CONFIG_BACKER_TIMEOUT can also be set at module load time.  It does not
+need to be adjusted unless you want to tweak the driver's behaviour to your
+own tastes.  It is the length of time the driver will wait for an operation
+to finish before deciding something's wrong and aborting.  It should not be
+less than the length of the BOR mark or the driver will timeout while
+waiting for data to start during playback.  It also must not be less than
+the time required to empty the DMA buffer or the driver will timeout while
+flushing its buffers at the end of a recording.
 
 
 2.  Compile the driver by typing
@@ -71,8 +70,8 @@ driver will timeout while flushing its buffers at the end of a recording.
 
 This puts the driver into MODULES_DIR and runs depmod -a to rebuild the
 module dependancy database.  Then it checks to see if devfs is in use and
-if not it creates the device inodes in /dev.  Finally it installs the man
-page.
+if not it creates the device inodes in DEV_DIR.  Finally it installs the
+man page.
 
 If devfs is not being used but the install script can't determine that fact
 then you will have to manually instruct make to create the device inodes by
@@ -155,7 +154,9 @@ To test the driver just type
 
 to verify that data is being written to video.  On your television set you
 should see some vertical bars for a few seconds (the BOR mark) followed by
-something that looks like noise.  Press CTRL-C to stop the test.
+something that looks like noise.  Just press CTRL-C to stop the test and be
+patient for a couple of seconds while the EOR mark is written and the DMA
+buffer empties.
 
 To unload the module type
 

@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH Backer 4 "March 21, 2001" "Linux" "Special Files"
+.TH Backer 4 "April 14, 2001" "Linux" "Special Files"
 .SH NAME
 backer \- The Backer video tape based storage device.
 .SH INTRODUCTION
@@ -28,15 +28,16 @@ The Backer device, manufactured by Danmere Ltd., allows data to be stored on
 video tape using a standard video cassette recorder in either NTSC or PAL
 video formats.
 .SH CONFIGURATION
-Backer devices are character device files.  By default they are owned by
-root:root with mode 0666.  They do not have a standard major number
-assigned to them but the source is distributed with 60 as the default.
-This can be adjusted to the needs of the system.  The minor number encodes
-the video mode, bit density and data format.  In alphabetical order, the
-device names are:
+Under Linux, the Backer hardware is represented by character device files.
+By default they are owned by root:root with mode 0666.  They do not have a
+standard major number assigned to them but the source is distributed with
+60 as the default.  This can be adjusted to the needs of the system.  The
+minor number encodes the video mode, bit density and data format.  In
+alphabetical order, the device names are:
 .PP
 .TS
-l l.
+center;
+c c.
 Name	Minor
 _
 \fBbacker/\fP\fIn\fP\fB/nhe\fP	0
@@ -54,12 +55,11 @@ _
 .TE
 .PP
 When used with the device file system, the device files are created
-automatically when the driver is loaded.  The \fIn\fP in the path of the
+automatically when the driver is loaded.  The \fIn\fP in the path of each
 device is the unit number but the driver currently only supports one unit
-so this is always 0.  The unique three letter sequence in each device
-file's name identifies the video mode (NTSC/PAL), the bit density
-(high/low), and the data format (SP/EP/raw) selected by accessing that
-device file.
+so this is always 0.  The three letter file name identifies the video mode
+(NTSC or PAL), the bit density (high or low), and the data format (SP, EP
+or raw) selected by accessing that particular file.
 .PP
 Depending on how the driver was compiled, some mode combinations might not
 be available.  To adjust mode availability, see the \fBminor_to_mode[]\fP
@@ -69,6 +69,7 @@ If the backer device is to be used as the default tape device then it is
 helpful to create a symbolic link \fB/dev/tape\fP that points to the
 preferred mode.
 .SH DESCRIPTION
+.SS GENERAL
 The driver presents the Backer device as a set of character device special
 files, one for each available format, that try to behave somewhat like tape
 devices.  It is not possible to provide a fully functional tape interface
@@ -88,34 +89,124 @@ pass-through mode.  One of the formats is intended for short play (SP)
 recordings and the other for extended play (EP) recordings while the
 pass-through mode disables all data processing within the driver allowing
 the raw tape data stream to be read and written.  The desired settings are
-selected by accessing the appropriate device file.  Any combination of the
-device files can be opened any number of times but, once a device is open,
-only the original user (or a super user) is allowed to open it again.
+selected by accessing the appropriate device file.  One can,
+simultaneously, open any combination of the device files any number of
+times but once a particular file is open only the original user (or a super
+user) is allowed to open it again.
 .PP
 A data transfer is started by making a call to
 .IR read (2)
 or
 .IR write (2).
 For obvious practical reasons, only one transfer is allowed at a time so
-once a transfer has been started on one of the file descriptors, all other
-reads and writes on all descriptors will fail but
-.IR ioctl (2)
-calls can still be made in order to retrieve the driver status, etc..
-Since the hardware is not full duplex, if a device is opened with mode
-\fBO_RDWR\fP the first read/write call selects the transfer direction and
-any subsequent calls in the other direction fail.
+once a transfer has been started on one of the open file descriptors, all
+other reads and writes on all other descriptors will fail.  Since the
+hardware is not full duplex, if a device is opened with mode \fBO_RDWR\fP
+the first read or write call selects the transfer direction and any
+subsequent calls in the other direction fail.
 .PP
 Data written to and read from the non-raw files is clean, synchronous and
 commensurate:  it will be retrieved error-free;  the, say, 2000th byte
 written will be the 2000th byte read back;  and exactly as many bytes as
 were written will be played back (the data is not padded to a multiple of
 some size).
-.PP
+.SS "RAW INTERFACE"
 The raw device files provide access to the actual tape data.  When writing,
 the first byte written is placed in the first position in the top line of
 the first video field and so on.  When reading, all the pleasantries of the
-raw video signal are present:  tape noise, missing video lines, etc..  Have
-fun.
+raw video signal are present:  tape noise, missing video lines, etc..  The
+interface provided by these files allows the requisite tape data processing
+to be performed in user space thus not only permitting tapes in formats
+foreign to the driver itself to be read and written but also allowing
+computers too slow to perform the processing in real time to make use of
+higher bandwidth modes.  See
+.IR bkrencode (8)
+for more information on using this feature.
+.SS "STATUS INFORMATION"
+Status information is provided through the \fB/proc\fP file system by the
+file \fB /proc/driver/backer\fP.  The information provided by this
+interface is invalid until at least one data transfer has taken place.  The
+Worst Key, Closest Non-Key, Least Skipped and Most Skipped fields are
+invalid unless the current or most recent operation was a read.  Between
+transfers, all fields will retain their values from the end of the last
+transfer.  The information is displayed in unsigned decimal format and the
+meaning of the fields is as follows.
+.TP
+\fBOperating Mode\fP
+A 16 bit number indicating the video mode, bit density and data format of
+the current transfer.  The masks and flags used to interpret this number
+can be found in the header file, \fBbacker.h\fP.
+.TP
+\fBSector Number\fP
+The current sector number being transfered to/from user space.  The DMA
+buffer introduces a delay between this and the sector being transfered
+to/from the tape.
+.TP
+\fBTotal Errors Corrected\fP
+Shows the total number of bad symbols that have been successfully corrected
+since the current read operation started.
+.TP
+\fBErrors in Worst Block\fP
+The first field shows the largest number of bad symbols that have been
+detected in any one block of data since the current read operation started.
+The second field is the number of Reed-Solomon parity symbols in each
+block.  If the number of errors in a block exceeds 1/2 the number of parity
+symbols then the block cannot be corrected.
+.TP
+\fBRecent Errors\fP
+Shows the largest number of bad symbols that have been detected in any one
+block of data since the last time the \fB/proc\fP file was read.
+.TP
+\fBUncorrectable Blocks\fP
+The number of blocks which the Reed-Solomon decoder detected could not be
+corrected.  Not all uncorrectable blocks can be detected (imagine errors
+occurring in such a way that they make the block look like another valid or
+correctable block).
+.TP
+\fBFraming Errors\fP
+An upper bound can be placed on the number of bytes which need to be
+searched before a sector key is found and this displays the number of times
+this bound was exceeded since the current read operation started.  Framing
+errors do not necessarily represent lost data but are symptomatic of a poor
+quality recording.
+.TP
+\fBOverrun Errors\fP
+The number of times the sector sequence number skipped in the positive
+direction indicating that the incoming video data filled the DMA buffer and
+the computer could not keep up.
+.TP
+\fBUnderflows Detected\fP
+The number of times the sector sequence number skipped in the negative
+direction indicating repeated sectors on the tape.  This indicates that
+when the data was written, the computer could not generate it as fast as it
+was being sent to tape causing the DMA buffer to empty (and then loop).
+Apart from wasting several tens of kilobytes of tape, underflows are
+non-destructive.
+.TP
+\fBWorst Key\fP
+The lowest correlation value assigned to a string of bytes identified as
+a sector key.
+.TP
+\fBClosest Non-Key\fP
+The highest correlation value assigned to a string of bytes identified as
+not being a sector key.
+.TP
+\fBLeast Skipped\fP
+The least number of bytes which were skipped before locating a sector
+key.
+.TP
+\fBMost Skipped\fP
+The most number of bytes which were skipped before locating a sector key.
+.TP
+\fBDMA Buffer\fP
+The first field shows the number of bytes in the DMA buffer.  The second
+field shows the size of the DMA buffer.  Ideally the buffer will be kept
+completely full whilst writing and completely empty whilst reading.
+.PP
+The worst key and closest non-key must have a comfortable margin between
+them if one is going to be able to identify sector keys in the data stream.
+The difference between the least and most skipped numbers shows the
+variability in the number of lines generated by a VCR during playback.
 .SH EXAMPLES
 The examples below assume that \fB/dev/tape\fP is a link to the desired
 device.
@@ -153,14 +244,14 @@ for more information.
 .IR tar (1)
 processes data in ``records'' and the larger the record size the more
 infrequently tar accesses the device.  If the time that elapses is too
-long, then the device's buffer can underflow (writing) or overflow
+long, then the driver's buffer can underflow (writing) or overflow
 (reading).  This is true for all tape devices but due to Backer's
 relatively high transfer speed for its buffer size, even tar's default
 record size can result in excessive delays if additional processing is
 being performed (like compression).  When writing, this is harmless
-(although tape is wasted) because during playback the driver can detect the
-underflow condition in the data stream and correct it.  When reading,
-however, the buffer overflows result in data loss.
+(although tape is wasted) because the driver can detect the underflow
+condition in the data stream during playback and correct it.  When reading,
+however, buffer overflows mean data is being lost.
 .PP
 The default record size for GNU tar is 10 kilobytes (twenty 512-byte
 blocks) and on a PII-400 this makes the device accesses too infrequent if
@@ -199,7 +290,7 @@ the cards (output of ``transmitter'' to input of ``receiver'') then at the
 transmitting machine writing data to a device file while at the receiving
 machine reading the data from the corresponding device file.  Any of the
 non-raw modes can be chosen as long as both machines are speaking the same
-one but PAL/high/SP (phs) is recommended since it has the highest data
+one but PAL/high/SP (phs) is recommended since it has the highest code
 rate.
 .SH IOCTLS
 The following
@@ -229,14 +320,17 @@ drive and driver status.  The structure's fields are filled as follows:
 Set to \fBMT_ISUNKNOWN\fP.
 .TP
 \fBmt_dsreg\fP (device dependent status bits)
-Set the current mode.  See \fBbacker.h\fP and specifically the
-\fBbkrconfig\fP structure for information on the code for each mode.
+Set to the current mode.  See \fBbacker.h\fP for information on the flags
+used for this.  The ``current mode'' is the mode in which the current
+transfer is being performed.  This may or may not match the mode
+represented by the file on which this ioctl is performed and is not
+guaranteed to be valid unless a transfer is actually taking place.
 .TP
 \fBmt_gstat\fP (device independent status bits)
-Sets the \fBGMT_ONLINE\fP bit.
+The \fBGMT_ONLINE\fP bit is set.
 .TP
 \fBmt_blkno\fP (block number)
-Sets this to the current sector number.
+Set to the current sector number.
 .TP
 \fBmt_resid\fP (residual count)
 Set to the number of bytes that need to be transfered in order to
@@ -252,17 +346,14 @@ Not used (set to 0).
 .IP \fBMTIOCPOS\fP
 Accepts a pointer to an \fBmtpos\fP structure which is filled with the
 current sector number.
-.IP \fBBKRIOCGETSTATUS\fP
-Accepts a pointer to a \fBbkrstatus\fP structure which is filled with the
-status of the device driver.  This is mainly intended to provide a means
-for writing a user interface with lots of pretty flashing lights.  
 .IP \fBBKRIOCGETFORMAT\fP
-Accepts a pointer to a \fBbkrformat\fP structure which is filled with the
-current format.  This is intended for use with external applications which
-interact with the data stream at a low level.  For example the
+Accepts a pointer to a \fBbkrformat\fP structure which is filled with
+information describing the current format.  This is intended for use with
+external applications which wish to interact with the data stream at a
+``low level''.  For example,
 .IR bkrcheck (8)
-utility needs to know how many bytes to generate in order to get a stable
-test pattern on the television screen.
+needs to know how many bytes to generate in order to get a stable test
+pattern on the television screen.
 .PP
 For the definitions of the structures mentioned above or for more
 information generally on these calls see \fBsys/mtio.h\fP and
@@ -389,11 +480,14 @@ this regard but the best defense is to not abuse your tapes.
 .SH FILES
 .IP /dev/backer/*/*
 The device file names.
+.IP /proc/driver/backer
+Driver and hardware status information.
 .SH BUGS
-Sometimes the hardware skips the first line of data in the DMA buffer.
-This shifts the video image up one line and makes it hard for the driver to
-stop the card at a proper frame boundary.  The cause of this is unknown and
-the tape format is designed to work around the problem.
+Sometimes, when writing to tape, the hardware skips the first line of data
+in the DMA buffer.  This shifts the video image up one line and makes it
+hard for the driver to stop the card at a proper frame boundary.  The cause
+of this is unknown and the tape format is designed to work around the
+problem.
 .SH "SEE ALSO"
 .IR bkrcheck (8),
 .IR bkrencode (8),
@@ -412,9 +506,11 @@ http://www.sourceforge.net/projects/linbacker
 .RE
 .SH HISTORY
 .TS
-l l l.
+center;
+c l c.
 Date	Event	Version
 _
 2000/10/10	First public release	0.2
 2001/01/13	First stable release	1.0
+2001/04/12	Second stable release	2.0
 .TE

@@ -32,6 +32,7 @@
 #include <linux/malloc.h>
 #include <linux/mtio.h>
 #include <linux/pci.h>
+#include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 
@@ -52,39 +53,19 @@
 
 
 /*
- * Config
- *
- * If I decide to submit this thing to the kernel source tree, these are
- * the options that will be moved to the build scripts.  In the meantime,
- * adjust them by hand here.
- */
-
-#define  CONFIG_BACKER_IOPORT   0x300
-#define  CONFIG_BACKER_DMA      3
-#define  CONFIG_BACKER_TIMEOUT  15      /* seconds */
-
-
-/*
  * Parameters and constants
  */
 
 #define  BKR_NAME               "backer"
-#define  BKR_VERSION            "2.0"
+#define  BKR_VERSION            "2.1"
 #define  BKR_MINOR_BASE         0       /* first minor number */
+#define  BKR_PROC_NAME          "driver/"BKR_NAME
 
-#define  BKR_BUFFER_SIZE        65536   /* bytes */
-#define  BKR_MAX_TIMEOUT        120     /* seconds */
+#define  MAX_RETRY_FREQ         50      /* max blocking retry rate in Hz */
+#define  BKR_MAX_TIMEOUT        30      /* seconds */
 
-#define  DMA_IO_TO_MEM          0x14    /* dmand transf, inc addr, auto-init */
-#define  DMA_MEM_TO_IO          0x18    /* dmand transf, inc addr, auto-init */
-#define  DMA_HOLD_OFF           512     /* min abs(head-tail) */
-
-#define  MIN_UPDATE_FREQ        3       /* min DMA update rate in Hz */
-#define  MAX_UPDATE_FREQ        50      /* max DMA update rate in Hz */
-#define  MIN_SYNC_FREQ          50      /* min sync frequency in Hz */
-
-#if (MIN_UPDATE_FREQ > HZ) || (MAX_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
-#error "One of the *_FREQ parameters is too high"
+#if (MAX_UPDATE_FREQ > HZ)
+#error "MAX_UPDATE_FREQ is too high"
 #endif
 
 
@@ -115,13 +96,14 @@ MODULE_PARM_DESC(timeout, "Timeout (seconds)");
 static int     open(struct inode *, struct file *);
 static int     release(struct inode *, struct file *);
 static int     stop_release(struct inode *, struct file *);
-static ssize_t start_common(int, direction_t, jiffies_t);
+static ssize_t start_common(struct file *, direction_t, jiffies_t);
 static ssize_t start_read(struct file *, char *, size_t, loff_t *);
 static ssize_t start_write(struct file *, const char *, size_t, loff_t *);
 static ssize_t read(struct file *, char *, size_t, loff_t *);
 static ssize_t write(struct file *, const char *, size_t, loff_t *);
 static int     ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 static loff_t  llseek(struct file *, loff_t, int);
+static int     bkr_read_proc(char *, char **, off_t, int, int *, void *);
 
 
 /*
@@ -206,6 +188,7 @@ static int minor_to_mode[] =
 
 static devfs_handle_t  dev_directory = NULL;   /* root of device tree */
 static devfs_handle_t  dev_entry[NUM_MODES];   /* devfs handles */
+static struct proc_dir_entry  *proc_entry = NULL;	/* proc handle */
 
 
 /*
@@ -219,15 +202,9 @@ static devfs_handle_t  dev_entry[NUM_MODES];   /* devfs handles */
 /*
  * ================================================================================================
  *
- *                                       KERNEL INTERFACE
+ *                                       ENTRY/EXIT CODE
  *
  * ================================================================================================
- */
-
-/*
- * init_module(), cleanup_module()
- *
- * Module start-up and shut-down code.
  */
 
 int __init init_module(void)
@@ -246,7 +223,6 @@ int __init init_module(void)
 	device_isa.dma = dma;
 
 	device.direction = STOPPED;
-	device.alloc_size = BKR_BUFFER_SIZE;
 	sector.buffer = NULL;
 
 	memset(dev_entry, 0, NUM_MODES * sizeof(devfs_handle_t));
@@ -259,15 +235,15 @@ int __init init_module(void)
 	 * Grab resources and register device.
 	 */
 
-	if((device.buffer = (unsigned char *) pci_alloc_consistent(NULL, device.alloc_size, &device_isa.phys_addr)) == NULL)
+	if((device.buffer = (unsigned char *) pci_alloc_consistent(NULL, BKR_BUFFER_SIZE, &device_isa.phys_addr)) == NULL)
 		{
-		printk("can't get %u byte DMA buffer\n", device.alloc_size);
+		printk("can't get %u byte DMA buffer\n", BKR_BUFFER_SIZE);
 		result = -ENOMEM;
 		goto no_dmamem;
 		}
 	if(request_region(device_isa.ioport, 1, BKR_NAME) < 0)
 		{
-		printk("I/O port %#x in use\n", device_isa.ioport);
+		printk("I/O port %#x not available\n", device_isa.ioport);
 		result = -EBUSY;
 		goto ioport_busy;
 		}
@@ -304,6 +280,12 @@ int __init init_module(void)
 		printk("can't register device\n");
 		goto cant_register_chrdev;
 		}
+	proc_entry = create_proc_read_entry(BKR_PROC_NAME, 0, 0, bkr_read_proc, NULL);
+	if(proc_entry == NULL)
+		{
+		printk("can't create /proc entry\n");
+		goto cant_register_proc;
+		}
 
 	/*
 	 * Driver installed.
@@ -317,13 +299,15 @@ int __init init_module(void)
 	 * There was a problem.  Release resources as needed.
 	 */
 
+	cant_register_proc:
+		devfs_unregister_chrdev(BKR_MAJOR, BKR_NAME);
 	cant_register_chrdev:
 		for(i = 0; i < NUM_MODES; i++)
 			devfs_unregister(dev_entry[i]);
 		devfs_unregister(dev_directory);
 		release_region(ioport, 1);
 	ioport_busy:
-		pci_free_consistent(NULL, device.alloc_size, device.buffer, device_isa.phys_addr);
+		pci_free_consistent(NULL, BKR_BUFFER_SIZE, device.buffer, device_isa.phys_addr);
 	no_dmamem:
 
 	return(result);
@@ -334,14 +318,23 @@ void __exit cleanup_module(void)
 	int i;
 
 	kfree(sector.buffer);
+	remove_proc_entry(BKR_PROC_NAME, NULL);
 	devfs_unregister_chrdev(BKR_MAJOR, BKR_NAME);
 	for(i = 0; i < NUM_MODES; i++)
 		devfs_unregister(dev_entry[i]);
 	devfs_unregister(dev_directory);
 	release_region(ioport, 1);
-	pci_free_consistent(NULL, device.alloc_size, device.buffer, device_isa.phys_addr);
+	pci_free_consistent(NULL, BKR_BUFFER_SIZE, device.buffer, device_isa.phys_addr);
 }
 
+
+/*
+ * ================================================================================================
+ *
+ *                                       FILE OPERATIONS
+ *
+ * ================================================================================================
+ */
 
 /*
  * open() --- Arbitrate device open requests.
@@ -385,6 +378,7 @@ static int open(struct inode *inode, struct file *filp)
 
 static int stop_release(struct inode *inode, struct file *filp)
 {
+	ssize_t  result;
 	jiffies_t  bailout;
 
 	if(device.direction == WRITING)
@@ -392,9 +386,33 @@ static int stop_release(struct inode *inode, struct file *filp)
 		bailout = jiffies + timeout;
 
 		if(BKR_FORMAT(PRIVATE_PTR(filp)->mode) != BKR_RAW)
-			bkr_write_eor(bailout);
+			while(1)
+				{
+				result = bkr_sector_write_eor();
+				if(result != -EWOULDBLOCK)
+					break;
+				set_current_state(TASK_INTERRUPTIBLE);
+				schedule_timeout(HZ/MAX_RETRY_FREQ);
+				if(jiffies >= bailout)
+					{
+					result = -ETIMEDOUT;
+					break;
+					}
+				}
 
-		bkr_device_flush(bailout);
+		while(1)
+			{
+			result = bkr_device_flush();
+			if(result != -EWOULDBLOCK)
+				break;
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ/MAX_RETRY_FREQ);
+			if(jiffies >= bailout)
+				{
+				result = -ETIMEDOUT;
+				break;
+				}
+			}
 		}
 
 	bkr_device_stop_transfer();
@@ -429,7 +447,6 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 		struct mtop  mtop;
 		struct mtget  mtget;
 		struct mtpos  mtpos;
-		struct bkrstatus  bkrstatus;
 		struct bkrformat  bkrformat;
 		} arg;
 
@@ -477,31 +494,10 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 		copy_to_user((void *) argument, &arg.mtpos, sizeof(struct mtpos));
 		return(0);
 
-		case BKRIOCGETSTATUS:
-		switch(device.direction) /* sync the buffer head/tail */
-			{
-			case STOPPED:
-			break;
-
-			case READING:
-			bkr_device_read(0, O_NONBLOCK, jiffies+timeout);
-			break;
-
-			case WRITING:
-			bkr_device_write(0, O_NONBLOCK, jiffies+timeout);
-			break;
-			}
-		arg.bkrstatus.bytes = bytes_in_buffer();
-		arg.bkrstatus.errors = errors;
-		arg.bkrstatus.health = health;
-		copy_to_user((void *) argument, &arg.bkrstatus, sizeof(struct bkrstatus));
-		errors.recent_symbol = 0;
-		return(0);
-
 		case BKRIOCGETFORMAT:
 		if(device.direction == STOPPED)
 			{
-			bkr_device_reset(PRIVATE_PTR(filp)->mode);
+			bkr_device_reset(PRIVATE_PTR(filp)->mode, STOPPED);
 			bkr_format_reset(PRIVATE_PTR(filp)->mode, STOPPED);
 			}
 		arg.bkrformat.buffer_size = device.size;
@@ -526,80 +522,43 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
  * write() method is made.
  */
 
-static ssize_t start_common(int mode, direction_t direction, jiffies_t bailout)
+static ssize_t start_common(struct file *filp, direction_t direction, jiffies_t bailout)
 {
 	ssize_t  result;
 
 	if(device.direction != STOPPED)
-		result = -EBUSY;
+		return(-EBUSY);
+
+	bkr_device_reset(PRIVATE_PTR(filp)->mode, direction);
+	if((result = bkr_format_reset(PRIVATE_PTR(filp)->mode, direction)) < 0)
+		{ }
+	else if((result = bkr_device_start_transfer(direction, bailout)) < 0)
+		{ }
 	else
-		{
-		bkr_device_reset(mode);
-		result = bkr_format_reset(mode, direction);
-		if(result >= 0)
-			result = bkr_device_start_transfer(direction, bailout);
-		}
+		filp->f_op = &file_ops[direction];
+
 	return(result);
 }
 
 static ssize_t start_read(struct file *filp, char *buff, size_t count, loff_t *posp)
 {
 	ssize_t  result;
-	jiffies_t  bailout;
 
-	bailout = jiffies + timeout;
-	result = start_common(PRIVATE_PTR(filp)->mode, READING, bailout);
-	if(result < 0)
-		goto done;
+	result = start_common(filp, READING, jiffies + timeout);
+	if(result >= 0)
+		result = filp->f_op->read(filp, buff, count, posp);
 
-	while(1)
-		{
-		result = sector.read(filp->f_flags, bailout);
-		if(result >= 0)
-			break;
-		if(jiffies >= bailout)
-			{
-			bkr_device_stop_transfer();
-			result = -ETIMEDOUT;
-			goto done;
-			}
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(HZ/MIN_UPDATE_FREQ);
-		}
-
-	filp->f_op = &file_ops[READING];
-
-	result = filp->f_op->read(filp, buff, count, posp);
-
-	done:
 	return(result);
 }
 
 static ssize_t start_write(struct file *filp, const char *buff, size_t count, loff_t *posp)
 {
 	ssize_t  result;
-	jiffies_t  bailout;
 
-	bailout = jiffies + timeout;
-	result = start_common(PRIVATE_PTR(filp)->mode, WRITING, bailout);
-	if(result < 0)
-		goto done;
+	result = start_common(filp, WRITING, jiffies + timeout);
+	if(result >= 0)
+		result = filp->f_op->write(filp, buff, count, posp);
 
-	if(BKR_FORMAT(PRIVATE_PTR(filp)->mode) != BKR_RAW)
-		{
-		result = bkr_write_bor(bailout);
-		if(result < 0)
-			{
-			bkr_device_stop_transfer();
-			goto done;
-			}
-		}
-
-	filp->f_op = &file_ops[WRITING];
-
-	result = filp->f_op->write(filp, buff, count, posp);
-
-	done:
 	return(result);
 }
 
@@ -615,7 +574,8 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 {
 	ssize_t  result;
 	jiffies_t  bailout;
-	unsigned int  moved, chunk_size;
+	unsigned int  moved = 0;
+	unsigned int  chunk_size;
 
 	filp->f_op = &file_ops[STOPPED];
 
@@ -627,7 +587,7 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 		}
 
 	bailout = jiffies + timeout;
-	for(moved = 0; count; buff += chunk_size, count -= chunk_size)
+	while(1)
 		{
 		chunk_size = sector.end - sector.offset;
 		if(chunk_size > count)
@@ -635,18 +595,41 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 
 		copy_to_user(buff, sector.offset, chunk_size);
 
-		moved += chunk_size;
 		sector.offset += chunk_size;
-		if(sector.offset == sector.end)
+		moved += chunk_size;
+		buff += chunk_size;
+		count -= chunk_size;
+
+		if(!count)
+			break;
+
+		while(1)
 			{
-			result = sector.read(filp->f_flags, bailout);
-			if(result <= 0)
+			result = sector.read();
+			if(result != -EWOULDBLOCK)
+				break;
+			if(filp->f_flags & O_NONBLOCK)
+				break;
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ/MAX_RETRY_FREQ);
+			if(jiffies >= bailout)
 				{
-				if(!moved)
-					goto done;
-				PRIVATE_PTR(filp)->last_error = result;
+				result = -ETIMEDOUT;
 				break;
 				}
+			if(signal_pending(current))
+				{
+				result = -EINTR;
+				break;
+				}
+			}
+
+		if(result <= 0)
+			{
+			if(!moved)
+				goto done;
+			PRIVATE_PTR(filp)->last_error = result;
+			break;
 			}
 		}
 	result = moved;
@@ -660,7 +643,8 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 {
 	ssize_t  result;
 	jiffies_t  bailout;
-	unsigned int  moved, chunk_size;
+	unsigned int  moved = 0;
+	unsigned int  chunk_size;
 
 	filp->f_op = &file_ops[STOPPED];
 
@@ -672,7 +656,7 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 		}
 
 	bailout = jiffies + timeout;
-	for(moved = 0; count; buff += chunk_size, count -= chunk_size)
+	while(1)
 		{
 		chunk_size = sector.end - sector.offset;
 		if(chunk_size > count)
@@ -680,18 +664,36 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 
 		copy_from_user(sector.offset, buff, chunk_size);
 
-		moved += chunk_size;
 		sector.offset += chunk_size;
-		if(sector.offset == sector.end)
+		moved += chunk_size;
+		buff += chunk_size;
+		count -= chunk_size;
+
+		if(!count)
+			break;
+
+		while(1)
 			{
-			result = sector.write(filp->f_flags, bailout);
-			if(result < 0)
+			result = sector.write();
+			if(result != -EWOULDBLOCK)
+				break;
+			if(filp->f_flags & O_NONBLOCK)
+				break;
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ/MAX_RETRY_FREQ);
+			if(jiffies >= bailout)
 				{
-				if(!moved)
-					goto done;
-				PRIVATE_PTR(filp)->last_error = result;
+				result = -ETIMEDOUT;
 				break;
 				}
+			}
+
+		if(result < 0)
+			{
+			if(!moved)
+				goto done;
+			PRIVATE_PTR(filp)->last_error = result;
+			break;
 			}
 		}
 	result = moved;
@@ -719,13 +721,113 @@ static loff_t llseek(struct file *filp, loff_t offset, int whence)
 /*
  * ================================================================================================
  *
+ *                                          /PROC I/O
+ *
+ * ================================================================================================
+ */
+
+static int bkr_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	int  length;
+	char  *pos;
+
+	/*
+	 * Sync the buffer head/tail
+	 */
+
+	switch(device.direction)
+		{
+		case STOPPED:
+		break;
+
+		case READING:
+		bkr_device_read(0);
+		break;
+
+		case WRITING:
+		bkr_device_write(0);
+		break;
+		}
+
+	/*
+	 * Output current status
+	 * If you change this, remember to update bkrmonitor!
+	 */
+
+	pos = page;
+	pos += sprintf(pos, "Operating Mode:          %u\n"
+	                    "Sector Number:           %lu\n"
+	                    "Total Errors Corrected:  %u\n"
+	                    "Errors in Worst Block:   %u / %u\n"
+	                    "Recent Worst Block:      %u\n"
+	                    "Uncorrectable Blocks:    %u\n"
+	                    "Framing Errors:          %u\n"
+	                    "Overrun Errors:          %u\n"
+	                    "Underflows Detected:     %u\n"
+	                    "Worst Key:               %u\n"
+	                    "Closest Non-Key:         %u\n"
+	                    "Least Skipped:           %u\n"
+	                    "Most Skipped:            %u\n"
+	                    "DMA Buffer:              %u / %u\n",
+	                    sector.mode,
+	                    sector.header.parts.number,
+	                    health.total_errors,
+	                    errors.symbol, sector.rs_format.parity,
+	                    errors.recent_symbol,
+	                    errors.block,
+	                    errors.frame,
+	                    errors.overrun,
+	                    errors.underflow,
+	                    health.worst_key,
+	                    health.best_nonkey,
+	                    health.least_skipped,
+	                    health.most_skipped,
+		            bytes_in_buffer(), device.size);
+	errors.recent_symbol = 0;
+
+	*start = page + off;
+	length = pos - *start;
+	if(length <= 0)
+		{
+		length = 0;
+		*eof = 1;
+		}
+
+	return(length);
+}
+
+
+/*
+ * ================================================================================================
+ *
  *                                       DEVICE-LEVEL I/O
  *
  * ================================================================================================
  */
 
-static int  update_dma_offset(unsigned int *);
+/*
+ * Local constants
+ */
+
+#define  DMA_IO_TO_MEM          0x14    /* dmand transf, inc addr, auto-init */
+#define  DMA_MEM_TO_IO          0x18    /* dmand transf, inc addr, auto-init */
+#define  DMA_HOLD_OFF           786     /* min abs(head-tail) */
+
+#define  MIN_UPDATE_FREQ        3       /* min DMA update rate in Hz */
+#define  MIN_SYNC_FREQ          50      /* min sync frequency in Hz */
+
+#if (MIN_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
+#error "One of the *_FREQ parameters is too high"
+#endif
+
+
+/*
+ * Local function declarations
+ */
+
+static int  update_dma_offset(bkr_offset_t *);
 static __inline__ int  get_dreq_status(unsigned int);
+
 
 /*
  * bkr_device_reset()
@@ -734,7 +836,7 @@ static __inline__ int  get_dreq_status(unsigned int);
  * assumes the mode is valid.
  */
 
-int bkr_device_reset(int mode)
+int bkr_device_reset(int mode, direction_t direction)
 {
 	outb(0, ioport);
 
@@ -756,7 +858,14 @@ int bkr_device_reset(int mode)
 	else
 		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
 
-	device.size = device.alloc_size - device.alloc_size % device.frame_size;
+	/*
+	 * Set the device size to a multiple of the frame size unless we
+	 * are reading, then make it a power of 2.
+	 */
+
+	device.size = BKR_BUFFER_SIZE;
+	if(direction != READING)
+		device.size -= BKR_BUFFER_SIZE % device.frame_size;
 
 	return(0);
 }
@@ -787,7 +896,7 @@ int bkr_device_start_transfer(direction_t direction, jiffies_t bailout)
 
 	device.head = 0;
 	device.tail = 0;
-	memset(device.buffer, 0, device.alloc_size);
+	memset(device.buffer, 0, BKR_BUFFER_SIZE);
 
 	flags = claim_dma_lock();
 	disable_dma(device_isa.dma);
@@ -814,13 +923,18 @@ int bkr_device_start_transfer(direction_t direction, jiffies_t bailout)
 	while(get_dreq_status(device_isa.dma) == 0)
 		if(jiffies >= short_bailout)
 			{
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ/MIN_UPDATE_FREQ);
 			if(jiffies >= bailout)
 				{
 				bkr_device_stop_transfer();
 				return(-EIO);
 				}
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule_timeout(HZ/MIN_UPDATE_FREQ);
+			if(signal_pending(current))
+				{
+				bkr_device_stop_transfer();
+				return(-EINTR);
+				}
 			short_bailout = jiffies + HZ/MIN_SYNC_FREQ;
 			}
 
@@ -858,14 +972,13 @@ void bkr_device_stop_transfer(void)
 /*
  * bkr_device_read()
  *
- * Doesn't actually "read" data... just waits until the requested length of
- * data starting at device.tail becomes available in the DMA buffer.
- * Returns 0 on success, -EINTR on signal, -ETIMEDOUT on timeout,
- * -EWOULDBLOCK if the operation would block (and we don't want it to) or
- * any error code returned by update_dma_offset().
+ * Doesn't actually "read" data... just makes sure the requested length of
+ * data starting at device.tail is available in the DMA buffer.  Returns 0
+ * on success, -EWOULDBLOCK if the data isn't available or any error code
+ * returned by update_dma_offset().
  */
 
-int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
+int bkr_device_read(unsigned int length)
 {
 	int  result;
 
@@ -878,37 +991,21 @@ int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 	if(((bytes_in_buffer() >= length) && (space_in_buffer() > DMA_HOLD_OFF)) || result)
 		return(result);
-	if(f_flags & O_NONBLOCK)
-		return(-EWOULDBLOCK);
 
-	do
-		{
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(HZ/MAX_UPDATE_FREQ);
-		if(jiffies >= bailout)
-			result = -ETIMEDOUT;
-		else if(signal_pending(current))
-			result = -EINTR;
-		else
-			result = update_dma_offset(&device.head);
-		}
-	while(((bytes_in_buffer() < length) || (space_in_buffer() <= DMA_HOLD_OFF)) && !result);
-
-	return(result);
+	return(-EWOULDBLOCK);
 }
 
 
 /*
  * bkr_device_write()
  *
- * Doesn't actually "write" data... just waits until the requested amount
- * of space has become available starting at the device head.  Returns 0 on
- * success, -ETIMEDOUT on timeout, -EWOULDBLOCK if the operation would
- * block (and we don't want it to) or any error code returned by
- * update_dma_offset().
+ * Doesn't actually "write" data... just makes sure the requested amount of
+ * space is available starting at the device buffer head.  Returns 0 on
+ * success, -EWOULDBLOCK if the space isn't available or or any error code
+ * returned by update_dma_offset().
  */
 
-int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
+int bkr_device_write(unsigned int length)
 {
 	int  result;
 
@@ -921,21 +1018,8 @@ int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 	if(((space_in_buffer() >= length) && (bytes_in_buffer() > DMA_HOLD_OFF)) || result)
 		return(result);
-	if(f_flags & O_NONBLOCK)
-		return(-EWOULDBLOCK);
 
-	do
-		{
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(HZ/MAX_UPDATE_FREQ);
-		if(jiffies >= bailout)
-			result = -ETIMEDOUT;
-		else
-			result = update_dma_offset(&device.tail);
-		}
-	while(((space_in_buffer() < length) || (bytes_in_buffer() <= DMA_HOLD_OFF)) && !result);
-
-	return(result);
+	return(-EWOULDBLOCK);
 }
 
 
@@ -948,29 +1032,28 @@ int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
  * update_dma_offset() or bkr_device_write().
  */
 
-int bkr_device_flush(jiffies_t bailout)
+int bkr_device_flush(void)
 {
-	int  count, result;
+	int  count;
+	int  result = 0;
 
 	count = device.head % device.frame_size;
-	if(count)
+	if(count != INTERNAL_BUFFER)
 		{
-		count = device.frame_size - count;
-		bkr_device_write(count, 0, bailout);
-		memset(device.buffer + device.head, 0, count);
-		device.head += count;
-		if(device.head == device.size)	/* guaranteed to not go past end */
-			device.head = 0;
+		if(count < INTERNAL_BUFFER)
+			count = INTERNAL_BUFFER - count;
+		else
+			count = device.frame_size + INTERNAL_BUFFER - count;
+		result = bkr_device_write(count);
+		if(result != -EWOULDBLOCK)
+			{
+			memset(device.buffer + device.head, 0, count);
+			device.head += count;
+			if(device.head >= device.size)
+				device.head -= device.size;
+			}
 		}
 
-	bkr_device_write(INTERNAL_BUFFER, 0, bailout);
-	device.head += INTERNAL_BUFFER;	/* guaranteed to not loop around */
-
-	result = bkr_device_write(device.size - 2*sector.video_size, 0, bailout);
-
-	/*
-	 * What the hell's with the off-by-one-line bug!!
-	 */
 #ifdef FIXME
 	while(bytes_in_buffer() && !result)
 #else
@@ -978,8 +1061,8 @@ int bkr_device_flush(jiffies_t bailout)
 #endif
 		{
 		result = update_dma_offset(&device.tail);
-		if(jiffies >= bailout)
-			result = -ETIMEDOUT;
+		if(bytes_in_buffer() >= device.frame_size)
+			result = -EWOULDBLOCK;
 		}
 
 	return(result);
@@ -995,7 +1078,7 @@ int bkr_device_flush(jiffies_t bailout)
  * activity is detected.
  */
 
-static int update_dma_offset(unsigned int *offset)
+static int update_dma_offset(bkr_offset_t *offset)
 {
 	unsigned long  flags;
 	jiffies_t  dma_bailout;

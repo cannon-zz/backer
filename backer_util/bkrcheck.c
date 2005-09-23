@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 	"	-f devname   Use device devname (default " DEFAULT_DEVICE ")\n" \
 	"	-h           Display usage\n" \
 	"	filename     Calculate tape required for filename (incl. BOR + EOR)");
-			exit(0);
+			exit(-1);
 			break;
 			}
 	if(optind < argc)
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
 		if(outfile < 0)
 			{
 			perror(PROGRAM_NAME);
-			exit(0);
+			exit(-1);
 			}
 		size = lseek(outfile, 0, SEEK_END);
 		close(outfile);
@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 	if(outfile < 0)
 		{
 		perror(PROGRAM_NAME);
-		exit(0);
+		exit(-1);
 		}
 	ioctl(outfile, MTIOCGET, &mtget);
 	ioctl(outfile, BKRIOCGETFORMAT, &format);
@@ -125,8 +125,16 @@ int main(int argc, char *argv[])
 
 	if(size >= 0)
 		{
-		time = rint((double) size / format.sector_capacity / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
-		time += BOR_LENGTH + EOR_LENGTH;
+		if(BKR_FORMAT(mtget.mt_dsreg) == BKR_RAW)
+			i = format.video_size/2;
+		else
+			i = format.sector_capacity;
+
+		time = rint((double) size / i / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
+
+		if(BKR_FORMAT(mtget.mt_dsreg) != BKR_RAW)
+			time += BOR_LENGTH + EOR_LENGTH;
+
 		printf("\n%s will occupy %dh:", argv[optind], (int) floor(time / 3600.0));
 		time = fmod(time, 3600.0);
 		printf("%02dm:", (int) floor(time / 60.0));
@@ -141,8 +149,8 @@ int main(int argc, char *argv[])
 
 	if((term = open("/dev/tty", O_RDWR)) < 0)
 		{
-		perror(PROGRAM_NAME);
-		exit(0);
+		perror(PROGRAM_NAME": /dev/tty");
+		exit(-1);
 		}
 	ioctl(term, TCGETS, &oldterm);
 	newterm = oldterm;

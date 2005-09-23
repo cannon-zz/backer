@@ -1,0 +1,67 @@
+.\" Copyright (c) 2001 Kipp Cannon (kcannon@users.sourceforge.net)
+.\"
+.\" This is free documentation; you can redistribute it and/or
+.\" modify it under the terms of the GNU General Public License as
+.\" published by the Free Software Foundation; either version 2 of
+.\" the License, or (at your option) any later version.
+.\"
+.\" The GNU General Public License's references to "object code"
+.\" and "executables" are to be interpreted as the output of any
+.\" document formatting or typesetting system, including
+.\" intermediate and printed output.
+.\"
+.\" This manual is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public
+.\" License along with this manual; if not, write to the Free
+.\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
+.\" USA.
+.\"
+.TH bkrcheck 8 "TODAYS_DATE" "Linux" "Backer"
+.SH NAME
+bkrcheck \- Backer device I/O testing tool.
+.SH SYNOPSIS
+\fBbkrcheck\fP [\fB\-h\fP] [\fB\-f\fP \fIdevname\fP] [\fIfilename\fP]
+.SH DESCRIPTION
+\fBbkrcheck\fP performs two functions.  If no file name is given, then it
+tests the operation of the
+.IR backer (4)
+device driver by writing a test pattern to one of the device files.  If,
+instead, a file name is given then it computes the length of tape required
+to store the file using the format of one of the device files.  In both
+cases, a particular device file can be specified with the \fB-f\fP option.
+.PP
+When computing the length of tape, the mode can be retrieved from
+a backer device even if a transfer is in progress as the format retrieval
+.IR ioctl (2)
+does not interfere with tape I/O.
+.SS OPTIONS
+.TP
+\fB\-h\fP
+Print a usage message.
+.TP
+\fB\-f\fP \fIdevname\fP
+Use \fIdevname\fP for communication with the device driver.  The default is
+\fBDEVICE_NAME\fP.
+.TP
+\fIfilename\fP
+Instead of writing a test pattern, compute the length of tape required to
+store \fIfilename\fP.
+.SH "SEE ALSO"
+.IR backer (4),
+.IR bkrencode (8),
+.IR bkrmonitor (8)
+.SH AUTHOR
+Kipp Cannon (kcannon@users.sourceforge.net).
+.SH AVAILABILITY
+The most recent version of the driver and utilities can be found on
+SourceForge at:
+.RS
+.sp
+http://www.sourceforge.net/projects/linbacker
+.sp
+.RE
+.TE

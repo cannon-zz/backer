@@ -8,11 +8,23 @@ device driver.
 Makefile.  These are:
 
     DRIVER_DIR    The location of the device driver sources.
-    DEVICE_NAME   The default device name to compile into the utilities.
     PREFIX        The top of the installation hierarchy.
+    DEVICE_NAME   The default device name to compile into the utilities.
+    DEFAULT_MODE  The default mode to compile into bkrencode.
 
-The defaults for these are probably fine.  The executables will be put in
-PREFIX/bin and the man pages in PREFIX/man/man8
+The executables will be put in PREFIX/bin and the man pages in
+PREFIX/man/man8.
+
+The install directories are not referred to within the applications
+themselves so you can safetly set PREFIX to a location other than the final
+install location.  For example, you might find PREFIX=${RPM_BUILD_ROOT}/usr
+to be convenient if you are building an RPM.
+
+For the constants to use for DEFAULT_MODE, see DRIVER_DIR/backer.h.
+
+(note:  If you *are* building an RPM, it's safe to just set these options
+on make's command line in the build stage so you don't have to screw around
+patching the Makefile in the prep stage.)
 
 
 2.  Build the utilities.  Typing
@@ -20,9 +32,8 @@ PREFIX/bin and the man pages in PREFIX/man/man8
 	make
 	
 builds the utilities and the man pages.  If GTK is not installed then
-bkrmonitor will be built as a text-only application.  If GTK is installed
-but the build script can't find it, manually specify the location of
-gtk-config like this
+bkrmonitor will not be built.  If you do have GTK installed but the build
+script can't find it, manually specify the location of gtk-config like this
 
 	make GTK_CONFIG=/usr/bin/gtk-config
 
@@ -33,4 +44,4 @@ or whatever is appropriate for your system.
 
 	make install
 
-installs the utilities and their man pages.
+installs the utilities and a man page for each one.

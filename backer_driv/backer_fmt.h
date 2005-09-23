@@ -80,7 +80,7 @@
  *    |            |     C       |   |
  *    |            |     T R     |   |
  *    |            |     I E     |   |
- *  video_size     |     V G     |   buffer_size
+ *  video_size     |     V G     |   active_size
  *    |            |     E I     |   |
  *    |            |       O     |   |
  *    |            |       N     |   |
@@ -184,7 +184,7 @@ typedef union
 	{
 	struct
 		{
-		unsigned char key[KEY_LENGTH];  /* key sequence */
+		unsigned char key[KEY_LENGTH];                           /* key sequence */
 		unsigned int  number : 22 __attribute__ ((packed));      /* sector number */
 		unsigned int  hi_used : 4 __attribute__ ((packed));      /* high 4 bits of usage */
 		unsigned int  type : 5 __attribute__ ((packed));         /* sector type */
@@ -192,7 +192,7 @@ typedef union
 		} parts;
 	struct
 		{
-		unsigned char key[KEY_LENGTH];  /* key sequence */
+		unsigned char key[KEY_LENGTH];                           /* key sequence */
 		unsigned int  state __attribute__ ((packed));            /* merged flags */
 		} all;
 	} sector_header_t;
@@ -207,7 +207,7 @@ typedef union
 #define  EOR_SECTOR   1                 /* sector is an EOR marker */
 #define  DATA_SECTOR  2                 /* sector contains data */
 
-#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) {{ KEY_SEQUENCE, 0, 0, DATA_SECTOR, 0 }})
+#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) {{ KEY_SEQUENCE, 0, 0, BOR_SECTOR, 0 }})
 
 
 /*
@@ -225,18 +225,20 @@ struct
 	unsigned char  *end;            /* see diagram above */
 	unsigned int  interleave;       /* block interleave */
 	unsigned int  video_size;       /* see diagram above */
-	unsigned int  buffer_size;      /* see diagram above */
+	unsigned int  active_size;      /* see diagram above */
 	unsigned int  data_size;        /* see diagram above */
 	unsigned int  parity_size;      /* see diagram above */
 	unsigned int  leader;           /* see diagram above */
 	unsigned int  trailer;          /* see diagram above */
 	int  oddfield;                  /* current video field is odd */
 	int  need_sequence_reset;       /* sector number needs to be reset */
+	int  found_data;                /* have found first valid data sector */
+	int  op_count;                  /* counter for misc operations */
 	int  mode;                      /* current mode (see backer.h) */
 	sector_header_t  header;        /* sector header copy */
 	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
-	int  (*read)(f_flags_t, jiffies_t);     /* sector read function */
-	int  (*write)(f_flags_t, jiffies_t);    /* sector write function */
+	int  (*read)(void);             /* sector read function */
+	int  (*write)(void);            /* sector write function */
 	} sector;
 
 
@@ -246,21 +248,18 @@ struct
  */
 
 int           bkr_format_reset(int, direction_t);
-int           bkr_write_bor(jiffies_t);
-int           bkr_write_eor(jiffies_t);
+int           bkr_sector_write_eor(void);
 unsigned int  space_in_buffer(void);
 unsigned int  bytes_in_buffer(void);
 
 
 /*
- * Some private functions meant only for export to the error analysis
- * program.
+ * Some private stuff meant only for export to the error analysis program.
  */
 
 #ifdef BACKER_FMT_PRIVATE
 
 extern unsigned char  weight[];
-int   bkr_find_sector(f_flags_t, jiffies_t);
 
 #endif /* BACKER_FMT_PRIVATE */
 

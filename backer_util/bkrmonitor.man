@@ -20,40 +20,38 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrcheck 8 "March 21, 2001" "Linux" "Backer"
+.TH bkrmonitor 8 "TODAYS_DATE" "Linux" "Backer"
 .SH NAME
-bkrcheck \- Backer device I/O testing tool.
+bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
-\fBbkrcheck\fP [\fB\-h\fP] [\fB\-f\fP \fIdevname\fP] [\fIfilename\fP]
+\fBbkrmonitor\fP [\fB\-h\fP] [\fB\-t\fP \fIinterval\fP]
 .SH DESCRIPTION
-\fBbkrcheck\fP performs two functions.  If no file name is given, then it
-tests the operation of the
+The \fBbkrmonitor\fP utility is a GTK+ application for monitoring the
+status of the
 .IR backer (4)
-device driver by writing a test pattern to one of the device files.  If,
-instead, a file name is given then it computes the length of tape required
-to store the file using the format of one of the device files.  In both
-cases, a particular device file can be specified with the \fB-f\fP option.
+driver.  When running, it repeatedly parses the contents of
+\fB/proc/driver/backer\fP and displays the information graphically.
 .PP
-When computing the length of tape, the mode can be retrieved from
-a backer device even if a transfer is in progress as the format retrieval
-.IR ioctl (2)
-does not interfere with tape I/O.
+See
+.IR backer (4)
+for information on the meaning of the information displayed.
 .SS OPTIONS
 .TP
 \fB\-h\fP
 Print a usage message.
 .TP
-\fB\-f\fP \fIdevname\fP
-Use \fIdevname\fP for communication with the device driver.  The default is
-\fBDEVICE_NAME\fP.
-.TP
-\fIfilename\fP
-Instead of writing a test pattern, compute the length of tape required to
-store \fIfilename\fP.
+\fB\-t\fP \fIinterval\fP
+Set the update interval to \fIinterval\fP milliseconds.
 .SH "SEE ALSO"
 .IR backer (4),
-.IR bkrencode (8),
-.IR bkrmonitor (8)
+.IR bkrcheck (8),
+.IR bkrencode (8)
+.SH BUGS
+The decay of the recent error indicator graph is keyed to increments in the
+sector number so if the number stops changing for some reason then the
+recent error graph stops decaying.  This will be seen if the graph is not
+zero at the end of a recording or while the driver is skipping over an
+underflow.
 .SH AUTHOR
 Kipp Cannon (kcannon@users.sourceforge.net).
 .SH AVAILABILITY

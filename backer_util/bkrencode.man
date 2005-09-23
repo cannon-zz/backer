@@ -20,12 +20,13 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrencode 8 "March 21, 2001" "Linux" "Backer"
+.TH bkrencode 8 "TODAYS_DATE" "Linux" "Backer"
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
-\fBbkrencode\fP [\fB\-h\fP] [\fB\-u\fP] [\fB\-V\fP n|p] [\fB\-D\fP h|l]
-[\fB\-F\fP e|s] [\fB\-a\fP] [\fB\-f\fP \fIdevname\fP]
+\fBbkrencode\fP [\fB\-h\fP] [\fB\-u\fP] [\fB\-V\fP \fBn\fP|\fBp\fP]
+[\fB\-D\fP \fBh\fP|\fBl\fP] [\fB\-F\fP \fBe\fP|\fBs\fP]
+[\fB\-f\fP [\fIdevname\fP]]
 .SH DESCRIPTION
 \fBbkrencode\fP is a user space implementation of the
 .IR backer (4)
@@ -49,38 +50,37 @@ of \fBbkrencode\fP compiled from the sources of the older driver.
 It is necessary to tell \fBbkrencode\fP what format to use when encoding a
 tape data stream and, likewise, the format the data stream is in when it's
 being decoded.  If the mode is not specified on the command line then the
-compiled-in default mode is used.  It is possible for \fBbkrencode\fP to
-automatically retrieve the format to use from a device file.  This is done
-with the \fB\-a\fP option combined, if necessary, with the \fB\-f\fP option
-and can be done whether or not the device is actually in use for a transfer
-at the time.
+compiled-in default mode, \fBDEFAULT_MODE\fP, is used.  It is possible for
+\fBbkrencode\fP to automatically retrieve the format to use from a Backer
+device file.  This is done with the \fB\-f\fP option followed, if
+necessary, with the name of the device to use.  The format retrieval
+operation is safe to perform at any time:  it will not interfere with any
+transfer.
 .SS OPTIONS
 .TP
 \fB\-h\fP
 Print a usage message.
 .TP
 \fB\-u\fP
-"Unencode".  Extract file data from a tape data stream.
+``Unencode''.  Extract file data from a tape data stream.
 .TP
-\fB\-V\fP [np]
-Set the video mode to format the data for to NTSC (n) or PAL (p).
+\fB\-V\fP \fBn\fP|\fBp\fP
+Set the video mode to format the data for to NTSC (\fBn\fP) or PAL
+(\fBp\fP).
 .TP
-\fB\-D\fP [hl]
-Set the density to format the data for to high (h) or low (l).
+\fB\-D\fP \fBh\fP|\fBl\fP
+Set the density to format the data for to high (\fBh\fP) or low (\fBl\fP).
 .TP
-\fB\-F\fP [es]
-Set the tape speed to format the data for to EP (e) or SP (s).
+\fB\-F\fP \fBe\fP|\fBs\fP
+Set the tape speed to format the data for to EP (\fBe\fP) or SP (\fBs\fP).
 .TP
-\fB\-a\fP
-Automatically retrieve the mode to use from a Backer device file.
-.TP
-\fB\-f\fP \fIdevname\fP
-When automatically retrieving the desired mode, retrieve it from
-\fIdevname\fP.  If this option is not given then the mode is retrieved from
+\fB\-f\fP [\fIdevname\fP]
+Retrieve the mode to use from a Backer device file.  If specified,
+\fIdevname\fP is used otherwise the mode is retrieved from
 \fBDEVICE_NAME\fP.
 .SH EXAMPLES
 To save a file in short play high density NTSC mode using
-\fBbkrencode\fP to process the data type
+\fBbkrencode\fP to process the data, type
 .RS 3
 .sp
 bkrencode -V n -D h -S s < \fIfilename\fP > /dev/backer/0/nhr
@@ -97,7 +97,7 @@ To use \fBbkrencode\fP to allow
 to be used with high compression on a slow computer do something like
 .RS 3
 .sp
-tar -czO \fIfilenames...\fP | bkrencode > /tmp/tape.dat
+tar -czO \fIfilenames...\fP | bkrencode \fIoptions\fP > /tmp/tape.dat
 .br
 cat /tmp/tape.dat > /dev/backer/0/\fIdevice\fP
 .sp

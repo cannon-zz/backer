@@ -1,3 +1,32 @@
+2.1 (?)
+	Documentation updates.
+
+	Removed -a option from bkrencode.  The -f option is used instead
+	but with the file name now being optional (-f with no file name is
+	equivalent to the old -a).
+
+	With the driver's new /proc status output, bkrmonitor was returned
+	to a purely graphical application and now gets its info from the
+	/proc entry rather than the (now non-existant) ioctl call.
+	bkrmonitor no longer needs to be stoped and started if the driver's
+	mode is changed.
+
+	bkrcheck's tape length calculation now works properly with raw
+	devices.
+
+	Due to changes in the device driver's formating code, bkrencode can
+	now skip over the junk sectors that are always found at the start
+	of a recording.
+
+	The default mode for bkrencode is now in the Makefile so it's
+	easier to edit and can get pasted into the man page.
+
+	Brought stdio_dev and bkrencode in line with the new blocking logic
+	used in the device driver's code.
+
+	Made the exit codes more consistent so that the utilities work as
+	expected in scripts (at least as I expect them too...).
+
 2.0 (2001/4/12)
 	Documentation updates and corrections.
 

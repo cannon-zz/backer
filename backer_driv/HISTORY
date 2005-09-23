@@ -1,3 +1,52 @@
+2.1 (?)
+	Documentation updates and corrections.
+
+	Replaced the BKRIOCGETSTATUS ioctl call with a human-readable /proc
+	interface allowing the driver's status to be monitored without an
+	external helper application.
+
+	Added the early stages of group code record (GCR) bit stream
+	modulation to the formating layer.  The actual modulation code is
+	currently is disabled with #if 0 blocks but the structural changes
+	that need to be made before it can be implemented have begun ---
+	so ignore all "unused variable" warnings.
+
+	Changed the configuration system a bit.  Rather than having to edit
+	paramters in backer_isa.c, all parameters are now located in the
+	Makefile so that they can be adjusted from the make command line.
+	Just in case someone wanted to make an RPM out of this.
+
+	O_NONBLOCK was not being honoured during read operations until
+	after the first valid data sector had been found.  Fixed this by
+	moving the logic to skip over the first few bad sectors into the
+	formating layer so that it runs in parallel with and can be
+	bypassed by the non-blocking logic.  This has the side benefit of
+	adding the skip-garbage-at-beginning-of-recording feature to
+	anything that uses the formating code (eg. bkrencode).
+
+	Changed the DMA buffer policy during read operations in order to
+	achieve some much-needed simplification of the formating code: the
+	buffer must now be exactly 64kB in size with the offsets being 16
+	bit unsigned ints.  This means that no more explicit checks for
+	loop-arounds are required making the read code as simple as the
+	write code but it unfortunately requires all other applications
+	that make use of the formating code (eg. bkrencode) to play along.
+
+	Overhauled the non-blocking mechanism:  moved all blocking policy
+	code from the hardware layer up to the kernel interface layer.
+	This required some significant changes to the BOR and EOR
+	generation mechanisms and a re-work of the hardware buffer flush
+	code.  The consequences of this change are firstly that full
+	blocking/non-blocking behaviour is exhibited even when the BOR (and
+	eventually the EOR) mark is being written and secondly it fixes a
+	busy loop in the formating code that I was never able to track
+	down.  It also seems to have reduced the size of the compiled
+	binary (?).
+
+	Decided to stop distributing the ``Additional Information''
+	document because it accounted for 1/2 of the tar ball and didn't
+	really contain any information helpful to users.
+
 2.0 (2001/4/12)
 	Changed the flags used to represent the data format to help fix a
 	bug in bkrencode.

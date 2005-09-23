@@ -52,13 +52,13 @@ unsigned int  length;
 unsigned char  *data;
 struct mtget mtget;
 struct bkrformat format;
+char  *devname = DEFAULT_DEVICE;
 
 
 int main(int argc, char *argv[])
 {
 	int  i;
 	struct termios oldterm, newterm;
-	char  *device = DEFAULT_DEVICE;
 	long  size = -1;
 	double  time;
 	int  term, outfile;
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 		switch(i)
 			{
 			case 'f':
-			device = optarg;
+			devname = optarg;
 			break;
 
 			case 'h':
@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
 	 * Open device and retrieve current mode and format
 	 */
 
-	outfile = open(device, O_WRONLY);
+	outfile = open(devname, O_WRONLY);
 	if(outfile < 0)
 		{
 		perror(PROGRAM_NAME);
@@ -156,12 +156,12 @@ int main(int argc, char *argv[])
 
 	switch(BKR_FORMAT(mtget.mt_dsreg))
 		{
-		case BKR_FMT:
-		gen_formated();
-		break;
-
 		case BKR_RAW:
 		gen_raw();
+		break;
+
+		default:
+		gen_formated();
 		break;
 		}
 
@@ -194,8 +194,6 @@ int main(int argc, char *argv[])
 
 void gen_formated()
 {
-	int i;
-
 	printf("\nFormat Parameters:\n" \
 	       "\tBuffer usage:      %u bytes (%u frames)\n" \
 	       "\tVideo field size:  %u bytes\n" \
@@ -204,21 +202,19 @@ void gen_formated()
 	       "\tParity bytes:      %u (max %u errors per block)\n" \
 	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
 	       "\tData rate:         %u bytes/second\n\n" \
-	       "Writing '\\0's.  ",
+	       "Writing '\\0's to %s...  ",
 	       format.buffer_size, format.buffer_size/format.video_size/2,
 	       format.video_size,
 	       format.interleave,
 	       format.block_size,
 	       format.block_parity, format.block_parity/2,
 	       format.sector_capacity, 100.0*format.sector_capacity/format.video_size,
-	       format.sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
+	       format.sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50),
+	       devname);
 
 	length = format.sector_capacity;
-
 	data = (unsigned char *) malloc(length);
-
-	for(i = 0; i < length; i++)
-		data[i] = 0;
+	memset(data, 0x55, length);
 }
 
 
@@ -242,11 +238,11 @@ void gen_raw(void)
 	       format.buffer_size, format.buffer_size/format.video_size,
 	       format.video_size);
 
+	length = format.video_size;
+	data = (unsigned char *) malloc(length);
 	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
 		{
 		case BKR_PAL:
-		length = LINES_PER_FIELD_PAL * bytes_per_line * 2;
-		data = (unsigned char *) malloc(length);
 		for(i = 0; i < length/2; i++)
 			data[i] = i/bytes_per_line + 1;
 		for(j = 0; i < length; i++, j++)
@@ -254,8 +250,6 @@ void gen_raw(void)
 		break;
 
 		case BKR_NTSC:
-		length = LINES_PER_FIELD_NTSC * bytes_per_line * 2 + bytes_per_line;
-		data = (unsigned char *) malloc(length);
 		for(i = 0; i < (length+bytes_per_line)/2; i++)
 			data[i] = i/bytes_per_line + 1;
 		for(j = 0; i < length; i++, j++)

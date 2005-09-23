@@ -33,40 +33,33 @@ void  bkr_display_mode(unsigned int mode)
 	switch(BKR_VIDEOMODE(mode))
 		{
 		case BKR_PAL:
-		fputs("\tVideo mode:  [*] PAL   [ ] NTSC\n", stderr);
+		fputs("\tVideo mode:   [*] PAL   [ ] NTSC\n", stderr);
 		break;
 		case BKR_NTSC:
-		fputs("\tVideo mode:  [ ] PAL   [*] NTSC\n", stderr);
+		fputs("\tVideo mode:   [ ] PAL   [*] NTSC\n", stderr);
 		default:
 		break;
 		}
 	switch(BKR_DENSITY(mode))
 		{
 		case BKR_LOW:
-		fputs("\tData rate:   [*] LOW   [ ] HIGH\n", stderr);
+		fputs("\tData rate:    [*] LOW   [ ] HIGH\n", stderr);
 		break;
 		case BKR_HIGH:
-		fputs("\tData rate:   [ ] LOW   [*] HIGH\n", stderr);
-		default:
-		break;
-		}
-	switch(BKR_SPEED(mode))
-		{
-		case BKR_EP:
-		fputs("\tTape speed:  [*] EP    [ ] SP/LP\n", stderr);
-		break;
-		case BKR_SP:
-		fputs("\tTape speed:  [ ] EP    [*] SP/LP\n", stderr);
+		fputs("\tData rate:    [ ] LOW   [*] HIGH\n", stderr);
 		default:
 		break;
 		}
 	switch(BKR_FORMAT(mode))
 		{
 		case BKR_RAW:
-		fputs("\tData type:   [*] RAW   [ ] FORMATED\n", stderr);
+		fputs("\tData format:  [*] RAW   [ ] SP/LP  [ ] EP\n", stderr);
 		break;
-		case BKR_FMT:
-		fputs("\tData type:   [ ] RAW   [*] FORMATED\n", stderr);
+		case BKR_SP:
+		fputs("\tData format:  [ ] RAW   [*] SP/LP  [ ] EP\n", stderr);
+		break;
+		case BKR_EP:
+		fputs("\tData format:  [ ] RAW   [ ] SP/LP  [*] EP\n", stderr);
 		default:
 		break;
 		}

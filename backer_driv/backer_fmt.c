@@ -59,7 +59,7 @@
 /*
  * Global Data
  *
- * 2280 = 2 * 2 * 2 * 3 * 5 * 19
+ * 2370 = 2 * 3 * 5 * 79
  */
 
 /* Read the docs for important info before adjusting these! */
@@ -70,22 +70,15 @@ static struct
 	unsigned int  interleave;
         unsigned int  parity;
         } format[] =                            /* format information */
-	{ {  32,  28,  8, 10 },                 /* FMT LOW  NTSC SP */
-	  {  48,  44,  8, 10 },                 /* FMT LOW  NTSC EP */
-	  {  40,  36,  8, 10 },                 /* FMT LOW  PAL  SP */
-	  {  48,  48,  8, 10 },                 /* FMT LOW  PAL  EP */
-	  {  80,  70, 20, 10 },                 /* FMT HIGH NTSC SP */
-	  { 110, 140, 60, 10 },                 /* FMT HIGH NTSC EP */
-	  { 100,  90, 20, 10 },                 /* FMT HIGH PAL  SP */
-	  { 120, 120, 20, 10 },                 /* FMT HIGH PAL  EP */
-	  {   0,   0,  1,  0 },                 /* RAW LOW  NTSC SP */
-	  {   0,   0,  1,  0 },                 /* RAW LOW  NTSC EP */
-	  {   0,   0,  1,  0 },                 /* RAW LOW  PAL  SP */
-	  {   0,   0,  1,  0 },                 /* RAW LOW  PAL  EP */
-	  {   0,   0,  1,  0 },                 /* RAW HIGH NTSC SP */
-	  {   0,   0,  1,  0 },                 /* RAW HIGH NTSC EP */
-	  {   0,   0,  1,  0 },                 /* RAW HIGH PAL  SP */
-	  {   0,   0,  1,  0 } };               /* RAW HIGH PAL  EP */
+	{ {  32,  28,  8,  8 },                 /* LOW  NTSC SP  */
+	  {  40,  32, 20,  8 },                 /* LOW  NTSC EP  */
+	  {  40,  36,  8,  8 },                 /* LOW  PAL  SP  */
+	  {  48,  48,  8,  8 },                 /* LOW  PAL  EP  */
+	  {  80,  70, 20,  8 },                 /* HIGH NTSC SP  */
+	  { 100,  70, 59,  6 },                 /* HIGH NTSC EP  */
+	  { 100,  90, 20,  8 },                 /* HIGH PAL  SP  */
+	  { 120, 120, 20,  8 },                 /* HIGH PAL  EP  */
+	  {   0,   0,  1,  0 } };               /* RAW           */
 
 unsigned char  weight[] =                       /* correlation weights */
 	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,
@@ -136,10 +129,12 @@ static struct
 /* convert mode to an index for the format array */
 static inline int mode_to_format(int mode)
 {
-	return(((BKR_FORMAT(mode) == BKR_RAW)    << 3) |
-	       ((BKR_DENSITY(mode) == BKR_HIGH)  << 2) |
+	if(BKR_FORMAT(mode) == BKR_RAW)
+		return(8);
+
+	return(((BKR_DENSITY(mode) == BKR_HIGH)  << 2) |
 	       ((BKR_VIDEOMODE(mode) == BKR_PAL) << 1) |
-	       ((BKR_SPEED(mode) == BKR_EP)      << 0));
+	       (BKR_FORMAT(mode) == BKR_EP));
 }
 
 static inline int sectors_per_second(void)
@@ -213,17 +208,17 @@ int bkr_format_reset(int mode, direction_t direction)
 		return(-ENOMEM);
 	memset(sector.buffer, BKR_FILLER, sector.buffer_size);
 
-	if(BKR_FORMAT(mode) == BKR_FMT)
-		{
-		sector.read = bkr_sector_read_fmt;
-		sector.write = bkr_sector_write_fmt;
-		sector.start = sector.buffer + sizeof(sector_header_t);
-		}
-	else
+	if(BKR_FORMAT(mode) == BKR_RAW)
 		{
 		sector.read = bkr_sector_read_raw;
 		sector.write = bkr_sector_write_raw;
 		sector.start = sector.buffer;
+		}
+	else
+		{
+		sector.read = bkr_sector_read_fmt;
+		sector.write = bkr_sector_write_fmt;
+		sector.start = sector.buffer + sizeof(sector_header_t);
 		}
 
 	sector.end = sector.buffer + sector.data_size;
@@ -440,6 +435,7 @@ static int bkr_sector_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 				sector.need_sequence_reset = 1;
 				return(-ENODATA);
 				}
+			health.total_errors += result;
 			if((unsigned int) result > errors.symbol)
 				errors.symbol = result;
 			if((unsigned int) result > errors.recent_symbol)
@@ -559,12 +555,6 @@ static int bkr_sector_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 	for(i = sector.data_size; i < sector.data_size + block.parity; i += 1 - sector.parity_size)
 		for(; i < sector.buffer_size; i += block.parity)
 			device.buffer[device.head++] = sector.buffer[i];
-
-#if 0   /* pad if using non-comensurate interleaving */
-	i = sector.buffer_size % block.size;
-	memset(device.buffer + device.head, BKR_FILLER, i);
-	device.head += i;
-#endif
 
 	/*
 	 * Write the trailer to the DMA buffer

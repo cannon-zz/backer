@@ -5,6 +5,36 @@
  *
  * See backer_fmt.h for a description of how to use the formating and
  * device layers together.
+ *
+ * For anyone interested in working on support for other I/O layers (eg.
+ * fb/video4linux) the semantics for the read and write functions are as
+ * follows.  Firstly, they generally don't actually "read" or "write"
+ * anything.  It is assumed that there exists some sort of I/O buffer (in
+ * the case of Backer this is the DMA buffer) which some other thing is
+ * magically putting data into or taking data out of all on its own.  All
+ * these functions do is wait until or otherwise ensure that the buffer
+ * either contains at least as much data as requested (read) or as much
+ * empty space as requested (write) and then update the buffer tail/head
+ * appropriately.  Upon returning from these functions, the calling code
+ * (the formating layer) then does the actual transfer of data to/from the
+ * buffer and updating of the head/tail as appropriate.
+ *
+ * In the case of the Backer device, the DMA hardware is the thing that is
+ * magically moving data into/out of the buffer but in the case of
+ * bkrencode the read and write functions actually do have to handle it
+ * themselves.  However, since the length parameter is just a minimum
+ * requested amount they are free to excede it which in bkrencode's case
+ * they do:  every time write is called it just completely empties the
+ * buffer while read fills the buffer to 50% (which is assumed to always be
+ * more than requested).
+ *
+ * For the other functions that need to be defined by the device layer
+ * (reset, start/stop, etc.) there are some minimum tasks that they are
+ * required to perform.  See stdio_dev.c for the minimal implementations
+ * (but note that the unusual write call in the flush function is relying
+ * on the behaviour of that particular implementation of the write function
+ * to accomplish the desired task... do the equivalent for your
+ * implementation).
  * 
  * Copyright (C) 2000,2001  Kipp C. Cannon
  *

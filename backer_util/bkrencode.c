@@ -37,7 +37,7 @@
 #include "bkr_disp_mode.h"
 
 #define  PROGRAM_NAME    "bkrencode"
-#define  DEFAULT_MODE    (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
+#define  DEFAULT_MODE    (BKR_NTSC | BKR_LOW | BKR_SP)
 #define  BUFFER_SIZE     8192
 #define  BAILOUT         1
 
@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 	 * Process command line options
 	 */
 
-	while((result = getopt(argc, argv, "ad:f:hs:uv:")) != EOF)
+	while((result = getopt(argc, argv, "aD:F:f:huV:")) != EOF)
 		switch(result)
 			{
 			case 'u':
@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
 			devname = optarg;
 			break;
 
-			case 'd':
+			case 'D':
 			if(mtget.mt_dsreg == -1)
 				break;
 			mtget.mt_dsreg &= ~BKR_DENSITY(-1);
@@ -121,10 +121,10 @@ int main(int argc, char *argv[])
 				}
 			break;
 
-			case 's':
+			case 'F':
 			if(mtget.mt_dsreg == -1)
 				break;
-			mtget.mt_dsreg &= ~BKR_SPEED(-1);
+			mtget.mt_dsreg &= ~BKR_FORMAT(-1);
 			switch(tolower(optarg[0]))
 				{
 				case 's':
@@ -134,12 +134,12 @@ int main(int argc, char *argv[])
 				mtget.mt_dsreg |= BKR_EP;
 				break;
 				default:
-				mtget.mt_dsreg |= BKR_SPEED(DEFAULT_MODE);
+				mtget.mt_dsreg |= BKR_FORMAT(DEFAULT_MODE);
 				break;
 				}
 			break;
 
-			case 'v':
+			case 'V':
 			if(mtget.mt_dsreg == -1)
 				break;
 			mtget.mt_dsreg &= ~BKR_VIDEOMODE(-1);
@@ -163,9 +163,9 @@ int main(int argc, char *argv[])
 	"Backer tape data encoder/unencoder.\n" \
 	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
-	"	-v <p/n>  Set the video mode to PAL or NTSC\n" \
-	"	-d <h/l>  Set the data rate to high or low\n" \
-	"	-s <s/e>  Set the tape speed to SP or EP\n" \
+	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
+	"	-D <h/l>  Set the data rate to high or low\n" \
+	"	-F <s/e>  Set the data format to SP or EP\n" \
 	"	-a        Get the format from the current mode of the Backer device\n" \
 	"	-f dev    Use device dev for the \"-a\" option (default " DEFAULT_DEVICE ")\n" \
 	"	-u        Unencode tape data (default is to encode)\n" \
@@ -192,11 +192,9 @@ int main(int argc, char *argv[])
 		close(tmp);
 		}
 
-	mtget.mt_dsreg = (mtget.mt_dsreg & ~BKR_FORMAT(-1)) | BKR_FMT;
-
 	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
 	        (direction == READING) ? "DECODING" : "ENCODING");
-	bkr_display_mode(mtget.mt_dsreg & ~BKR_FORMAT(-1));
+	bkr_display_mode(mtget.mt_dsreg);
 
 	/*
 	 * Grab interrupt signal so we can write a nice EOR before exiting

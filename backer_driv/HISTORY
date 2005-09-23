@@ -1,3 +1,37 @@
+1.107(beta) (2001/3/24)
+	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
+
+	Changed the devfs entry naming scheme.  Rather than dumping
+	everything into /dev, a tree structure is created of the form
+	/dev/backer/?/??? where the first ? is the device number (currently
+	only one device is supported so this is always 0) and the file name
+	is three characters:  1st character is n/p for NTSC/PAL, 2nd
+	character is h/l for high/low density and last character is e/s/r
+	if the file represents an EP/SP/raw mode respectively.  The
+	minor-to-mode mapping has also changed.
+
+	Gave the makefile an overhaul:  the install target now checks to
+	see if devfs is in use by scanning /proc/mounts and automatically
+	creates the device inodes if devfs is not found.
+
+	Re-structured the internal mode flags so that rather than having
+	two "formated" modes and one "raw" mode there are three "data
+	formats":  sp, ep and raw (pass-through).  This matches the device
+	file naming scheme.
+
+	Moved some of the documentation out of the postscript file into
+	text files and a man page to be a little more "standard".
+
+	The MTGET ioctl now returns the count of total errors corrected
+	since the last read started in the mt_erreg field.
+
+	Adjusted the interleaving and the number of parity symbols in some
+	of the tape formats.
+
+	The code is now in feature freeze for 2.0.  Among other things, the
+	tape format will not change until the next developmental (pre 3.0)
+	series.
+
 1.106 (2001/3/14)
 	Fixed bug in transfer start code that would allow a second transfer
 	to be started even if one was in progress.

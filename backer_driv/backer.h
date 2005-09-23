@@ -71,13 +71,14 @@ struct bkrerrors                                /* Error counts */
 
 struct bkrhealth
 	{
+	unsigned int  total_errors;             /* total errors corrected */
 	unsigned int  worst_key;
 	unsigned int  best_nonkey;
 	unsigned int  least_skipped;
 	unsigned int  most_skipped;
 	};
 
-#define  HEALTH_INITIALIZER  ((struct bkrhealth) {~0, 0, ~0, 0})
+#define  HEALTH_INITIALIZER  ((struct bkrhealth) { 0, ~0, 0, ~0, 0})
 
 struct bkrstatus                                /* Status structure (read only) */
 	{
@@ -108,15 +109,13 @@ struct bkrformat                                /* Format structure (read only) 
 #define  BKR_VIDEOMODE(x)      ((x) & 0x0003)
 #define  BKR_DENSITY(x)        ((x) & 0x000c)
 #define  BKR_FORMAT(x)         ((x) & 0x0030)
-#define  BKR_SPEED(x)          ((x) & 0x00c0)
 #define  BKR_NTSC              0x0001           /* NTSC video mode */
 #define  BKR_PAL               0x0002           /* PAL video mode */
 #define  BKR_LOW               0x0004           /* low density */
 #define  BKR_HIGH              0x0008           /* high density */
-#define  BKR_FMT               0x0010           /* read/write formated data */
-#define  BKR_RAW               0x0020           /* read/write raw data */
-#define  BKR_SP                0x0040           /* VCR is in SP/LP mode */
-#define  BKR_EP                0x0080           /* VCR is in EP mode */
+#define  BKR_RAW               0x0010           /* read/write raw data */
+#define  BKR_SP                0x0020           /* VCR is in SP/LP mode */
+#define  BKR_EP                0x0030           /* VCR is in EP mode */
 
 
 #endif /* _BACKER_H */

@@ -51,8 +51,9 @@ struct
 	{
 	GtkWidget  *ntsc, *pal;
 	GtkWidget  *high, *low;
-	GtkWidget  *ep, *sp;
+	GtkWidget  *raw, *sp, *ep;
 	GtkWidget  *sector;
+	GtkWidget  *total;
 	GtkWidget  *symbol, *block, *frame, *overrun, *underflow;
 	GtkWidget  *worst, *best, *least, *most;
 	GtkWidget  *buffer_status;
@@ -131,7 +132,7 @@ int main(int argc, char *argv[])
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_policy(GTK_WINDOW(window), FALSE, FALSE, TRUE);
 	gtk_window_set_title(GTK_WINDOW(window), "Backer Monitor");
-	gtk_container_set_border_width(GTK_CONTAINER(window), 5);
+	gtk_container_set_border_width(GTK_CONTAINER(window), 7);
 	gtk_signal_connect(GTK_OBJECT(window), "destroy", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 	gtk_signal_connect(GTK_OBJECT(window), "delete_event", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 
@@ -140,7 +141,7 @@ int main(int argc, char *argv[])
 
 	/* Mode indicators */
 
-	table = gtk_table_new(2, 3, TRUE);
+	table = gtk_table_new(3, 3, TRUE);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
 	widgets.ntsc = gtk_radio_button_new_with_label(NULL, "NTSC");
@@ -153,10 +154,12 @@ int main(int argc, char *argv[])
 	widgets.low = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.high)), "Low");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.low, 1, 2, 1, 2);
 
-	widgets.sp = gtk_radio_button_new_with_label(NULL, "SP/LP");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sp, 2, 3, 0, 1);
+	widgets.raw = gtk_radio_button_new_with_label(NULL, "RAW");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.raw, 2, 3, 0, 1);
+	widgets.sp = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.raw)), "SP/LP");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sp, 2, 3, 1, 2);
 	widgets.ep = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.sp)), "EP");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ep, 2, 3, 1, 2);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ep, 2, 3, 2, 3);
 
 	gtk_widget_set_sensitive(GTK_WIDGET(table), FALSE);
 
@@ -182,8 +185,12 @@ int main(int argc, char *argv[])
 		break;
 		}
 
-	switch(BKR_SPEED(mtget.mt_dsreg))
+	switch(BKR_FORMAT(mtget.mt_dsreg))
 		{
+		case BKR_RAW:
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.raw), TRUE);
+		break;
+
 		case BKR_SP:
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.sp), TRUE);
 		break;
@@ -195,39 +202,44 @@ int main(int argc, char *argv[])
 
 	/* Error counts */
 
-	table = gtk_table_new(6, 2, FALSE);
+	table = gtk_table_new(7, 2, FALSE);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
 	widget = gtk_label_new("Sector Number");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
-	widget = gtk_label_new("Most Symbol Errors");
+	widget = gtk_label_new("Total Errors Corrected");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
-	widget = gtk_label_new("Uncorrectable Blocks");
+	widget = gtk_label_new("Errors in Worst Block");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 2, 3);
-	widget = gtk_label_new("Framing Errors");
+	widget = gtk_label_new("Uncorrectable Blocks");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
-	widget = gtk_label_new("Over-run Errors");
+	widget = gtk_label_new("Framing Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 4, 5);
-	widget = gtk_label_new("Underflows Detected");
+	widget = gtk_label_new("Overrun Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 5, 6);
+	widget = gtk_label_new("Underflows Detected");
+	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 6, 7);
 
 	widgets.sector = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sector, 1, 2, 0, 1);
 
+	widgets.total = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.total, 1, 2, 1, 2);
+
 	widgets.symbol = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 1, 2);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 2, 3);
 
 	widgets.block = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.block, 1, 2, 2, 3);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.block, 1, 2, 3, 4);
 
 	widgets.frame = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.frame, 1, 2, 3, 4);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.frame, 1, 2, 4, 5);
 
 	widgets.overrun = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 4, 5);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 5, 6);
 
 	widgets.underflow = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 5, 6);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 6, 7);
 
 	/* Health information */
 
@@ -331,6 +343,9 @@ gint update_status(gpointer data)
 
 	sprintf(text, "%lu", pos.mt_blkno);
 	gtk_label_set_text(GTK_LABEL(widgets.sector), text);
+
+	sprintf(text, "%u", status.health.total_errors);
+	gtk_label_set_text(GTK_LABEL(widgets.total), text);
 
 	sprintf(text, "%u", status.errors.symbol);
 	gtk_label_set_text(GTK_LABEL(widgets.symbol), text);

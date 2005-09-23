@@ -1,0 +1,90 @@
+                           INSTALLATION INSTRUCTIONS
+                           =========================
+
+HARDWARE
+--------
+
+You have probably had your Backer working under Windows in which case you
+already have it installed and know there are no hardware conflicts.  If you
+are installing the hardware for the first time then you should first check
+to see which I/O ports and DMA channels are being used by taking a look at
+the two files /proc/ioports and /proc/dma.  Set your Backer to a free I/O
+port and DMA channel then just follow the installation instructions that
+came with the card.
+
+
+SOFTWARE
+--------
+
+Here are the steps for installing the driver.
+
+1.  Configure the driver parameters for your system.  The constants that
+should be set are:
+
+	In Makefile
+
+	BKR_MAJOR
+	MODULES_DIR
+	PREFIX
+
+	In backer_isa.c
+
+	CONFIG_BACKER_IOPORT
+	CONFIG_BACKER_DMA
+	CONFIG_BACKER_TIMEOUT
+
+In the Makefile, BKR_MAJOR is the major number the device inodes will have.
+You can set this to anything your system isn't using.  It currently
+defaults to 60 which is in one of the blocks of number set aside for
+``experimental and local use''.  A number must be chosen even if you are
+using the device filesystem.
+
+MODULES_DIR is the directory the compiled driver will be placed in.  The
+default is /lib/modules/misc which is probably fine.
+
+PREFIX is the top of the hierarchy in which the manual page will be placed.
+The man page is put in PREFIX/man/man4.
+
+The parameters in backer_isa.c specify the hardware settings and the
+timeout.  These can all be set at module load time although you might as
+well configure them now to simplify things later.
+
+The timeout is the length of time the driver will wait before aborting an
+operation in the event of a problem and the only reason to adjust it is if
+you want to tweak the driver's behaviour to your own tastes.  It should not
+be less than the length of the BOR mark or the driver will timeout while
+waiting for data to start during playback.  It also must not be less than
+the time required to empty the DMA buffer or the driver will timeout while
+flushing its buffers at the end of a recording.
+
+
+2.  Compile the driver by typing "make".  Easy enough.
+
+
+3.  Install the driver, device inodes and man page by typing "make
+install".  This puts the driver into MODULES_DIR and runs depmod -a to
+rebuild the module dependancy database.  Then it checks to see if devfs is
+in use and if not it creates the device inodes in /dev.  Finally it
+installs the man page.
+
+If the status of devfs cannot be determined and it is not being used then
+you will have to create the device inodes yourself by running "make devs".
+
+4.  Create link named /dev/tape.  The driver is designed to imitate a
+standard magnetic tape drive and if you want to use your Backer as your
+default tape device you should also create a symbolic link called /dev/tape
+that points to your preferred device.  For example (assuming devfs),
+
+	cd /dev
+	ln -s backer/0/nhs tape
+
+selects high density NTSC in SP mode as the default tape format.  Note that
+if you are using devfs you will have to create this link every time the
+system reboots.  Usually a system will have several such links (for example
+/dev/mouse will be a link to the prefered mouse device) and some mechanism
+will be in place to automatically create them.  One could either use a
+script to create them or put them into a .tar file which is unpacked into
+/dev by the boot scripts.  I leave it up to you to figure out how your
+system accomplishes this.
+
+5.  Done!

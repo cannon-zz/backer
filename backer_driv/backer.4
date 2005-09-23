@@ -1,0 +1,429 @@
+.\" Copyright (c) 2001 Kipp Cannon (kcannon@users.sourceforge.net)
+.\"
+.\" This is free documentation; you can redistribute it and/or
+.\" modify it under the terms of the GNU General Public License as
+.\" published by the Free Software Foundation; either version 2 of
+.\" the License, or (at your option) any later version.
+.\"
+.\" The GNU General Public License's references to "object code"
+.\" and "executables" are to be interpreted as the output of any
+.\" document formatting or typesetting system, including
+.\" intermediate and printed output.
+.\"
+.\" This manual is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public
+.\" License along with this manual; if not, write to the Free
+.\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
+.\" USA.
+.\"
+.TH Backer 4 "March 21, 2001" "Linux" "Special Files"
+.SH NAME
+backer \- The Backer video tape based storage device.
+.SH INTRODUCTION
+The Backer device, manufactured by Danmere Ltd., allows data to be stored on
+video tape using a standard video cassette recorder in either NTSC or PAL
+video formats.
+.SH CONFIGURATION
+Backer devices are character device files.  By default they are owned by
+root:root with mode 0666.  They do not have a standard major number
+assigned to them but the source is distributed with 60 as the default.
+This can be adjusted to the needs of the system.  The minor number encodes
+the video mode, bit density and data format.  In alphabetical order, the
+device names are:
+.PP
+.TS
+l l l.
+Name (devfs)	Name (no devfs)	Minor (see text)
+_
+\fBbacker/\fP\fIn\fP\fB/nhe\fP	\fBbackernhe\fP	0
+\fBbacker/\fP\fIn\fP\fB/nhr\fP	\fBbackernhr\fP	1
+\fBbacker/\fP\fIn\fP\fB/nhs\fP	\fBbackernhs\fP	2
+\fBbacker/\fP\fIn\fP\fB/nle\fP	\fBbackernle\fP	3
+\fBbacker/\fP\fIn\fP\fB/nlr\fP	\fBbackernlr\fP	4
+\fBbacker/\fP\fIn\fP\fB/nls\fP	\fBbackernls\fP	5
+\fBbacker/\fP\fIn\fP\fB/phe\fP	\fBbackerphe\fP	6
+\fBbacker/\fP\fIn\fP\fB/phr\fP	\fBbackerphr\fP	7
+\fBbacker/\fP\fIn\fP\fB/phs\fP	\fBbackerphs\fP	8
+\fBbacker/\fP\fIn\fP\fB/ple\fP	\fBbackerple\fP	9
+\fBbacker/\fP\fIn\fP\fB/plr\fP	\fBbackerplr\fP	10
+\fBbacker/\fP\fIn\fP\fB/pls\fP	\fBbackerpls\fP	11
+.TE
+.PP
+When used with the device file system, the device files are created
+automatically when the driver is loaded.  The \fIn\fP in the path of the
+device is the unit number but the driver currently only supports one unit
+so this is always 0.  The unique three letter sequence in each device
+file's name identifies the video mode (NTSC/PAL), the bit density
+(high/low), and the data format (SP/EP/raw) selected by accessing that
+device file.
+.PP
+Depending on how the driver was compiled, not all mode combinations will be
+present.  Minor numbers are assigned sequentially at run time to those
+modes which are available and the table above shows the assignment when all
+modes are available.  To adjust mode availability, see the
+\fBminor_to_mode[]\fP array in the sources.
+.PP
+If the backer device is to be used as the default tape device then it is
+helpful to create a symbolic link \fB/dev/tape\fP that points to the
+preferred mode.  For example:
+.RS
+.sp
+cd /dev
+.br
+ln -s backer/0/nhs tape
+.sp
+.RE
+.SH DESCRIPTION
+The driver presents the Backer device as a set of character special files,
+one for each available format, that try to behave somewhat like tape
+devices.  It is not possible to provide a fully functional tape interface
+because the tape transport itself (your VCR) is not under computer control.
+This means that every task requires operator assistance to complete.  Apart
+from the lack of automation, however, the driver should be able to
+inter-operate with any software designed for use with tapes such as
+.IR mt (1)
+and
+.IR tar (1).
+.PP
+The Backer hardware is compatible with both NTSC and PAL video equipment
+and it can modulate the data stream into the video signal at two bit
+densities, ``high'' and ``low''.  In addition to the hardware settings, one
+can also switch the driver software between two tape data formats and a
+pass-through mode.  One of the formats is intended for short play (SP)
+recordings and the other for extended play (EP) recordings while the
+pass-through mode disables all data processing within the driver allowing
+the raw tape data stream to be read and written.  The desired settings are
+selected by accessing the appropriate device file.
+.PP
+Any combination of the device files can be opened any number of times but
+only one transfer is allowed at a time.  Once a transfer has been started
+on a file descriptor, all other
+.IR read (2)
+and
+.IR write (2)
+calls on all descriptors will fail but
+.IR ioctl (2)
+calls can still be made on those descriptors to retrieve the driver status,
+etc..  Since the hardware is not full duplex, if a device is opened with
+mode \fBO_RDWR\fP the first read/write call selects the transfer direction
+and any subsequent calls in the other direction fail.
+.PP
+Data written to and read from the non-raw files is clean, synchronous and
+commensurate:  it will be retrieved error-free;  the, say, 2000th byte
+written will be the 2000th byte read back;  exactly as many bytes as were
+written will be played back (the data is not padded to a multiple of some
+size).
+.PP
+The raw device files provide access to the actual tape data.  When writing,
+the first byte written is placed in the first position in the top line of
+the first video field and so on.  When reading, all the pleasantries of the
+raw video signal are present:  tape noise, missing video lines, etc..  Have
+fun.
+.SH EXAMPLES
+The examples below assume that \fB/dev/tape\fP points to the desired
+device.
+.SS "BASIC USE"
+To save a file to tape, press Record and type
+.RS
+.sp
+cat \fIfilename\fP > /dev/tape
+.sp
+.RE
+When the recording first starts you will see the beginning-of-record (BOR)
+mark which consists of vertical bars and will last for several seconds.
+That will be followed by what, for the most part, is random noise until the
+recording ends with the end-of-record (EOR) mark.  To verify the recording,
+rewind to the beginning (before or during the BOR mark is OK), press Play
+and type
+.RS
+.sp
+cmp /dev/tape \fIfilename\fP
+.sp
+.RE
+To retrieve the file, position the tape at the start of the recording as
+above and type
+.RS
+.sp
+cat /dev/tape > \fIfilename\fP
+.sp
+.RE
+If the computer isn't fast enough to process the data in real time then
+buffer over- and underflows will be seen.  In this case it will be necessary
+to use off-line processing.  See
+.IR bkrencode (8)
+for more information.
+.SS "USE WITH tar"
+.IR tar (1)
+processes data in ``records'' and the larger the record size the more
+infrequently tar accesses the device.  If the time that elapses is too
+long, then the device's buffer can underflow (writing) or overflow
+(reading).  This is true for all tape devices but due to Backer's
+relatively high transfer speed for its buffer size, even tar's default
+record size can result in excessive delays if additional processing is
+being performed (like compression).  When writing, this is harmless
+(although tape is wasted) because the driver can detect the underflow
+condition in the data stream and correct it during playback.  When reading,
+however, the buffer overflows result in data loss.
+.PP
+The default record size for GNU tar is 10 kilobytes (twenty 512-byte
+blocks) and on a PII-400 this makes the device accesses too infrequent if
+.IR gzip (1)
+based compression is used at high data rate.  It appears that the simplest
+solution is to set the record size to the minimum of 1 block.  This not
+only solves the through-put problem but also seems to result in smaller
+archive files.
+.PP
+The record size is adjusted with the \fB-b\fP option.  An example of
+making a backup using
+.IR gzip (1)
+compression is
+.RS
+.sp
+tar -b 1 -c -z -f /dev/tape [other options...]
+.sp
+.RE
+and the corresponding restore command is
+.RS
+.sp
+tar -b 1 -x -z -f /dev/tape [other options...]
+.sp
+.RE
+.PP
+If your computer still has trouble keeping up with the data stream then try
+changing the \fB-z\fP to \fB-Z\fP to use
+.IR compress (1)
+rather than gzip.  The compression will not be as good but there will be
+less CPU overhead.  If it still doesn't work try it without any compression
+at all.
+.SS "MACHINE-TO-MACHINE COPYING"
+If two computers with Backers are available then it is possible to use the
+Backers to copy data between them.  This is accomplished by cross wiring
+the cards (output of ``transmitter'' to input of ``receiver'') then at the
+transmitting machine writing data to a device file while at the receiving
+machine reading the data from the corresponding device file.  Any of the
+non-raw modes can be chosen as long as both machines are speaking the same
+one but PAL/high/SP (phs) is recommended since it has the highest data
+rate.
+.SH IOCTLS
+The following
+.IR ioctl (2)
+calls are understood.
+.IP \fBMTIOCTOP\fP
+Accepts a pointer to an \fBmtop\fP structure which is used to access
+several sub-commands.  The following sub-commands are understood:
+.RS +0.5i
+.TP
+\fBMTNOP\fP
+Does nothing.
+.TP
+\fBMTRESET\fP
+Does nothing.
+.TP
+\fBMTSETDRVBUFFER\fP
+With the \fBmt_count\fP field set to (\fBMT_ST_TIMEOUTS\fP | \fItimeout\fP)
+the operation timeout is set to \fItimeout\fP seconds.
+.RE
+.IP \fBMTIOCGET\fP
+Accepts a pointer to an \fBmtget\fP structure which is filled with the tape
+drive and driver status.  The structure's fields are filled as follows:
+.RS +0.5i
+.TP
+\fBmt_type\fP (drive type)
+Set to \fBMT_ISUNKNOWN\fP.
+.TP
+\fBmt_dsreg\fP (device dependent status bits)
+Set the the current mode.  See \fBbacker.h\fP and specifically the
+\fBbkrconfig\fP structure for information on the code for each mode.
+.TP
+\fBmt_gstat\fP (device independent status bits)
+Sets the \fBGMT_ONLINE\fP bit.
+.TP
+\fBmt_blkno\fP (block number)
+Sets this to the current sector number.
+.TP
+\fBmt_resid\fP (residual count)
+Set to the number of bytes that need to be transfered in order to
+fill/empty the current sector.
+.TP
+\fBmg_erreg\fP (corrected errors)
+Set to the total number of errors that have been corrected since the last
+read started.
+.TP
+\fBmt_fileno\fP (file number)
+Not used (set to 0).
+.RE
+.IP \fBMTIOCPOS\fP
+Accepts a pointer to an \fBmtpos\fP structure which is filled with the
+current sector number.
+.IP \fBBKRIOCGETSTATUS\fP
+Accepts a pointer to a \fBbkrstatus\fP structure which is filled with the
+status of the device driver.  This is mainly intended to provide a means
+for writing a user interface with lots of pretty flashing lights.  
+.IP \fBBKRIOCGETFORMAT\fP
+Accepts a pointer to a \fBbkrformat\fP structure which is filled with the
+current format.  This is intended for use with external applications which
+interact with the data stream at a low level.  For example the
+.IR bkrcheck (8)
+utility needs to know how many bytes to generate in order to get a stable
+test pattern on the television screen.
+.PP
+For the definitions of the structures mentioned above or for more
+information generally on these calls see \fBsys/mtio.h\fP and
+\fBbacker.h\fP.
+.SH ERRORS
+The following is a list of the error codes that can be generated by the
+driver and the reasons for them.
+.IP \fBEAGAIN\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+The current operation would block and non-blocking I/O has been selected.
+.RE
+.PD 1
+.IP \fBEBUSY\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+The I/O port could not be reserved at module load time.
+.TP 2
+o
+An attempt was made to start a transfer or change the direction of a
+transfer while one was already in progress.
+.TP 2
+o
+The DMA channel could not be reserved on I/O.
+.RE
+.PD 1
+.IP \fBEINTR\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+A signal arrived while an I/O operation was blocked.
+.RE
+.PD 1
+.IP \fBEINVAL\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+A call was made to
+.IR ioctl (2)
+with an unrecognized ioctl function or sub-function.
+.RE
+.PD 1
+.IP \fBEIO\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+No DMA activity could be detected during an I/O operation.  Perhaps the
+driver is not configured for the correct I/O port or DMA channel or perhaps
+the VCR is not connected.
+.RE
+.PD 1
+.IP \fBEISPIPE\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+A call was made to
+.IR lseek (2).
+The device is not seekable.
+.RE
+.PD 1
+.IP \fBENODATA\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+A data block was read from tape and the Reed-Solomon decoder detected that it
+could not correct the errors in it.  The entire sector in which this occurs is
+discarded.
+.RE
+.PD 1
+.IP \fBENOMEM\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+The DMA buffer could not be allocated at module load time.
+.TP 2
+o
+Some internal structures could not be allocated on device open.
+.TP 2
+o
+The sector buffer could not be allocated on I/O.
+.RE
+.PD 1
+.IP \fBETIMEDOUT\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+The current operation timed out.
+.RE
+.PD 1
+.SH NOTES
+.SS "EP RECORDINGS"
+Although the driver supports modes that are meant for EP recordings,
+\fBRECORDING DATA IN EP MODE IS NOT RELIABLE!\fP  These modes should only
+be available in experimental versions of the driver.  Work is being done on
+supporting EP recordings but there are some data conditioning issues that
+remain unresolved.
+.SS "TAPE CARE"
+VCRs are not as gentle with their tapes as data grade transports are
+designed to be.  In particular, VCRs have a tendency to stretch tapes when
+starting and stopping them.  To improve the reliability of backups, try to
+avoid as many start/stop cycles for each tape as reasonably possible.
+Especially avoid using the visual search functions of the VCR with any tape
+that will be used to store data.
+.PP
+If you find you have a particularly bad VCR that can't help itself, try
+enabling the driver's EP tape formats by uncommenting them from the
+\fBminor_to_mode[]\fP array in \fBbacker_isa.c\fP and using those to record
+data (but still only in SP, though!).  The storage efficiency will drop
+considerably but those formats are much better at handling stretch-induced
+errors in the byte stream.  Modifications to the data format that are
+planned for version 3 will generally improve the driver's performance in
+this regard but the best defense is to not abuse your tapes.
+.SH FILES
+.IP /dev/backer/*/*
+The device file names when devfs is in use.
+.IP /dev/backer*
+The device file names when devfs is not available.
+.SH BUGS
+Sometimes the hardware skips the first line of data in the DMA buffer.
+This shifts the video image up one line and makes it hard for the driver to
+stop the card at a proper frame boundary.  The cause of this is unknown and
+the tape format is designed to work around the problem.
+.SH "SEE ALSO"
+.IR bkrcheck (8),
+.IR bkrencode (8),
+.IR bkrmonitor (8),
+.IR mt (1),
+.IR tar (1)
+.SH AUTHOR
+Kipp Cannon (kcannon@users.sourceforge.net).
+.SH AVAILABILITY
+The most recent stable and developmental versions of the driver and
+utilities can be found on SourceForge at:
+.RS
+.sp
+http://www.sourceforge.net/projects/linbacker
+.sp
+.RE
+.SH HISTORY
+.TS
+l l l.
+Date	Event	Version
+_
+2000/10/10	First public release	0.2
+2001/01/13	First stable release	1.0
+.TE

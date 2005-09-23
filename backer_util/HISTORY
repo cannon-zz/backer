@@ -1,3 +1,16 @@
+1.107 (2001/3/24)
+	Adjusted some more of bkrcheck's messages.
+
+	Changed a bunch of command line arguements and messages to match
+	the new mode flag structures of the driver.  The utilities, like
+	the driver, now consider there to simply be three data formats (SP,
+	EP and raw) rather than two formated modes and a pass-through mode.
+
+	Added the total error count to bkrmonitor.
+
+	Moved all of the documentation into text files and man pages to be
+	more "standard".
+
 1.106 (2001/3/14)
 	Did some behind-the-scenes fiddling with stdio_dev.c for the sake
 	of another project I'm working on:  the read buffer is now kept at
@@ -6,8 +19,9 @@
 	Adjusted some of the messages printed by bkrcheck.
 
 1.105 (2001/3/9)
-	Fixed bkrencode to work with recent (2.2) glibc's (more standards
-	compliant?) errno behaviour.
+	Upgraded my system to glibc 2.2 and had to fix bkrencode to work
+	with the new errno behaviour.  Should still work with older
+	glibc's.
 
 1.104 (2001/3/4)
 	Split bkrencode's standard I/O device layer into a separate file.

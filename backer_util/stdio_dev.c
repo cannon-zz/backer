@@ -121,7 +121,7 @@ int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 
 int bkr_device_flush(jiffies_t bailout)
 {
-	bkr_device_write(1, 0, bailout);
+	bkr_device_write(0, 0, bailout);
 	fflush(stdout);
 	return(0);
 }

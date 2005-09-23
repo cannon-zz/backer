@@ -1,0 +1,43 @@
+                           INSTALLATION INSTRUCTIONS
+                           =========================
+
+
+LOADING/UNLOADING THE DRIVER
+----------------------------
+
+To load the driver, login as root and type
+
+	insmod backer [options]
+
+where the following options can be set:
+
+	ioport=num
+		Set the I/O port to num.
+	dma=num
+		Set the DMA channel to num.
+	timeout=num
+		Set the timeout to num seconds.
+
+Here's an example install command:
+
+	insmod backer ioport=0x304 dma=3 timeout=20
+
+You'll get an error message if the driver couldn't be installed.  If that
+happens, check /var/log/messages to see what the problem was.  The driver will
+have printed a little banner and will have complained if it couldn't reserve a
+particular resource.  Note that to allow the DMA channel to be shared, the
+driver will only request access to it when the device is actually in use so
+successfully loading the driver does not guarantee that there are no resource
+conflicts.
+
+To test the driver just type
+
+	cat /dev/zero > /dev/tape
+
+to verify that data is being written to video.  On your television set you
+should see some vertical bars for a few seconds (the BOR mark) followed by
+something that looks like noise.  Press CTRL-C to stop the test.
+
+To unload the module type
+
+	rmmod backer

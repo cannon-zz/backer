@@ -1,20 +1,23 @@
 #
-# Set this to the directory containing the driver sources and
-# be sure to leave off the trailing slash
+# Some things to set for your system
 #
-DRIVER_DIR = ../backer-driv-1.106
+#    DRIVER_DIR : location of driver sources (no trailing slash).
+#    DEVICE_NAME : file to use as default device.
+#    PREFIX : top of installation hierarchy (no trailing slahs).
+#
 
-#
-# Set this to your prefered device
-#
+DRIVER_DIR = ../backer-driv-1.107
 DEVICE_NAME = /dev/tape
+PREFIX = /usr/local
 
 #
-#
+# Here we go...
 #
 
+BIN_DIR = $(PREFIX)/bin
+MAN_DIR = $(PREFIX)/man
 CC = gcc
-CFLAGS = -O3 -fstrict-aliasing -Wall -Wstrict-prototypes -I$(DRIVER_DIR) -DDEFAULT_DEVICE=\"$(DEVICE_NAME)\"
+CFLAGS = -O3 -Wall -Wstrict-prototypes -I$(DRIVER_DIR) -DDEFAULT_DEVICE=\"$(DEVICE_NAME)\"
 
 all : bkrcheck bkrencode bkrmonitor
 
@@ -31,6 +34,24 @@ bkrencode : bkrencode.c bkr_disp_mode.c stdio_dev.c \
 bkrmonitor : bkrmonitor.c $(DRIVER_DIR)/backer.h
 	$(CC) $(CFLAGS) $(shell gtk-config --cflags --libs) -o bkrmonitor \
 	    bkrmonitor.c
+
+install: all
+	install -d -m 0755 $(BIN_DIR)
+	install -d -m 0755 $(MAN_DIR)/man8
+	install -m 0755 bkrcheck $(BIN_DIR)
+	install -m 0755 bkrencode $(BIN_DIR)
+	install -m 0755 bkrmonitor $(BIN_DIR)
+	[ -x bkrcheck ]   && install -m 0644 bkrcheck.8 $(MAN_DIR)/man8
+	[ -x bkrencode ]  && install -m 0644 bkrencode.8 $(MAN_DIR)/man8
+	[ -x bkrmonitor ] && install -m 0644 bkrmonitor.8 $(MAN_DIR)/man8
+
+uninstall:
+	rm -f $(BIN_DIR)/bkrcheck
+	rm -f $(BIN_DIR)/bkrencode
+	rm -f $(BIN_DIR)/bkrmonitor
+	rm -f $(MAN_DIR)/man8/bkrcheck.8
+	rm -f $(MAN_DIR)/man8/bkrencode.8
+	rm -f $(MAN_DIR)/man8/bkrmonitor.8
 
 clean:
 	rm -f *.o core

@@ -4,7 +4,7 @@
  * Command line utility for setting the operating mode of the Backer device
  * driver.
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 	 * Parse command line.
 	 */
 
-	newconfig.mode = -1;
+	newconfig.mode = BKR_VIDEOMODE(-1) | BKR_DENSITY(-1) | BKR_FORMAT(-1) | BKR_SPEED(-1);
 	newconfig.timeout = -1;
 
 	while((opt = getopt(argc, argv, "v:d:m:f:s:t:h")) != EOF)
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 	 * Open device and retrieve current configuration.
 	 */
 
-	if((devfile = open(fname, O_RDWR)) < 0)
+	if((devfile = open(fname, O_RDONLY)) < 0)
 		{
 		printf("\nbkrmode: can't open %s\n\n", fname);
 		exit(-1);

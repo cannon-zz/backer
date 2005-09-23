@@ -1,3 +1,64 @@
+1.101 (2001/2/8)
+	This is another major re-write.  Many changes have been made to the
+	way the driver interacts with the outside world.
+
+	Implemented a mechanism to delay the start of a data transfer until
+	the first I/O operation.
+
+	The delayed start mechanism has removed many race conditions which
+	had previously been avoided by imposing unusual access restrictions
+	so the entire access control mechanism has been loosened up.  In
+	particular:
+		-The driver no longer has unusual interpretations of the
+		file mode: you can use O_RDONLY/O_WRONLY/O_RDWR as you wish
+		and as long as you don't actually call read() or write() no
+		transfer will be started (which means the driver now
+		behaves itself for mt).
+		
+		-The device can now be opened multiple times even with a
+		direction specified:  the first call to read() or write()
+		gives the data stream to that file descriptor and all
+		subsequent reads and writes by others fail.
+		
+		-The device can even be opened by multiple users (but, for
+		safety, only if the 2nd and subsequent users are super
+		users).
+	This should bring the driver's access mechanism in line with
+	standard Unix semantics.
+
+	Tracked down and corrected another source of the "start on wrong
+	line" syndrom.  It turns out that the card's hardware does not like
+	being stopped in the middle of a video frame.  If one takes care to
+	always stop writing on a frame boundary then subsequent transfers
+	(are more likely to) start on the correct video line.  The fix I
+	used was to make bkr_device_flush() fill to a frame boundary before
+	flushing the DMA buffer.
+
+	Farther separated the device and formating code.  This has added
+	some bloat to the source code but the compiled size has actually
+	gone down.  This will increase the ease with which support for the
+	external version can be added if I am ever able to get my hands on
+	one.
+
+	The mode can now be set at module load time.  It and the timeout
+	are now both set with the config= option.  See the docs.
+
+	Obfuscated the Reed-Solomon decoder source code a little with some
+	#if-#else-#endif's in order to improve the performace a wee bit
+	more.
+
+	Changed the bkrstatus structure.  The "temporary" debuging
+	information is now permanent and is grouped together as health
+	info.  Anything using BKRIOCGETSTATUS needs to be updated.
+
+	The device layer now monitors the DREQ bit rather than the SYNC
+	bit.  This means that the driver no longer cares if a return video
+	signal is present (in case you only want to hook up one cable).  It
+	also means that stopping a tape while reading from it results in an
+	I/O error rather than a timeout.
+
+	Lots of other little touch-ups here and there.
+
 1.100 (2001/1/29)
 	*** THIS VERSION INCLUDES AN INCOMPATIBLE TAPE FORMAT CHANGE ***
 

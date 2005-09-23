@@ -5,7 +5,7 @@
  *
  *                   ISA Device I/O & Kernel Interface
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@
 #include <linux/module.h>
 
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/mtio.h>
@@ -41,25 +40,25 @@
 
 
 /*
- * Parameters
+ * Parameters and constants
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "1.100"
-#define  BKR_MAJOR             60           /* adjust this for your system */
+#define  BKR_VERSION           "1.101"
+#define  BKR_MAJOR             60       /* adjust this for your system */
 
-#define  BKR_DEF_IOPORT        0x300        /* adjust this for your system */
-#define  BKR_DEF_DMA_CHANNEL   3            /* adjust this for your system */
-#define  BKR_DEF_BUFFER_SIZE   65500        /* bytes */
-#define  BKR_DEF_TIMEOUT       10           /* seconds */
+#define  BKR_DEF_IOPORT        0x300    /* adjust this for your system */
+#define  BKR_DEF_DMA_CHANNEL   3        /* adjust this for your system */
+#define  BKR_DEF_BUFFER_SIZE   65500    /* bytes */
+#define  BKR_DEF_TIMEOUT       10       /* seconds */
 
-#define  DMA_IO_TO_MEM         0x14         /* demand transfer, inc addr, auto-init */
-#define  DMA_MEM_TO_IO         0x18         /* demand transfer, inc addr, auto-init */
-#define  DMA_HOLD_OFF          512          /* stay this far back from transfer point */
+#define  DMA_IO_TO_MEM         0x14     /* demand transfer, inc addr, auto-init */
+#define  DMA_MEM_TO_IO         0x18     /* demand transfer, inc addr, auto-init */
+#define  DMA_HOLD_OFF          512      /* stay this far back from transfer point */
 
-#define  MIN_UPDATE_FREQ       3            /* minimum rate for DMA status updates in Hz */
-#define  MAX_UPDATE_FREQ       50           /* maximum rate for DMA status updates in Hz */
-#define  MIN_SYNC_FREQ         50           /* minimum sync frequency in Hz if video OK */
+#define  MIN_UPDATE_FREQ       3        /* minimum rate for DMA status updates in Hz */
+#define  MAX_UPDATE_FREQ       50       /* maximum rate for DMA status updates in Hz */
+#define  MIN_SYNC_FREQ         50       /* minimum sync frequency in Hz if video OK */
 
 #if (MIN_UPDATE_FREQ > HZ) || (MAX_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
 #error "One of the *_FREQ parameters is too high"
@@ -72,84 +71,64 @@
 
 typedef struct
 	{
-	int  last_error;
+	int  last_error;                /* Pending error code if != 0 */
 	} bkr_private_t;
+
+#define  PRIVATE_INITIALIZER  ((bkr_private_t) { 0 })
 
 
 /*
  * Function prototypes
  */
 
-int   open(struct inode *, struct file *);
-void  close(struct inode *, struct file *);
-int   start_read(struct inode *, struct file *, char *, int);
-int   read(struct inode *, struct file *, char *, int);
-int   start_write(struct inode *, struct file *, const char *, int);
-int   write(struct inode *, struct file *, const char *, int);
-int   ioctl(struct inode *, struct file *, unsigned int, unsigned long);
-int   lseek(struct inode *, struct file *, off_t, int);
-static int   update_dma_offset(unsigned int *);
-static int   get_dreq_status(unsigned int);
+int         open(struct inode *, struct file *);
+void        release(struct inode *, struct file *);
+void        stop_release(struct inode *, struct file *);
+static int  start_common(int);
+int         start_read(struct inode *, struct file *, char *, int);
+int         start_write(struct inode *, struct file *, const char *, int);
+int         read(struct inode *, struct file *, char *, int);
+int         write(struct inode *, struct file *, const char *, int);
+int         ioctl(struct inode *, struct file *, unsigned int, unsigned long);
+int         lseek(struct inode *, struct file *, off_t, int);
+static int  update_dma_offset(unsigned int *);
+static int  get_dreq_status(unsigned int);
 
 
 /*
  * Global Data
+ *
+ * for file_operations the funcs are:
+ * { lseek, read, write, readdir, select, ioctl,
+ *    mmap, open, release, fsync, fasync, check_media_change, revalidate }
  */
 
-unsigned int  ioport = 0;                       /* I/O port */
-unsigned int  dma    = 0;                       /* DMA channel */
-unsigned int  buffer = 0;                       /* allocated DMA buffer size */
-unsigned int  timeout = BKR_MAX_TIMEOUT+1;      /* length of time to wait on I/O events */
-
-static struct file_operations start_ops =
+unsigned int  ioport = BKR_DEF_IOPORT;          /* I/O port */
+unsigned int  dma    = BKR_DEF_DMA_CHANNEL;     /* DMA channel */
+unsigned int  buffer = BKR_DEF_BUFFER_SIZE;     /* allocated DMA buffer size */
+struct bkrconfig  config =                      /* config info */
 	{
-	lseek,
-	start_read,
-	start_write,
-	NULL,					/* readdir() */
-	NULL,					/* select() */
-	ioctl,
-	NULL,					/* mmap() */
-	open,
-	close,
-	NULL,					/* fsync() */
-	NULL,					/* fasync() */
-	NULL,					/* check_media_change() */
-	NULL					/* revalidate() */
+	BKR_DEF_MODE,
+	BKR_DEF_TIMEOUT
 	};
 
-static struct file_operations read_ops =
-	{
-	lseek,
-	read,
-	start_write,
-	NULL,					/* readdir() */
-	NULL,					/* select() */
-	ioctl,
-	NULL,					/* mmap() */
-	open,
-	close,
-	NULL,					/* fsync() */
-	NULL,					/* fasync() */
-	NULL,					/* check_media_change() */
-	NULL					/* revalidate() */
-	};
+#define STOPPED_OPS                                           \
+	{ lseek, start_read, start_write, NULL, NULL, ioctl,  \
+	  NULL, open,      release, NULL, NULL, NULL, NULL }
 
-static struct file_operations write_ops =
+#define READING_OPS                                           \
+	{ lseek,       read, start_write, NULL, NULL, ioctl,  \
+	  NULL, open, stop_release, NULL, NULL, NULL, NULL }
+
+#define WRITING_OPS                                           \
+	{ lseek, start_read,       write, NULL, NULL, ioctl,  \
+	  NULL, open, stop_release, NULL, NULL, NULL, NULL }
+
+static struct file_operations file_ops[] =      /* file I/O functions */
 	{
-	lseek,
-	start_read,
-	write,
-	NULL,					/* readdir() */
-	NULL,					/* select() */
-	ioctl,
-	NULL,					/* mmap() */
-	open,
-	close,
-	NULL,					/* fsync() */
-	NULL,					/* fasync() */
-	NULL,					/* check_media_change() */
-	NULL					/* revalidate() */
+	STOPPED_OPS,
+	READING_OPS,
+	WRITING_OPS
 	};
 
 
@@ -185,20 +164,14 @@ int init_module(void)
 
 	sector.data = NULL;
 
-	/*
-	 * Check options and set defaults if necessary then grab resources,
-	 * initialize device parameters, and register device.
-	 */
+	if(config.timeout > BKR_MAX_TIMEOUT)
+		config.timeout = BKR_DEF_TIMEOUT;
+	config.timeout *= HZ;
 
-	if(ioport == 0)
-		ioport = BKR_DEF_IOPORT;
-	if(dma == 0)
-		dma = BKR_DEF_DMA_CHANNEL;
-	if(buffer == 0)
-		buffer = BKR_DEF_BUFFER_SIZE;
-	if(timeout > BKR_MAX_TIMEOUT)
-		timeout = BKR_DEF_TIMEOUT;
-	timeout *= HZ;
+	/*
+	 * Grab resources, initialize device parameters, and register
+	 * device.
+	 */
 
 	if((device.buffer = (unsigned char *) kmalloc(buffer, GFP_KERNEL | GFP_DMA)) == NULL)
 		{
@@ -213,12 +186,12 @@ int init_module(void)
 		goto ioport_busy;
 		}
 	request_region(ioport, 1, BKR_NAME);
-	if((result = bkr_set_parms(BKR_DEF_MODE, buffer)) < 0)
+	if((result = bkr_device_reset(config.mode, buffer)) < 0)
 		{
-		printk(KERN_ERR BKR_NAME ":   can't allocate memory");
+		printk(KERN_ERR BKR_NAME ":   can't configre driver");
 		goto no_bufmem;
 		}
-	if((result = register_chrdev(BKR_MAJOR, BKR_NAME, &start_ops)) < 0)
+	if((result = register_chrdev(BKR_MAJOR, BKR_NAME, &file_ops[STOPPED])) < 0)
 		{
 		printk(KERN_ERR BKR_NAME ":   can't get device major %u", BKR_MAJOR);
 		goto cant_register;
@@ -228,9 +201,8 @@ int init_module(void)
 	 * Driver installed.
 	 */
 
-	bkr_device_reset(O_RDWR);
 	printk(KERN_INFO BKR_NAME ": dma=%u ioport=%#x buffer=%u mode=%#06x\n",
-	       dma, ioport, buffer, device.mode);
+	       dma, ioport, buffer, config.mode);
 	return(0);
 
 	/*
@@ -251,7 +223,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	bkr_device_reset(O_RDWR);
 	kfree(sector.data);
 	release_region(ioport, 1);
 	kfree(device.buffer);
@@ -262,116 +233,69 @@ void cleanup_module(void)
 /*
  * open() --- Arbitrate device open requests.
  *
- * The device can only be opened for reading/writing once at a time since
- * there is only one data stream to interact with but the device can be
- * opened any number of times if a direction is not given (i.e. O_RDWR).
- * Furthermore, to protect the contents of the data stream only one user at
- * a time is given access to the device (super users are always given
- * access).  A data transfer is started when the device is opened with a
- * specific transfer direction (i.e. either O_RDONLY or O_WRONLY) with the
- * transfer proceding in the direction requested.
+ * The device can be opened any number of times but only by one user at a
+ * time (unless by a super user) and access to the data stream is only
+ * granted once on a first-come first-serve basis.  A data transfer is
+ * started when the first call to a read() or write() method is made after
+ * which all read/write attempts from other file descriptors fail.
+ *
+ * FIXME:  two processes can share a file descriptor (eg after a fork) but
+ * if both try to use it then we have PROBLEMS --- read() and write() are
+ * not re-entrant.
  */
 
 int open(struct inode *inode, struct file *filp)
 {
-	int  result;
-
-	/*
-	 * Access control.
-	 */
-
 	if(!MOD_IN_USE)
 		device.owner = current->uid;
 	else if((device.owner != current->uid) && (device.owner != current->euid) && !suser())
 		return(-EBUSY);
-	if((device.direction != O_RDWR) && ((filp->f_flags & O_ACCMODE) != O_RDWR))
-		return(-EBUSY);
+
+	filp->private_data = kmalloc(sizeof(bkr_private_t), GFP_KERNEL);
+	if(filp->private_data == NULL)
+		return(-ENOMEM);
 
 	MOD_INC_USE_COUNT;
 
-	if((filp->f_flags & O_ACCMODE) == O_RDWR)
-		return(0);
+	*(bkr_private_t *) filp->private_data = PRIVATE_INITIALIZER;
 
-	/*
-	 * If we've made it this far then this open request is defining the
-	 * transfer direction so some additional stuff has to be done.
-	 */
-
-	if(sector.data == NULL)
-		{
-		result = -ENXIO;
-		goto mode_not_set;
-		}
-
-	if(request_dma(dma, BKR_NAME) < 0)
-		{
-		printk(KERN_ERR BKR_NAME ":  dma %u not available\n", dma);
-		result = -EBUSY;
-		goto cant_get_dma;
-		}
-
-	bkr_device_reset(filp->f_flags & O_ACCMODE);
-	bkr_format_reset();
-	result = bkr_device_start_transfer();
-	if(result < 0)
-		goto cant_start;
-
-	if((device.direction == O_WRONLY) && (BKR_FORMAT(device.mode) == BKR_FMT))
-		{
-		result = bkr_write_bor(jiffies + timeout);
-		if(result < 0)
-			goto cant_write_bor;
-		}
-
-	filp->private_data = 0;
 	return(0);
-
-	cant_write_bor:
-		bkr_device_stop_transfer();
-	cant_start:
-		free_dma(dma);
-	cant_get_dma:
-	mode_not_set:
-		MOD_DEC_USE_COUNT;
-		return(result);
 }
 
 
 /*
- * close()
+ * stop_release(), release()
  *
- * Handle device close requests
+ * Handle device close requests.  stop_release, additionally, terminates
+ * the current transfer.
  */
 
-void close(struct inode *inode, struct file *filp)
+void stop_release(struct inode *inode, struct file *filp)
 {
 	jiffies_t  bailout;
 
-	MOD_DEC_USE_COUNT;
-
-	/*
-	 * Do nothing if this open didn't define the transfer direction.
-	 */
-
-	if((filp->f_flags & O_ACCMODE) == O_RDWR)
-		return;
-
-	/*
-	 * Write an EOR mark and flush the DMA buffer as needed.
-	 */
-
-	if(device.direction == O_WRONLY)
+	if(device.direction == WRITING)
 		{
-		bailout = jiffies + timeout;
+		bailout = jiffies + config.timeout;
 
-		if(BKR_FORMAT(device.mode) == BKR_FMT)
+		if(BKR_FORMAT(config.mode) == BKR_FMT)
 			bkr_write_eor(bailout);
 
 		bkr_device_flush(bailout);
 		}
 
 	bkr_device_stop_transfer();
-	free_dma(dma);
+
+	release(inode, filp);
+
+	return;
+}
+
+void release(struct inode *inode, struct file *filp)
+{
+	kfree(filp->private_data);
+
+	MOD_DEC_USE_COUNT;
 
 	return;
 }
@@ -425,7 +349,7 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		case MTIOCGET:
 		arg.mtget.mt_type = MT_ISUNKNOWN;        /* maybe we'll have our own one day... */
 		arg.mtget.mt_resid = 0;                  /* not implemented */
-		arg.mtget.mt_dsreg = device.mode;        /* device-dependant status bits */
+		arg.mtget.mt_dsreg = config.mode;        /* device-dependant status bits */
 		arg.mtget.mt_gstat = GMT_ONLINE(-1L);    /* device-independant status bits */
 		arg.mtget.mt_erreg = 0;                  /* not implemented */
 		arg.mtget.mt_fileno = 0;                 /* not implemented */
@@ -442,11 +366,11 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		if(jiffies - device.last_update >= HZ/MIN_UPDATE_FREQ)
 			switch(device.direction)
 				{
-				case O_WRONLY:
+				case WRITING:
 				update_dma_offset(&device.tail);
 				break;
 
-				case O_RDONLY:
+				case READING:
 				update_dma_offset(&device.head);
 				break;
 
@@ -454,34 +378,35 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 				}
 		arg.bkrstatus.bytes = bytes_in_buffer();
 		arg.bkrstatus.errors = errors;
-		arg.bkrstatus.worst_match = worst_match;
-		arg.bkrstatus.best_nonmatch = best_nonmatch;
-		arg.bkrstatus.least_skipped = least_skipped;
-		arg.bkrstatus.most_skipped = most_skipped;
+		arg.bkrstatus.health = health;
 		memcpy_tofs((void *) argument, &arg.bkrstatus, sizeof(struct bkrstatus));
+		errors.recent_symbol = 0;
 		return(0);
 
 		case BKRIOCGETMODE:
-		arg.bkrconfig.mode = device.mode;
-		arg.bkrconfig.timeout = timeout/HZ;
+		arg.bkrconfig = config;
+		arg.bkrconfig.timeout /= HZ;
 		memcpy_tofs((void *) argument, &arg.bkrconfig, sizeof(struct bkrconfig));
 		return(0);
 
 		case BKRIOCSETMODE:
-		if(device.direction != O_RDWR)
+		if(device.direction != STOPPED)
 			return(-EBUSY);
 		memcpy_fromfs(&arg.bkrconfig, (void *) argument, sizeof(struct bkrconfig));
 		if(arg.bkrconfig.timeout > BKR_MAX_TIMEOUT)
-			return(-EINVAL);
-		if(BKR_SPEED(arg.bkrconfig.mode) == BKR_EP)
+			result = -ENXIO;
+		else if((result = bkr_device_reset(arg.bkrconfig.mode, buffer)) >= 0)
 			{
-			/* FIXME: either get EP working or drop it as a "feature" */
-			return(-EINVAL);
+			config = arg.bkrconfig;
+			config.timeout *= HZ;
 			}
-		timeout = arg.bkrconfig.timeout*HZ;
-		return(bkr_set_parms(arg.bkrconfig.mode, buffer));
+		return(result);
 
 		case BKRIOCGETFORMAT:
+		if(device.direction == STOPPED)
+			bkr_format_reset(STOPPED, config.mode);
+		if(block.size == 0)
+			return(-ENXIO);
 		arg.bkrformat.buffer_size = device.size;
 		arg.bkrformat.sector_size = sector.size;
 		arg.bkrformat.leader = sector.leader;
@@ -501,31 +426,60 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 
 
 /*
- * start_read(), start_write()
+ * start_common(), start_read(), start_write()
  *
- * These functions start data transfers when the first call to the read()
- * or write() method is made (eventually they will do this!).
+ * These functions start data transfers when the first call to a read() or
+ * write() method is made.
  */
+
+static int start_common(int direction)
+{
+	int  result = 0;
+
+	if(device.direction != STOPPED)
+		result = -EBUSY;
+	else if((result = bkr_format_reset(direction, config.mode)) < 0)
+		{ }
+	else
+		result = bkr_device_start_transfer(direction);
+
+	return(result);
+}
 
 int start_read(struct inode *inode, struct file *filp, char *buff, int count)
 {
-	if((filp->f_flags & O_ACCMODE) != O_RDONLY)
-		return(-EPERM);
+	int  result;
 
-	filp->f_op = &read_ops;
+	result = start_common(READING);
+	if(result < 0)
+		return(result);
 
-	return(read(inode, filp, buff, count));
+	filp->f_op = &file_ops[READING];
+
+	return(filp->f_op->read(inode, filp, buff, count));
 }
-
 
 int start_write(struct inode *inode, struct file *filp, const char *buff, int count)
 {
-	if((filp->f_flags & O_ACCMODE) != O_WRONLY)
-		return(-EPERM);
+	int  result;
 
-	filp->f_op = &write_ops;
+	result = start_common(WRITING);
+	if(result < 0)
+		return(result);
 
-	return(write(inode, filp, buff, count));
+	if(BKR_FORMAT(config.mode) == BKR_FMT)
+		{
+		result = bkr_write_bor(jiffies + config.timeout);
+		if(result < 0)
+			{
+			bkr_device_stop_transfer();
+			return(result);
+			}
+		}
+
+	filp->f_op = &file_ops[WRITING];
+
+	return(filp->f_op->write(inode, filp, buff, count));
 }
 
 
@@ -538,14 +492,14 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 	jiffies_t  bailout;
 	int  moved, chunk_size, result = 0;
 
-	if(filp->private_data != 0)
+	if(((bkr_private_t *) filp->private_data)->last_error != 0)
 		{
-		result = (int) filp->private_data;
-		filp->private_data = 0;
+		result = ((bkr_private_t *) filp->private_data)->last_error;
+		((bkr_private_t *) filp->private_data)->last_error = 0;
 		return(result);
 		}
 
-	bailout = jiffies + timeout;
+	bailout = jiffies + config.timeout;
 	for(moved = 0; count; buff += chunk_size, count -= chunk_size)
 		{
 		chunk_size = block.end - block.offset;
@@ -563,7 +517,7 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 				{
 				if(!moved)
 					return(result);
-				filp->private_data = (void *) result;
+				((bkr_private_t *) filp->private_data)->last_error = result;
 				return(moved);
 				}
 			}
@@ -577,14 +531,14 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 	jiffies_t  bailout;
 	int  moved, chunk_size, result;
 
-	if(filp->private_data != 0)
+	if(((bkr_private_t *) filp->private_data)->last_error != 0)
 		{
-		result = (int) filp->private_data;
-		filp->private_data = 0;
+		result = ((bkr_private_t *) filp->private_data)->last_error;
+		((bkr_private_t *) filp->private_data)->last_error = 0;
 		return(result);
 		}
 
-	bailout = jiffies + timeout;
+	bailout = jiffies + config.timeout;
 	for(moved = 0; count; buff += chunk_size, count -= chunk_size)
 		{
 		chunk_size = block.end - block.offset;
@@ -602,7 +556,7 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 				{
 				if(!moved)
 					return(result);
-				filp->private_data = (void *) result;
+				((bkr_private_t *) filp->private_data)->last_error = result;
 				return(moved);
 				}
 			}
@@ -637,40 +591,52 @@ int lseek(struct inode *inode, struct file *filp, off_t offset, int whence)
 /*
  * bkr_device_reset()
  *
- * Resets the Backer hardware, the DMA buffer pointers and if a transfer
- * direction is selected it sets up the DMA channel.
+ * Resets the Backer hardware.  The return code indicates success or
+ * failure.  On failure, device.size is left = 0 so this can also be used
+ * to check for a successful configuration.
  */
 
-void bkr_device_reset(unsigned int direction)
+int bkr_device_reset(int mode, unsigned int max_buffer)
 {
-	unsigned long  flags;
-
 	outb(0, ioport);
 
-	device.head = 0;
-	device.tail = 0;
-	device.direction = direction;
+	device.direction = STOPPED;
+	device.control = 0;
+	device.size = 0;
 
-	if(direction == O_RDWR)
-		return;
-
-	save_flags(flags);
-	cli();
-	disable_dma(dma);
-	clear_dma_ff(dma);
-	switch(direction)
+	switch(BKR_DENSITY(mode))
 		{
-		case O_WRONLY:
-		set_dma_mode(dma, DMA_MEM_TO_IO);
+		case BKR_HIGH:
+		device.control |= BIT_HIGH_DENSITY;
+		device.bytes_per_line = BYTES_PER_LINE_HIGH;
 		break;
 
-		case O_RDONLY:
-		set_dma_mode(dma, DMA_IO_TO_MEM);
+		case BKR_LOW:
+		device.bytes_per_line = BYTES_PER_LINE_LOW;
 		break;
+
+		default:
+		return(-ENXIO);
 		}
-	set_dma_addr(dma, virt_to_bus(device.buffer));
-	set_dma_count(dma, device.size);
-	restore_flags(flags);
+
+	switch(BKR_VIDEOMODE(mode))
+		{
+		case BKR_NTSC:
+		device.control |= BIT_NTSC_VIDEO;
+		device.frame_size = device.bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
+		break;
+
+		case BKR_PAL:
+		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
+		break;
+
+		default:
+		return(-ENXIO);
+		}
+
+	device.size = max_buffer - max_buffer % device.frame_size;
+
+	return(0);
 }
 
 
@@ -680,15 +646,35 @@ void bkr_device_reset(unsigned int direction)
  * Start the tape <---> memory data transfer.
  */
 
-int bkr_device_start_transfer(void)
+int bkr_device_start_transfer(int direction)
 {
+	unsigned long  flags;
 	jiffies_t  bailout;
 
+	device.direction = direction;
+
 	/*
-	 * Clear the buffer and enable the DMA channel.
+	 * Set up the DMA channel.
 	 */
 
+	if(request_dma(dma, BKR_NAME) < 0)
+		return(-EBUSY);
+
+	device.head = 0;
+	device.tail = 0;
 	memset(device.buffer, 0, buffer);
+
+	disable_dma(dma);
+	save_flags(flags);
+	cli();
+	clear_dma_ff(dma);
+	if(direction == WRITING)
+		set_dma_mode(dma, DMA_MEM_TO_IO);
+	else
+		set_dma_mode(dma, DMA_IO_TO_MEM);
+	set_dma_addr(dma, virt_to_bus(device.buffer));
+	set_dma_count(dma, device.size);
+	restore_flags(flags);
 	enable_dma(dma);
 
 	/*
@@ -698,7 +684,7 @@ int bkr_device_start_transfer(void)
 	device.control |= BIT_DMA_REQUEST;
 	outb(device.control, ioport);
 
-	device.control |= (device.direction == O_WRONLY) ? BIT_TRANSMIT : BIT_RECEIVE;
+	device.control |= (device.direction == WRITING) ? BIT_TRANSMIT : BIT_RECEIVE;
 	outb(device.control, ioport);
 
 	/*
@@ -710,11 +696,11 @@ int bkr_device_start_transfer(void)
 		if(jiffies >= bailout)
 			{
 			bkr_device_stop_transfer();
-			return(-ENXIO);
+			return(-EIO);
 			}
 
 	/*
-	 * Force a buffer update on the first read/write.
+	 * Force a buffer update on the first bkr_device_read/write.
 	 */
 
 	device.last_update = jiffies - HZ/MIN_UPDATE_FREQ;
@@ -726,20 +712,20 @@ int bkr_device_start_transfer(void)
 /*
  * bkr_device_stop_transfer()
  *
- * Stop the tape <---> memory transfer.  The DMA controller is left fully
- * configured so if someone else's code accidentally initiates a transfer
- * it will occur in a safe region of memory (i.e. our buffer).
+ * Stop the tape <---> memory transfer.  The DMA channel is left fully
+ * configured so that if a bug in someone else's code starts a transfer
+ * without setting up a proper buffer then at least it will occur in a safe
+ * region of memory (our buffer).
  */
 
 void bkr_device_stop_transfer(void)
 {
+	outb(0, ioport);
+
 	device.control &= ~(BIT_TRANSMIT | BIT_RECEIVE | BIT_DMA_REQUEST);
+	device.direction = STOPPED;
 
-	bkr_device_reset(O_RDWR);
-
-	disable_dma(dma);
-
-	memset(device.buffer, 0, buffer);
+	free_dma(dma);
 }
 
 
@@ -834,28 +820,40 @@ int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 /*
  * bkr_device_flush()
  *
- * Wait until the contents of the DMA buffer have been written to tape.
- * Returns 0 on success, -ETIMEDOUT on timeout or any error code returned
- * by update_dma_offset();
+ * Make sure we've completed a full video frame then wait until the
+ * contents of the DMA buffer have been written to tape.  Returns 0 on
+ * success, -ETIMEDOUT on timeout or any error code returned by
+ * update_dma_offset() or bkr_device_write().
  */
 
 int bkr_device_flush(jiffies_t bailout)
 {
-	int  result;
+	int  count, result;
+
+	count = device.head % device.frame_size;
+	if(count)
+		{
+		count = device.frame_size - count;
+		bkr_device_write(count, 0, bailout);
+		device.head += count;
+		if(device.head >= device.size)
+			device.head -= device.size;
+		}
 
 	bkr_device_write(INTERNAL_BUFFER, 0, bailout);
-
 	device.head += INTERNAL_BUFFER;
 	if(device.head >= device.size)
 		device.head -= device.size;
 
 	result = bkr_device_write(device.size - 2*sector.size, 0, bailout);
 
-	while(bytes_in_buffer() && (jiffies < bailout) && !result)
+	while(bytes_in_buffer() && !result)
+		{
 		result = update_dma_offset(&device.tail);
+		if(jiffies >= bailout)
+			result = -ETIMEDOUT;
+		}
 
-	if(jiffies >= bailout)
-		return(-ETIMEDOUT);
 	return(result);
 }
 
@@ -876,10 +874,10 @@ static int update_dma_offset(unsigned int *offset)
 
 	bailout = jiffies + HZ/MIN_SYNC_FREQ;
 
-	while(~inb(ioport) & BIT_SYNC)
+	while(~inb(ioport) & BIT_DMA_REQUEST)
 		 if(jiffies >= bailout)
 			return(-EIO);
-	while(inb(ioport) & BIT_SYNC)
+	while(inb(ioport) & BIT_DMA_REQUEST)
 		if(jiffies >= bailout)
 			return(-EIO);
 

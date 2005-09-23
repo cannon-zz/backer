@@ -3,7 +3,7 @@
  * 
  * Header file for Backer 16/32 device driver.
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,16 +29,20 @@
  * Data Types
  */
 
-typedef  unsigned long  jiffies_t;          /* type for jiffies */
-typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file */
+typedef  unsigned long  jiffies_t;              /* type for jiffies */
+typedef  unsigned short  f_flags_t;             /* type for f_flags in struct file */
 
 
 /*
  * Parameters
+ *
+ * BKR_DEF_MODE must be a real mode or the driver will enter an infinite
+ * recursion when loaded.  You've been warned.  (it's a real mode if it has
+ * exactly one constant from each group ORed together).
  */
 
 #define  BKR_DEF_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
-#define  BKR_MAX_TIMEOUT       120          /* seconds */
+#define  BKR_MAX_TIMEOUT       120              /* seconds */
 
 #ifndef __KERNEL__
 #define  HZ  100
@@ -69,44 +73,52 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  * IOCTL stuff
  */
 
-struct bkrerrors                            /* Error counts */
+struct bkrerrors                                /* Error counts */
 	{
-	unsigned int  symbol;               /* most symbol errors in any one block */
-	unsigned int  block;                /* uncorrectable blocks since BOR */
-	unsigned int  frame;                /* framing errors since BOR */
-	unsigned int  overrun;              /* buffer overruns since BOR */
-	unsigned int  underflow;            /* underflow warnings since BOR */
+	unsigned int  symbol;                   /* most symbol errors in any one block */
+	unsigned int  recent_symbol;            /* most symbol errors since last update */
+	unsigned int  block;                    /* uncorrectable blocks since BOR */
+	unsigned int  frame;                    /* framing errors since BOR */
+	unsigned int  overrun;                  /* buffer overruns since BOR */
+	unsigned int  underflow;                /* underflows since BOR */
 	};
 
-#define  ERRORS_INITIALIZER  ((struct bkrerrors) {0, 0, 0, 0, 0})
+#define  ERRORS_INITIALIZER  ((struct bkrerrors) {0, 0, 0, 0, 0, 0})
 
-struct bkrstatus                            /* Status structure (read only) */
+struct bkrhealth
 	{
-	unsigned int  bytes;                /* in DMA buffer */
-	struct bkrerrors errors;
-	unsigned int  worst_match;
-	unsigned int  best_nonmatch;
+	unsigned int  worst_key;
+	unsigned int  best_nonkey;
 	unsigned int  least_skipped;
 	unsigned int  most_skipped;
 	};
 
-struct bkrformat                            /* Format structure (read only) */
+#define  HEALTH_INITIALIZER  ((struct bkrhealth) {~0, 0, ~0, 0})
+
+struct bkrstatus                                /* Status structure (read only) */
 	{
-	unsigned int  buffer_size;          /* == bytes per frame * an integer */
-	unsigned int  sector_size;          /* bytes */
-	unsigned int  leader;               /* bytes */
-	unsigned int  trailer;              /* bytes */
-	unsigned int  interleave;           /* interleave ratio */
-	unsigned int  block_size;           /* bytes */
-	unsigned int  block_parity;         /* bytes */
-	unsigned int  block_capacity;       /* bytes */
-	unsigned int  sector_capacity;      /* bytes */
+	unsigned int  bytes;                    /* in DMA buffer */
+	struct bkrerrors errors;
+	struct bkrhealth health;
 	};
 
-struct bkrconfig                            /* Config structure (read/write) */
+struct bkrformat                                /* Format structure (read only) */
 	{
-	unsigned int  mode;                 /* see below */
-	unsigned int  timeout;              /* in seconds */
+	unsigned int  buffer_size;              /* == bytes per frame * an integer */
+	unsigned int  sector_size;              /* bytes */
+	unsigned int  leader;                   /* bytes */
+	unsigned int  trailer;                  /* bytes */
+	unsigned int  interleave;               /* interleave ratio */
+	unsigned int  block_size;               /* bytes */
+	unsigned int  block_parity;             /* bytes */
+	unsigned int  block_capacity;           /* bytes */
+	unsigned int  sector_capacity;          /* bytes */
+	};
+
+struct bkrconfig                                /* Config structure (read/write) */
+	{
+	unsigned int  mode;                     /* see below */
+	unsigned int  timeout;                  /* in seconds */
 	};
 
 #define  BKRIOCGETSTATUS       _IOR('m', 10, struct bkrstatus)    /* get status */

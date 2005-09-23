@@ -7,7 +7,7 @@
  * that code the symbols defined in this header file.  See the utility
  * bkrencode for an example of implementing a device layer.
  * 
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,12 +30,22 @@
 
 #include "backer.h"
 
+
+/*
+ * Transfer directions
+ */
+
+#define  STOPPED  0
+#define  READING  1
+#define  WRITING  2
+
+
 /*
  * Functions exported by the device layer
  */
 
-void  bkr_device_reset(unsigned int);
-int   bkr_device_start_transfer(void);
+int   bkr_device_reset(int, unsigned int);
+int   bkr_device_start_transfer(int);
 void  bkr_device_stop_transfer(void);
 int   bkr_device_read(unsigned int, f_flags_t, jiffies_t);
 int   bkr_device_write(unsigned int, f_flags_t, jiffies_t);
@@ -43,7 +53,7 @@ int   bkr_device_flush(jiffies_t);
 
 
 /*
- * Data exported to formating layer
+ * Data exported to formating and kernel layer
  */
 
 struct
@@ -53,8 +63,8 @@ struct
 	unsigned int  head;             /* offset of next write transfer */
 	unsigned int  tail;             /* offset of next read transfer */
 	unsigned int  bytes_per_line;   /* width of one line of video */
-	unsigned long  last_update;     /* jiffies at time of last update */
-	unsigned int  mode;             /* as in bkrconfig */
+	unsigned int  frame_size;       /* bytes in a full video frame */
+	jiffies_t  last_update;         /* jiffies at time of last update */
 	unsigned int  owner;            /* owner's user id */
 	unsigned int  direction;        /* current transfer direction */
 	unsigned char control;          /* control byte for card */

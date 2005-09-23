@@ -3,7 +3,7 @@
  *
  * Tape data encoder/decoder for the Backer tape device.
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include <malloc.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 
@@ -67,7 +68,7 @@ int main(int argc, char *argv[])
 	 */
 
 	sector.data = NULL;
-	device.direction = O_WRONLY;
+	device.direction = WRITING;
 
 	if((device.buffer = (unsigned char *) malloc(BUFFER_SIZE)) == NULL)
 		{
@@ -83,7 +84,7 @@ int main(int argc, char *argv[])
 		switch(tmp)
 			{
 			case 'u':
-			device.direction = O_RDONLY;
+			device.direction = READING;
 			break;
 
 			case 'a':
@@ -170,7 +171,7 @@ int main(int argc, char *argv[])
 
 	if(config.mode == -1)
 		{
-		if((tmp = open(devname, O_RDWR)) < 0)
+		if((tmp = open(devname, O_RDONLY)) < 0)
 			{
 			perror(PROGRAM_NAME);
 			exit(-1);
@@ -186,14 +187,10 @@ int main(int argc, char *argv[])
 	config.mode = (config.mode & ~BKR_FORMAT(-1)) | BKR_FMT;
 
 	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
-	        (device.direction == O_RDONLY) ? "DECODING" : "ENCODING");
+	        (device.direction == READING) ? "DECODING" : "ENCODING");
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
 
-	if(bkr_set_parms(config.mode, BUFFER_SIZE) < 0)
-		{
-		perror(PROGRAM_NAME);
-		exit(-1);
-		}
+	bkr_device_reset(config.mode, BUFFER_SIZE);
 
 	/*
 	 * Grab interrupt signal so we can write a nice EOR before exiting
@@ -207,14 +204,12 @@ int main(int argc, char *argv[])
 	 * Transfer data one block at a time until EOF is reached.
 	 */
 
-	bkr_device_reset(0);
-	bkr_format_reset();
-
 	setbuf(stderr, NULL);
-	bkr_device_start_transfer();
 	switch(device.direction)
 		{
-		case O_RDONLY:
+		case READING:
+		bkr_format_reset(READING, config.mode);
+		bkr_device_start_transfer(READING);
 		while(!feof(stdin))
 			{
 			errno = 0;
@@ -233,7 +228,9 @@ int main(int argc, char *argv[])
 			}
 		break;
 
-		case O_WRONLY:
+		case WRITING:
+		bkr_format_reset(WRITING, config.mode);
+		bkr_device_start_transfer(WRITING);
 		bkr_write_bor(1);
 		while(!feof(stdin) & !got_sigint)
 			{
@@ -286,21 +283,61 @@ void sigint_handler(int num)
  * These functions pass on any error codes returned by the file system.
  */
 
-void  bkr_device_reset(unsigned int direction)
+int  bkr_device_reset(int mode, unsigned max_buffer)
 {
-	device.head = 0;
-	device.tail = 0;
+	device.direction = STOPPED;
+
+	device.control = 0;
+
+	switch(BKR_DENSITY(mode))
+		{
+		case BKR_HIGH:
+		device.control |= BIT_HIGH_DENSITY;
+		device.bytes_per_line = BYTES_PER_LINE_HIGH;
+		break;
+
+		case BKR_LOW:
+		device.bytes_per_line = BYTES_PER_LINE_LOW;
+		break;
+
+		default:
+		return(-EINVAL);
+		}
+
+	switch(BKR_VIDEOMODE(mode))
+		{
+		case BKR_NTSC:
+		device.control |= BIT_NTSC_VIDEO;
+		device.frame_size = device.bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
+		break;
+
+		case BKR_PAL:
+		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
+		break;
+
+		default:
+		return(-EINVAL);
+		}
+
+	device.size = max_buffer - max_buffer % device.frame_size;
+
+	return(0);
 }
 
 
-int  bkr_device_start_transfer(void)
+int  bkr_device_start_transfer(int direction)
 {
+	device.direction = direction;
+	device.head = 0;
+	device.tail = 0;
+	memset(device.buffer, 0, BUFFER_SIZE);
 	return(0);
 }
 
 
 void bkr_device_stop_transfer(void)
 {
+	device.direction = STOPPED;
 	return;
 }
 

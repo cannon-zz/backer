@@ -2,7 +2,7 @@
 # Set this to the directory containing the driver sources and
 # be sure to leave off the trailing slash
 #
-DRIVERDIR = ../backer-driv-1.100
+DRIVERDIR = ../backer-driv-1.101
 
 CFLAGS = -O2 -Wall -Wstrict-prototypes -I$(DRIVERDIR)
 

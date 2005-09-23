@@ -5,7 +5,7 @@
  *
  *                             Formating Layer
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,7 +27,6 @@
 #ifdef __KERNEL__
 
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
 
@@ -37,7 +36,6 @@
 #else
 
 #include <errno.h>
-#include <fcntl.h>
 #include <malloc.h>
 #include <string.h>
 
@@ -53,63 +51,94 @@
 
 /*
  * Parameters
- *
- * Note the parity lengths must be multiples of 2.
  */
 
-/* { bytes of leader, bytes of trailer, bytes of parity } */
-#define  FORMATS  {{  32, 28, 10 },     /* LOW  NTSC SP */   \
-                   {  32, 28, 14 },     /* LOW  NTSC EP */   \
-                   {  40, 32, 10 },     /* LOW  PAL  SP */   \
-                   {  40, 32, 14 },     /* LOW  PAL  EP */   \
-                   {  80, 70, 10 },     /* HIGH NTSC SP */   \
-                   {  80, 70, 14 },     /* HIGH NTSC EP */   \
-                   { 100, 80, 10 },     /* HIGH PAL  SP */   \
-                   { 100, 80, 14 }}     /* HIGH PAL  EP */
+#define  CORRELATION_THRESHOLD  204                     /* 255 == 100% */
 
-/* convert mode to an index for the format array (see bkrconfig.mode) */
-static inline unsigned int BKR_MODE_TO_FORMAT(unsigned int mode)
-{
-	return((BKR_DENSITY(mode)==BKR_HIGH)<<2  | \
-	       (BKR_VIDEOMODE(mode)==BKR_PAL)<<1 | \
-	       (BKR_SPEED(mode)==BKR_EP));
-}
 
-#define WEIGHT_INITIALIZER                                   \
-	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,    \
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
-	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
-	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
-	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
-	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
+/*
+ * Global Data
+ */
+
+/* Note the parity lengths must be multiples of 2. */
+static struct
+        {
+        unsigned int  leader;
+        unsigned int  trailer;
+        unsigned int  parity;
+        } format[] =                                    /* format information */
+	{ {  32, 28, 10 },                              /* LOW  NTSC SP */
+	  {  32, 28, 14 },                              /* LOW  NTSC EP */
+	  {  40, 32, 10 },                              /* LOW  PAL  SP */
+	  {  40, 32, 14 },                              /* LOW  PAL  EP */
+	  {  80, 70, 10 },                              /* HIGH NTSC SP */
+	  {  80, 70, 14 },                              /* HIGH NTSC EP */
+	  { 100, 80, 10 },                              /* HIGH PAL  SP */
+	  { 100, 80, 14 } };                            /* HIGH PAL  EP */
+
+static unsigned char  weight[] =                        /* correlation weights */
+	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,
 	  0x25, 0x09, 0x09, 0x01, 0x09, 0x01, 0x01, 0x00 };
 
-#define  CORRELATION_THRESHOLD  0xcc
+
+/*
+ * Macros
+ */
+
+/* convert mode to an index for the format array (see bkrconfig.mode) */
+static inline int BKR_MODE_TO_FORMAT(int mode)
+{
+	int result = 0;
+
+	if(BKR_DENSITY(mode) == BKR_HIGH)
+		result |= 4;
+	if(BKR_VIDEOMODE(mode) == BKR_PAL)
+		result |= 2;
+	if(BKR_SPEED(mode) == BKR_EP)
+		result |= 1;
+
+	return(result);
+}
+
+static inline int BLOCKS_PER_SECOND(void)
+{
+	return(sector.interleave * (BKR_VIDEOMODE(sector.mode) == BKR_PAL ? 50 : 60));
+}
+
+static inline int SECTOR_KEY_OFFSET(void)
+{
+	return(sector.leader + (block.parity + sizeof(block_header_t))*sector.interleave);
+}
 
 
 /*
@@ -128,34 +157,6 @@ static int   bkr_find_sector(f_flags_t, jiffies_t);
 
 
 /*
- * Global Data
- */
-
-static struct
-        {
-        unsigned int  leader;
-        unsigned int  trailer;
-        unsigned int  parity;
-        } format[] = FORMATS;                           /* format information */
-static unsigned char  weight[] = WEIGHT_INITIALIZER;    /* correlation weights */
-
-
-/*
- * Macros
- */
-
-static inline int BLOCKS_PER_SECOND(void)
-{
-	return(sector.interleave * (BKR_VIDEOMODE(device.mode) == BKR_PAL ? 50 : 60));
-}
-
-static inline int SECTOR_KEY_OFFSET(void)
-{
-	return(sector.leader + (block.parity + sizeof(block_header_t))*sector.interleave);
-}
-
-
-/*
  * ================================================================================================
  *
  *                                      MISCELLANEOUS
@@ -164,118 +165,60 @@ static inline int SECTOR_KEY_OFFSET(void)
  */
 
 /*
- * bkr_set_parms()
+ * bkr_format_reset()
  *
- * Sets all the format and device parameters based on the selected mode.
- * The mode parameter is as in bkrmode.  Returns -EINVAL if the supplied
- * mode is invalid, -ENOMEM if the various buffers couldn't be
- * allocated/resized, or 0 if everything is A-OK.
- *
- * An even number of bytes is always allocated for the block buffer so the
- * randomizer can work 16 bits at a time.
+ * Reset the block and sector formating layers.  The return code indicates
+ * success or failure.  On failure, block.size is left = 0 which can be
+ * used to check for failures after the fact.
  */
 
-int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
+int bkr_format_reset(int direction, int mode)
 {
-	device.control = 0;
+	int  fmt;
 
-	switch(BKR_DENSITY(mode))
-		{
-		case BKR_HIGH:
-		device.control |= BIT_HIGH_DENSITY;
-		device.bytes_per_line = BYTES_PER_LINE_HIGH;
-		break;
+	block.size = 0;
 
-		case BKR_LOW:
-		device.bytes_per_line = BYTES_PER_LINE_LOW;
-		break;
+	if(device.size == 0)
+		return(-ENXIO);
 
-		default:
-		goto bad_mode;
-		}
+	fmt = BKR_MODE_TO_FORMAT(mode);
+
+	/*
+	 * Sector layer
+	 */
 
 	switch(BKR_VIDEOMODE(mode))
 		{
 		case BKR_NTSC:
-		device.control |= BIT_NTSC_VIDEO;
 		sector.size = device.bytes_per_line * LINES_PER_FIELD_NTSC;
-		device.size = sector.size * 2 + device.bytes_per_line;
 		break;
 
 		case BKR_PAL:
 		sector.size = device.bytes_per_line * (LINES_PER_FIELD_PAL - 1);
-		device.size = (sector.size + device.bytes_per_line) * 2;
 		break;
 
 		default:
-		goto bad_mode;
+		return(-ENXIO);
 		}
-	device.size = max_buffer - max_buffer % device.size;
 
 	sector.interleave = device.bytes_per_line * 2;
-	sector.leader  = format[BKR_MODE_TO_FORMAT(mode)].leader;
-	sector.trailer = format[BKR_MODE_TO_FORMAT(mode)].trailer;
+	sector.leader  = format[fmt].leader;
+	sector.trailer = format[fmt].trailer;
 	sector.data_size = sector.size - sector.leader - sector.trailer;
-
-	switch(BKR_FORMAT(mode))
-		{
-		case BKR_FMT:
-		block.read = bkr_block_read_fmt;
-		block.write = bkr_block_write_fmt;
-		block.size = sector.data_size / sector.interleave;
-		block.parity = format[BKR_MODE_TO_FORMAT(mode)].parity;
-		break;
-
-		case BKR_RAW:
-		block.read = bkr_block_read_raw;
-		block.write = bkr_block_write_raw;
-		block.size = sector.data_size;
-		block.parity = 0;
-		break;
-
-		default:
-		goto bad_mode;
-		}
 
 	free(sector.data);
 	sector.data = (unsigned char *) malloc(sector.data_size);
 	if(sector.data == NULL)
 		return(-ENOMEM);
 
-	reed_solomon_init(block.size, block.size - block.parity, &block.rs_format);
-
-	device.mode = mode;
-	return(0);
-
-	/*
-	 * The specified mode does not exist --- use default mode.
-	 */
-
-	bad_mode:
-	bkr_set_parms(BKR_DEF_MODE, max_buffer);
-	return(-EINVAL);
-}
-
-
-/*
- * bkr_format_reset()
- *
- * Reset the block and sector formating layers.
- */
-
-void bkr_format_reset(void)
-{
-	/*
-	 * Sector layer
-	 */
-
 	sector.header_loc = (sector_header_t *) (sector.data + block.parity + sizeof(block_header_t));
 	sector.header = (sector_header_t) { KEY_INITIALIZER, 0 };
 	sector.oddfield = 1;
 	sector.need_sequence_reset = 1;
 	sector.offset = sector.data;
-	if(device.direction == O_WRONLY)
+	if(direction == WRITING)
 		sector.offset += sector.data_size - block.size;
+	sector.mode = mode;
 
 	/*
 	 * Block layer
@@ -284,21 +227,34 @@ void bkr_format_reset(void)
 	block.header.type = DATA_BLOCK;
 	block.header.header = 0;
 	block.header.truncate = 0;
-	switch(BKR_FORMAT(device.mode))
+	switch(BKR_FORMAT(mode))
 		{
 		case BKR_FMT:
+		block.read = bkr_block_read_fmt;
+		block.write = bkr_block_write_fmt;
+		block.size = sector.data_size / sector.interleave;
+		block.parity = format[fmt].parity;
 		block.start = sector.offset + block.parity + sizeof(block_header_t);
 		break;
 
 		case BKR_RAW:
+		block.read = bkr_block_read_raw;
+		block.write = bkr_block_write_raw;
+		block.size = sector.data_size;
+		block.parity = 0;
 		block.start = sector.data;
 		break;
+
+		default:
+		return(-ENXIO);
 		}
 	block.end = block.start + block.size;
-	if(device.direction == O_WRONLY)
+	if(direction == WRITING)
 		block.offset = block.start;
 	else
 		block.offset = block.end;
+
+	reed_solomon_init(block.size, block.size - block.parity, &block.rs_format);
 
 	/*
 	 * Stats
@@ -306,7 +262,7 @@ void bkr_format_reset(void)
 
 	errors = ERRORS_INITIALIZER;
 
-	return;
+	return(0);
 }
 
 
@@ -338,9 +294,6 @@ unsigned int bytes_in_buffer(void)
  *                                      BLOCK-LEVEL FORMATING
  *
  * ================================================================================================
- *
- * Any errors occuring in the sector or device layers cancel the current
- * operation and the error code is passed along.
  */
 
 /*
@@ -373,16 +326,13 @@ int bkr_write_eor(jiffies_t bailout)
 	unsigned int  i;
 
 	if(block.offset != block.start)
-		{
 		result = bkr_block_write_fmt(0, bailout);
-		if(result < 0)
-			return(result);
-		}
 
-	block.header.type = EOR_BLOCK;
+	i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND() * EOR_LENGTH;
 
-	for(i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND() * EOR_LENGTH; i && !result; i--)
+	for(; i && !result; i--)
 		{
+		block.header.type = EOR_BLOCK;
 		block.offset = block.end;
 		result = bkr_block_write_fmt(0, bailout);
 		}
@@ -417,6 +367,7 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 			}
 
 		block.header = *(block_header_t *) (sector.offset + block.parity);
+
 		if(block.header.header)
 			block.start += sizeof(sector_header_t);
 		block.offset = block.start;
@@ -436,10 +387,7 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 		if(block.header.type == BOR_BLOCK)
 			{
 			errors = ERRORS_INITIALIZER;
-			best_nonmatch = 0;
-			worst_match = 1000000;
-			least_skipped = 1000000;
-			most_skipped = 0;
+			health = HEALTH_INITIALIZER;
 			}
 		}
 }
@@ -653,43 +601,42 @@ static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 			 * Do error correction.
 			 */
 
-			for(i = result = 0; (i < sector.data_size) && (result >= 0); i += block.size)
+			for(i = 0; i < sector.data_size; i += block.size)
 				{
 				result = reed_solomon_decode(&sector.data[i], NULL, 0, &block.rs_format);
-				if(result > (int) errors.symbol)
+				if(result < 0)
+					{
+					errors.block++;
+					sector.need_sequence_reset = 1;
+					return(-ENODATA);
+					}
+				if(result > errors.symbol)
 					errors.symbol = result;
-				}
-
-			if(result < 0)
-				{
-				errors.block++;
-				sector.need_sequence_reset = 1;
-				return(-ENODATA);
+				if(result > errors.recent_symbol)
+					errors.recent_symbol = result;
 				}
 
 			/*
-			 * Recover the sector number and skip repeated
-			 * sectors.
+			 * Ensure correct sector ordering.
 			 */
 
+			result = sector.header_loc->number - sector.header.number;
 			if(sector.need_sequence_reset)
-				sector.need_sequence_reset = 0;
-			else
 				{
-				result = sector.header_loc->number - sector.header.number;
-
-				if(result > 1)
-					errors.overrun++;
-				else if(result < 1)
-					{
-					errors.underflow += underflow_detect;
-					underflow_detect = 0;
-					continue;
-					}
+				sector.need_sequence_reset = 0;
+				break;
 				}
-			sector.header.number = sector.header_loc->number;
-			break;
+			else if(result == 1)
+				break;
+			else if(result > 1)
+				{
+				errors.overrun++;
+				break;
+				}
+			errors.underflow += underflow_detect;
+			underflow_detect = 0;
 			}
+		sector.header.number = sector.header_loc->number;
 
 		/*
 		 * De-randomize the data and reset this sector.
@@ -756,7 +703,7 @@ static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
 		memset(device.buffer + device.head, BKR_FILLER, sector.trailer);
 		device.head += sector.trailer;
 
-		if(sector.oddfield || (BKR_VIDEOMODE(device.mode) == BKR_PAL))
+		if(sector.oddfield || (BKR_VIDEOMODE(sector.mode) == BKR_PAL))
 			{
 			memset(device.buffer + device.head, BKR_FILLER, device.bytes_per_line);
 			device.head += device.bytes_per_line;
@@ -800,7 +747,7 @@ static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
 	unsigned int  i, j;
-	unsigned int  correlation;
+	unsigned int  correlation = 0;
 	unsigned int  skipped = -1;
 
 	result = bkr_device_read(SECTOR_KEY_OFFSET(), f_flags, bailout);
@@ -818,8 +765,8 @@ static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 		skipped++;
 
 		if(skipped > 0)
-			if(correlation > best_nonmatch)
-				best_nonmatch = correlation;
+			if(correlation > health.best_nonkey)
+				health.best_nonkey = correlation;
 
 		result = bkr_device_read(sector.size - SECTOR_KEY_OFFSET(), f_flags, bailout);
 		if(result < 0)
@@ -844,15 +791,15 @@ static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 	device.tail -= SECTOR_KEY_OFFSET();
 	if(result >= 0)
 		{
-		if(correlation < worst_match)
-			worst_match = correlation;
-		if(skipped < least_skipped)
-			least_skipped = skipped;
-		if(skipped > most_skipped)
-			most_skipped = skipped;
+		if(correlation < health.worst_key)
+			health.worst_key = correlation;
+		if(skipped < health.least_skipped)
+			health.least_skipped = skipped;
+		if(skipped > health.most_skipped)
+			health.most_skipped = skipped;
 
-		result = skipped;
 		device.tail += sector.leader;
+		result = skipped;
 		}
 	if((int) device.tail < 0)
 		device.tail += device.size;

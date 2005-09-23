@@ -4,7 +4,7 @@
  * This code is an overhaul of a Reed-Solomon encoder/decoder implementation
  * written by Phil Karn which was distributed under the name rs-2.0.
  *
- * Copyright (C) 2000 Kipp C. Cannon
+ * Copyright (C) 2000,2001 Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -63,9 +63,7 @@ static inline gf modNN(int x)
 
 static inline int min(int a, int b)
 {
-	if(a <= b)
-		return(a);
-	return(b);
+	return(a <= b ? a : b);
 }
 
 
@@ -425,7 +423,11 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 
 	memcpy(&temp[1], &lambda[1], deg_lambda * sizeof(gf));
 
+#if LOG_BETA == 1
+	for(i = 1; i <= NN; i++)
+#else
 	for(i = 1, k = NN-Ldec; i <= NN; i++, k = modNN(NN - Ldec + k))
+#endif
 		{
 		tmp = 1;
 		for(j = deg_lambda, x = &temp[deg_lambda]; j > 0; x--, j--)
@@ -444,7 +446,11 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		 */
 
 		root[count] = i;
+#if LOG_BETA == 1
+		loc[count] = NN - i;
+#else
 		loc[count] = k;
+#endif
 		if(loc[count] >= rs_format->n)
 			return(-1);
 		if(++count == deg_lambda)

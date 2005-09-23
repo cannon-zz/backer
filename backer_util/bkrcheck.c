@@ -3,7 +3,7 @@
  *
  * Command line utility for checking the health of the Backer device.
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -106,10 +106,7 @@ int main(int argc, char *argv[])
 	 * Open device and retrieve current mode and format
 	 */
 
-	if(size >= 0)
-		outfile = open(device, O_RDWR);
-	else
-		outfile = open(device, O_WRONLY);
+	outfile = open(device, O_WRONLY);
 	if(outfile < 0)
 		{
 		perror(PROGRAM_NAME);
@@ -173,8 +170,10 @@ int main(int argc, char *argv[])
 
 	puts("Press 'q' to quit.");
 	do
-		write(outfile, data, length);
-	while(fgetc(stdin) != 'q');
+		i = write(outfile, data, length);
+	while((i >= 0) && (fgetc(stdin) != 'q'));
+	if(i < 0)
+		perror(PROGRAM_NAME);
 
 	/*
 	 * Clean up and quit

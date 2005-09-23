@@ -7,7 +7,7 @@
  * unwanted parameters.  For example, if the timeout passed to this function
  * is too high then it will not be displayed.
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by

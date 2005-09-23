@@ -6,18 +6,17 @@
  * To access the formating layer, the symbols defined here are required.  The
  * access sequence should be as follows:
  *
- *      1.  bkr_set_parms()                 (only needed on format change)
  *      2.  bkr_format_reset()
  *      3.  bkr_write_bor()                 (only needed when writing)
- *      4.  block.read() or block.write()
+ *      4.  block.read() or block.write()   (repeat as needed)
  *      5.  bkr_write_eor()                 (only needed when writing)
  *
- * Note that reading and writing is done via the function pointers in the
- * block data structure which will point to the raw or formated I/O functions
- * as determined by the mode passed to bkr_set_parms().
+ * Note:  In order to support multiple formats, reading and writing is done
+ * via function pointers in the block info structure.  The pointers are set
+ * according to the mode passed to bkr_format_reset().
  *
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -59,7 +58,7 @@
  *    |            |             |   v
  *    |        --  +-------------+  --
  *    v  trailer   |   trailer   |
- *    --       --  +-------------+  <-- one extra line in NTSC mode
+ *    --       --  +-------------+  <-- one extra line in NTSC & PAL modes
  *                 |   leader    |
  *                 +-------------+
  *                 |             |
@@ -73,22 +72,24 @@
  *                 |             |
  *                 +-------------+
  *                 |   trailer   |
- *                 +-------------+
+ *                 +-------------+  <-- one extra line in PAL mode
  */
 
 
 /*
  * The meaning of the variables involved in block formating is as
- * illustrated in the following diagram.  The start pointer points to the
- * first byte of data in the block while the end pointer points to the byte
- * immediately after the last byte of data in the block.  The optional
- * capacity field occupies the single byte at the end of a block whose data
- * is truncated to less than full capacity and specifies, for that block,
- * the zero-origin offset of the end pointer from the start pointer.  In
- * blocks containing the sector header, the header occupies the first
- * sizeof(sector_header_t) bytes of the data area.  In pass-through mode,
- * the entire sector data buffer is used as a single block with the start
- * and end pointers pointing to its start and end.
+ * illustrated in the following diagram.  The optional capacity field
+ * occupies the single byte at the end of a block whose data is truncated
+ * to less than full capacity and specifies, for that block, the
+ * zero-origin offset of the end pointer from the start pointer.  In blocks
+ * containing the sector header, the header occupies the first
+ * sizeof(sector_header_t) bytes of the data area.  In all cases, the
+ * formating code will ensure that the start pointer points to the first
+ * byte of file data in the block while the end pointer points to the byte
+ * immediately after the last byte of file data in the block.  In
+ * pass-through mode, the entire sector data buffer is used as a single
+ * block with the start and end pointers pointing to its start and end and
+ * no processing is applied to the data what so ever.
  *
  *             --  +-------------+  --
  *             ^   |             |   ^
@@ -139,8 +140,8 @@
 
 typedef struct
 	{
-	unsigned char type : 2;         /* type */
-	unsigned char pad : 4;
+	unsigned char type : 3;         /* type */
+	unsigned char pad : 3;
 	unsigned char header : 1;       /* block contains sector header */
 	unsigned char truncate : 1;     /* block is truncated */
 	} block_header_t;
@@ -148,7 +149,6 @@ typedef struct
 #define  BOR_BLOCK     0                /* block is a BOR marker */
 #define  EOR_BLOCK     1                /* blcok is an EOR marker */
 #define  DATA_BLOCK    2                /* block contains data */
-#define  AUX_BLOCK     3                /* block contains auxiliary data */
 
 typedef struct
 	{
@@ -161,12 +161,8 @@ typedef struct
  * Data exported by formating layer
  */
 
-unsigned int  worst_match;              /* these are for debugging only */
-unsigned int  best_nonmatch;
-unsigned int  least_skipped;
-unsigned int  most_skipped;
-
 struct bkrerrors errors;                /* error counts */
+struct bkrhealth health;                /* health indicators */
 
 struct
 	{
@@ -186,12 +182,13 @@ struct
 	unsigned char  *data;           /* uninterleaved data for current sector */
 	unsigned char  *offset;         /* pointer to current block */
 	unsigned int  interleave;       /* block interleave */
-	unsigned int  size;             /* sector size in bytes */
-	unsigned int  data_size;        /* data size in bytes */
+	unsigned int  size;             /* see diagram above */
+	unsigned int  data_size;        /* see diagram above */
 	unsigned int  leader;           /* see diagram above */
 	unsigned int  trailer;          /* see diagram above */
 	int  oddfield;                  /* current video field is odd */
 	int  need_sequence_reset;       /* we need to reset the sequence counter */
+	int  mode;                      /* as in bkrconfig.mode */
 	sector_header_t  *header_loc;   /* sector header location */
 	sector_header_t  header;        /* sector header copy */
 	} sector;
@@ -202,8 +199,7 @@ struct
  * functions are accessed through the pointers in the block data structure.
  */
 
-int           bkr_set_parms(unsigned int, unsigned int);
-void          bkr_format_reset(void);
+int           bkr_format_reset(int, int);
 int           bkr_write_bor(jiffies_t);
 int           bkr_write_eor(jiffies_t);
 unsigned int  space_in_buffer(void);

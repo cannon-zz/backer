@@ -3,7 +3,7 @@
  *
  * Graphical display of Backer device driver status.
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
 #define  DEFAULT_DEVICE  "/dev/backer"
 #define  DEFAULT_UPDATE  50                     /* milliseconds */
 #define  MIN_UPDATE      10                     /* milliseconds */
+#define  DECAY_INTERVAL  60                     /* sectors */
 
 /*
  * Function prototypes
@@ -57,6 +58,12 @@ struct
 	GtkWidget  *worst, *best, *least, *most;
 	GtkWidget  *buffer_status;
 	} widgets;
+struct
+	{
+	GtkWidget  *widget;
+	int  rate;
+	int  last_block;
+	} error_rate;
 struct  bkrstatus  status;
 struct  bkrformat  format;
 struct  bkrconfig  config;
@@ -72,7 +79,7 @@ int main(int argc, char *argv[])
 	int  i;
 	char  *devname = DEFAULT_DEVICE;
 	GtkWidget  *window;
-	GtkWidget  *vbox, *hbox;
+	GtkWidget  *vbox;
 	GtkWidget  *table;
 	GtkWidget  *widget;
 
@@ -109,7 +116,7 @@ int main(int argc, char *argv[])
 	 * Open device file and get info.
 	 */
 
-	devfile = open(devname, O_RDWR);
+	devfile = open(devname, O_RDONLY);
 	if(devfile < 0)
 		{
 		perror(PROGRAM_NAME);
@@ -249,17 +256,24 @@ int main(int argc, char *argv[])
 	widgets.most = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.most, 1, 2, 3, 4);
 
-	/* DMA Buffer status */
+	/* Error rate and DMA buffer indicators */
 
-	hbox = gtk_hbox_new(FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
+	table = gtk_table_new(2, 2, FALSE);
+	gtk_table_set_row_spacings(GTK_TABLE(table), 4);
+	gtk_table_set_col_spacings(GTK_TABLE(table), 10);
+	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
+	widget = gtk_label_new("Error Rate");
+	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
 	widget = gtk_label_new("DMA Buffer");
-	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 10);
+	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 
+	error_rate.widget = gtk_progress_bar_new();
+	gtk_progress_configure(GTK_PROGRESS(error_rate.widget), 0, 0, format.block_parity/2*DECAY_INTERVAL);
+	gtk_table_attach_defaults(GTK_TABLE(table), error_rate.widget, 1, 2, 0, 1);
 	widgets.buffer_status = gtk_progress_bar_new();
 	gtk_progress_configure(GTK_PROGRESS(widgets.buffer_status), 0, 0, format.buffer_size);
-	gtk_box_pack_start(GTK_BOX(hbox), widgets.buffer_status, TRUE, TRUE, 0);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.buffer_status, 1, 2, 1, 2);
 
 	/* Close button */
 
@@ -283,6 +297,9 @@ int main(int argc, char *argv[])
 	 * Start
 	 */
 
+	error_rate.rate = 0;
+	error_rate.last_block = 0;
+
 	gtk_main();
 
 	exit(0);
@@ -300,6 +317,17 @@ gint update_status(gpointer data)
 	ioctl(devfile, MTIOCPOS, &pos);
 	ioctl(devfile, BKRIOCGETSTATUS, &status);
 
+	if(status.errors.recent_symbol != 0)
+		error_rate.rate = status.errors.recent_symbol * DECAY_INTERVAL;
+	else if(error_rate.rate > 0)
+		{
+		error_rate.rate -= pos.mt_blkno - error_rate.last_block;
+		if(error_rate.rate < 0)
+			error_rate.rate = 0;
+		}
+	error_rate.last_block = pos.mt_blkno;
+
+	gtk_progress_set_value(GTK_PROGRESS(error_rate.widget), error_rate.rate);
 	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), status.bytes);
 
 	sprintf(text, "%lu", pos.mt_blkno);
@@ -320,16 +348,16 @@ gint update_status(gpointer data)
 	sprintf(text, "%u", status.errors.underflow);
 	gtk_label_set_text(GTK_LABEL(widgets.underflow), text);
 
-	sprintf(text, "%u", status.worst_match);
+	sprintf(text, "%u", status.health.worst_key);
 	gtk_label_set_text(GTK_LABEL(widgets.worst), text);
 
-	sprintf(text, "%u", status.best_nonmatch);
+	sprintf(text, "%u", status.health.best_nonkey);
 	gtk_label_set_text(GTK_LABEL(widgets.best), text);
 
-	sprintf(text, "%u", status.least_skipped);
+	sprintf(text, "%u", status.health.least_skipped);
 	gtk_label_set_text(GTK_LABEL(widgets.least), text);
 
-	sprintf(text, "%u", status.most_skipped);
+	sprintf(text, "%u", status.health.most_skipped);
 	gtk_label_set_text(GTK_LABEL(widgets.most), text);
 
 	return(TRUE);

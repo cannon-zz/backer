@@ -1,9 +1,7 @@
            Quick Install Guide for the Backer 16/32 Device Driver
            ======================================================
 
-
-Here are the steps for installing the driver
---------------------------------------------
+Full instructions can be found in the User's Guide.
 
 1.  Configure the driver parameters for your system.  The constants that
 should be set are:
@@ -15,18 +13,13 @@ should be set are:
 
 	In backer.h:
 		BKR_DEF_MODE
+		BKR_DEF_TIMEOUT
 
 Of these, the only one that actually must be set is the device major
-number.  The I/O port and DMA channel can be set at module load time
-although you might as well configure them now to simplify things later.  In
-the future I will also allow the default (start up) mode to be set at load
-time but for now it can only be adjusted at compile time.
+number.  The I/O port, DMA channel, default mode and timeout can be set at
+module load time although you might as well configure them now to simplify
+things later.
 
-Regarding the device major number:  I currently have the driver configured
-for device major 60.  This is in one of the blocks of numbers set aside for
-``experimental and local use''.  That should do for now unless you've
-already got something using number 60.  You can set this to any number your
-system isn't using.
 
 2.  Compile and install the driver to the modules directory.  This is done
 by typing (while logged in as root)
@@ -36,6 +29,7 @@ by typing (while logged in as root)
 
 or you can just run make and copy the resulting backer.o to your modules
 directory, /lib/modules/<kernel version>/misc, yourself.
+
 
 3.  Create a device file.  Do this (still as root) by typing
 
@@ -48,36 +42,23 @@ should also create a symbolic link called /dev/tape
 
 	cp -s /dev/backer /dev/tape
 
-4.  You're Done!  Now load the driver and test it.  See the next section
-for how to do this.
 
-
-Loading/Unloading the Driver
-----------------------------
-
-To load the driver, login as root and type
+4.  To load the driver, login as root and type
 
 	insmod backer [options]
 
 where the following options can be set:
 
-	ioport=num      Set the I/O port to num.
-	dma=num         Set the DMA channel to num.
-	buffer=num      Set the DMA buffer size to num bytes.
-	timeout=num     Set the timeout to num seconds.
+	ioport=num            Set the I/O port to num.
+	dma=num               Set the DMA channel to num.
+	buffer=num            Set the DMA buffer size to num bytes.
+	config=mode,timeout   Set the mode and timeout (seconds).
 
 Here's an example install command:
 
-insmod backer ioport=0x304 dma=3
+insmod backer ioport=0x304 dma=3 config=0x59,20
 
-To test the driver just type
+
+5.  To test the driver just type
 
 	cat /dev/zero > /dev/backer
-
-to verify that data is being written to video.  On your television set you
-should see vertical bars for several seconds followed by something that
-looks like noise.
-
-To unload the module type
-
-rmmod backer

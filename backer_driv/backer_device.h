@@ -3,9 +3,8 @@
  *
  * Linux 2.0.xx driver for Danmere's Backer 16/32 video tape backup cards.
  *
- * Any code making use of the formating layer code must be sure to export to
- * that code the symbols defined in this header file.  See the utility
- * bkrencode for an example of implementing a device layer.
+ * See backer_fmt.h for a description of how to use the formating and
+ * device layers together.
  * 
  * Copyright (C) 2000,2001  Kipp C. Cannon
  *
@@ -28,11 +27,8 @@
 #ifndef BACKER_DEVICE_H
 #define BACKER_DEVICE_H
 
-#include "backer.h"
-
-
 /*
- * Transfer directions
+ * Transfer directions.
  */
 
 typedef enum
@@ -44,10 +40,10 @@ typedef enum
 
 
 /*
- * Functions exported by the device layer
+ * Functions exported by the device layer.
  */
 
-int   bkr_device_reset(int, unsigned int);
+int   bkr_device_reset(int);
 int   bkr_device_start_transfer(direction_t);
 void  bkr_device_stop_transfer(void);
 int   bkr_device_read(unsigned int, f_flags_t, jiffies_t);
@@ -56,21 +52,19 @@ int   bkr_device_flush(jiffies_t);
 
 
 /*
- * Data exported to formating and kernel layer
+ * Data shared with formating and kernel layer.
  */
 
 struct
 	{
-	unsigned char *buffer;          /* location of DMA buffer */
+	unsigned char *buffer;          /* location of I/O buffer */
 	unsigned int  size;             /* amount of buffer in use */
 	unsigned int  head;             /* offset of next write transfer */
 	unsigned int  tail;             /* offset of next read transfer */
 	unsigned int  bytes_per_line;   /* width of one line of video */
 	unsigned int  frame_size;       /* bytes in a full video frame */
-	jiffies_t  last_update;         /* jiffies at time of last update */
-	unsigned int  owner;            /* owner's user id */
 	direction_t  direction;         /* current transfer direction */
-	unsigned char control;          /* control byte for card */
+	unsigned int  alloc_size;       /* allocated buffer size */
 	} device;
 
 #endif /* BACKER_DEVICE_H */

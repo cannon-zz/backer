@@ -3,16 +3,47 @@
  *
  * Linux 2.0.xx driver for Danmere's Backer 16/32 video tape backup cards.
  *
- * To access the formating layer, the symbols defined here are required.  The
- * access sequence should be as follows:
+ * The device and formating layers, while separate, do expect each other to
+ * perform certain tasks so their use is inter-twined.  Here's the order in
+ * which things should be done.
  *
- *      2.  bkr_format_reset()
- *      3.  bkr_write_bor()                 (only when writing)
- *      4.  block.read() or block.write()   (repeat as needed)
- *      5.  bkr_write_eor()                 (only when writing)
+ * Do some pre-cleaning.
+ *
+ *	device.direction = STOPPED;
+ *	device.buffer = (allocate a buffer here)
+ *	device.alloc_size = (insert allocated buffer size here)
+ *	sector.buffer = NULL;
+ *
+ * Reset the two layers in order.
+ *
+ *	bkr_device_reset();
+ *	bkr_format_reset();
+ *
+ * Start the transfer.
+ *
+ *      bkr_device_start_transfer();
+ *
+ * Read/write data.
+ *
+ *	bkr_write_bor();                (only if writing)
+ *
+ *	sector.read();                  (repeat as needed if reading)
+ *      sector.write();                 (repeat as needed if writing)
+ *
+ *	bkr_write_eor();                (only if writing)
+ *
+ * Flush if needed and stop the transfer.
+ *
+ *	bkr_device_flush();             (only if writing)
+ *	bkr_device_stop_transfer();
+ *
+ * Final clean up.
+ *
+ *	free(sector.buffer);
+ *	free(device.buffer);
  *
  * Note:  In order to support multiple formats, reading and writing is done
- * via function pointers in the block info structure.  The pointers are set
+ * via function pointers in the sector structure.  The pointers are set
  * according to the mode passed to bkr_format_reset().
  *
  *
@@ -38,70 +69,68 @@
 /*
  * The meaning of some of the variables used in sector formating is as
  * follows.  The diagram shows the layout for a complete frame (two
- * sectors) of data starting on an odd field of video.  offset points to
- * the first byte of the block currently being read/written.  interleave
- * specifies the block interleave ratio (consecutive bytes from a single
- * block are spaced this far apart when written to tape).  header_loc
- * points to the location of the sector header within the data buffer.
+ * sectors) starting on an odd field of video.
  *
  *    --       --  +-------------+
  *    ^   leader   |   leader    |
- *    |        --  +-------------+  --
- *    |            |             |   ^
- *    |            |      D      |   |
- *    |            |             |   |
- *    |            |      A      |   |
- *    size         |             |   data_size
- *    |            |      T      |   |
- *    |            |             |   |
- *    |            |      A      |   |
+ *    |        --  +-------------+  --  <-- buffer (pointer)
+ *    |            |     A       |   ^
+ *    |            |     C       |   |
+ *    |            |     T R     |   |
+ *    |            |     I E     |   |
+ *  video_size     |     V G     |   buffer_size
+ *    |            |     E I     |   |
+ *    |            |       O     |   |
+ *    |            |       N     |   |
  *    |            |             |   v
  *    |        --  +-------------+  --
  *    v  trailer   |   trailer   |
  *    --       --  +-------------+  <-- one extra line in NTSC & PAL modes
  *                 |   leader    |
  *                 +-------------+
- *                 |             |
- *                 |      D      |
- *                 |             |
- *                 |      A      |
- *                 |             |
- *                 |      T      |
- *                 |             |
- *                 |      A      |
+ *                 |     A       |
+ *                 |     C       |
+ *                 |     T R     |
+ *                 |     I E     |
+ *                 |     V G     |
+ *                 |     E I     |
+ *                 |       O     |
+ *                 |       N     |
  *                 |             |
  *                 +-------------+
  *                 |   trailer   |
  *                 +-------------+  <-- one extra line in PAL mode
- */
-
-
-/*
- * The meaning of the variables involved in block formating is as
- * illustrated in the following diagram.  The optional capacity field
- * occupies the single byte at the end of a block whose data is truncated
- * to less than full capacity and specifies, for that block, the
- * zero-origin offset of the end pointer from the start pointer.  In blocks
- * containing the sector header, the header occupies the first
- * sizeof(sector_header_t) bytes of the data area.  In all cases, the
- * formating code will ensure that the start pointer points to the first
- * byte of file data in the block while the end pointer points to the byte
- * immediately after the last byte of file data in the block.  In
- * pass-through mode, the entire sector data buffer is used as a single
- * block with the start and end pointers pointing to its start and end and
- * no processing is applied to the data what so ever.
  *
- *             --  +-------------+  --
- *             ^   |             |   ^
- *             |   |    Parity   |   parity
- *             |   |             |   v
- *             |   +-------------+  --
- *             |   |    Header   |
+ *
+ * Zoomed in on the active area of a single sector, the meaning of a few more
+ * variables is shown below.  offset always points to the next byte to be
+ * read/written and if equal to end then the sector is empty/full respectively.
+ * If the sector contains less than its maximum capacity of data, then the
+ * truncate bit is set in the header and the last byte of the data area is used
+ * to hold the lowest 8 bits of the count of actual bytes (excluding the
+ * header) in the sector while the upper 4 bits of the count are stored in the
+ * header itself.  end always points to the end of the data portion of the
+ * sector and is adjusted appropriately when a truncated sector is retrieved.
+ *
+ * Logically, the data portion of the sector (including the header) is
+ * divided into blocks although this is hidden from the interface.
+ * Associated with each block is a group of parity symbols used for error
+ * control.  The parity symbols for all the blocks are grouped together at
+ * the top end of the sector's active area.
+ *
+ * The active area of the sector is not written linearly to tape but is
+ * instead interleaved in order to distribute burst errors among the
+ * individual blocks.  The final distance, in bytes, between adjacent bytes
+ * of a given block when written to tape is given by the interleave
+ * paramter.
+ *
+ *             --  +-------------+
+ *             ^   |    Header   |
  *             |   +-------------+  <--- start (pointer)
  *             |   |             |
  *             |   |             |
  *             |   |             |
- *          size   |      D      |
+ *     data_size   |      D      |
  *             |   |      A      |
  *             |   |      T      |
  *             |   |      A      |
@@ -111,14 +140,18 @@
  *             |   +- - - - - - -+
  *             v   |   capacity  |
  *             --  +-------------+  <--- end (pointer)
+ *                 |             |
+ *                 |    Parity   |
+ *                 |             |
+ *                 +-------------+
  */
 
 
 #ifndef BACKER_FMT_H
 #define BACKER_FMT_H
 
-#include "backer_device.h"
 #include "rs.h"
+#include "backer_device.h"
 
 /*
  * Paramters
@@ -131,36 +164,38 @@
 #define  BOR_LENGTH            4        /* seconds */
 #define  EOR_LENGTH            1        /* seconds */
 
+
+/*
+ * Header structure
+ */
+
+typedef struct
+	{
+	unsigned char key[KEY_LENGTH];  /* key sequence */
+	union
+		{
+		struct
+			{
+			unsigned int  number : 24;      /* sector number */
+			unsigned int  hi_used : 4;      /* high 4 bits of usage */
+			unsigned int  type : 3;         /* sector type */
+			unsigned int  truncate : 1 ;    /* sector is truncated */
+			} parts;
+		unsigned int  all;
+		} state;
+	} sector_header_t;
+
 #define KEY_SEQUENCE                                         \
 	{ 0xb9, 0x57, 0xd1, 0x0b, 0xb5, 0xd3, 0x66, 0x07,    \
 	  0x5e, 0x76, 0x99, 0x7d, 0x73, 0x6a, 0x09, 0x1e,    \
 	  0x89, 0x55, 0x3f, 0x21, 0xca, 0xa6, 0x36, 0xb7,    \
 	  0xdf, 0xf9, 0xaa, 0x17 }
 
-/*
- * Header structures
- */
+#define  BOR_SECTOR   0                 /* sector is a BOR marker */
+#define  EOR_SECTOR   1                 /* sector is an EOR marker */
+#define  DATA_SECTOR  2                 /* sector contains data */
 
-typedef struct
-	{
-	unsigned char type : 6;         /* type */
-	unsigned char header : 1;       /* block contains sector header */
-	unsigned char truncate : 1;     /* block is truncated */
-	} block_header_t;
-
-#define  BOR_BLOCK   0                  /* block is a BOR marker */
-#define  EOR_BLOCK   1                  /* blcok is an EOR marker */
-#define  DATA_BLOCK  2                  /* block contains data */
-
-#define  BLOCK_HEADER_INITIALIZER  ((block_header_t) { DATA_BLOCK, 0, 0 })
-
-typedef struct
-	{
-	unsigned char key[KEY_LENGTH];                  /* sector key */
-	unsigned int  number __attribute__ ((packed));  /* sector number */
-	} sector_header_t;
-
-#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) { KEY_SEQUENCE, 0 });
+#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) { KEY_SEQUENCE, {{ 0, 0, DATA_SECTOR, 0 }} })
 
 
 /*
@@ -172,37 +207,29 @@ struct bkrhealth health;                /* health indicators */
 
 struct
 	{
-	unsigned char  *offset;         /* next byte to be read/written */
-	unsigned char  *end;            /* see diagram above */
+	unsigned char  *buffer;         /* uninterleaved data buffer */
+	unsigned char  *offset;         /* location of next byte to be read/written */
 	unsigned char  *start;          /* see diagram above */
-	block_header_t  header;         /* block header copy */
-	unsigned int  size;             /* see diagram above */
-	unsigned int  parity;           /* see diagram above */
-	int  (*read)(f_flags_t, jiffies_t);        /* block read function */
-	int  (*write)(f_flags_t, jiffies_t);       /* block write function */
-	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
-	} block;
-
-struct
-	{
-	unsigned char  *data;           /* uninterleaved data buffer */
-	unsigned char  *offset;         /* location of current block */
+	unsigned char  *end;            /* see diagram above */
 	unsigned int  interleave;       /* block interleave */
-	unsigned int  size;             /* see diagram above */
+	unsigned int  video_size;       /* see diagram above */
+	unsigned int  buffer_size;      /* see diagram above */
 	unsigned int  data_size;        /* see diagram above */
 	unsigned int  leader;           /* see diagram above */
 	unsigned int  trailer;          /* see diagram above */
 	int  oddfield;                  /* current video field is odd */
 	int  need_sequence_reset;       /* sector number needs to be reset */
 	int  mode;                      /* as in bkrconfig.mode */
-	sector_header_t  *header_loc;   /* sector header location */
 	sector_header_t  header;        /* sector header copy */
+	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
+	int  (*read)(f_flags_t, jiffies_t);     /* sector read function */
+	int  (*write)(f_flags_t, jiffies_t);    /* sector write function */
 	} sector;
 
 
 /*
- * Functions exported by formating layer.  The block read and write
- * functions are accessed through the pointers in the block data structure.
+ * Functions exported by formating layer.  The read and write functions are
+ * accessed through the pointers in the sector data structure.
  */
 
 int           bkr_format_reset(int, direction_t);
@@ -219,7 +246,7 @@ unsigned int  bytes_in_buffer(void);
 
 #ifdef BACKER_FMT_PRIVATE
 
-int   bkr_block_read_raw(f_flags_t, jiffies_t);
+int   bkr_sector_read_raw(f_flags_t, jiffies_t);
 int   bkr_find_sector(f_flags_t, jiffies_t);
 
 #endif /* BACKER_FMT_PRIVATE */

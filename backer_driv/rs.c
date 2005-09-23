@@ -217,7 +217,7 @@ static void generate_poly(struct rs_format_t *rs_format)
  *	7.  The remainder forms the parity symbols.
  */
 
-void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
+void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_format)
 {
 	int  i;                         /* current data symbol index */
 	data_t  *b;                     /* current remainder symbol */
@@ -227,33 +227,33 @@ void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
 	if(rs_format->parity == 0)
 		return;
 
-	memset(block, 0, rs_format->parity * sizeof(data_t));
+	memset(parity, 0, rs_format->parity * sizeof(data_t));
 
 	/*
 	 * At the start of each iteration, b points to the most significant
 	 * symbol in the remainder for that iteration.
 	 */
 
-	b = &block[rs_format->remainder_start];
+	b = &parity[rs_format->remainder_start];
 
-	for(i = rs_format->n - 1; i >= rs_format->parity; i--)
+	for(i = rs_format->n - rs_format->parity - 1; i >= 0; i--)
 		{
-		feedback = Log_alpha[block[i] ^ *b];
+		feedback = Log_alpha[data[i] ^ *b];
 		if(feedback != INFINITY)
 			{
 			b--;
-			for(g = &rs_format->g[rs_format->parity - 1]; b >= block; g--, b--)
+			for(g = &rs_format->g[rs_format->parity - 1]; b >= parity; g--, b--)
 				if(*g != INFINITY)
 					*b ^= Alpha_exp[feedback + *g];
-			for(b = &block[rs_format->parity - 1]; g > rs_format->g; b--, g--)
+			for(b = &parity[rs_format->parity - 1]; g > rs_format->g; b--, g--)
 				if(*g != INFINITY)
 					*b ^= Alpha_exp[feedback + *g];
 			*b = Alpha_exp[feedback + *g];
 			}
 		else
 			*b = 0;
-		if(--b < block)
-			b = &block[rs_format->parity - 1];
+		if(--b < parity)
+			b = &parity[rs_format->parity - 1];
 		}
 }
 
@@ -270,7 +270,7 @@ void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
  * error magnitudes.
  */
 
-int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
+int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, struct rs_format_t *rs_format)
 {
 	int  i, j, k;                   /* general purpose loop indecies */
 	gf  *x, *y;                     /* general purpose loop pointers */
@@ -298,12 +298,27 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	 * errors to correct.
 	 */
 
-	for(x = &s[rs_format->parity]; x > s; *(--x) = block[0]);
+	for(x = &s[rs_format->parity]; x > s; *(--x) = parity[0]);
 
-	for(j = 1; j < rs_format->n; j++)
-		if(block[j] != 0)
+	for(j = 1; j < rs_format->parity; j++)
+		if(parity[j] != 0)
 			{
-			tmp = modNN(Log_alpha[block[j]] + LOG_BETA*J0*j);
+			tmp = modNN(Log_alpha[parity[j]] + LOG_BETA*J0*j);
+			for(x = s; x < &s[rs_format->parity]; x++)
+				{
+				*x ^= Alpha_exp[tmp];
+				#if (LOG_BETA==1)
+				if((tmp += j) >= NN)
+					tmp -= NN;
+				#else
+				tmp = modNN(tmp + LOG_BETA*j);
+				#endif /* LOG_BETA */
+				}
+			}
+	for(; j < rs_format->n; j++)
+		if(data[j - rs_format->parity] != 0)
+			{
+			tmp = modNN(Log_alpha[data[j - rs_format->parity]] + LOG_BETA*J0*j);
 			for(x = s; x < &s[rs_format->parity]; x++)
 				{
 				*x ^= Alpha_exp[tmp];
@@ -526,7 +541,10 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		num = modNN(Log_alpha[num] + (J0-1) * *y);
 
 		/* Apply error to block */
-		block[loc[y - root]] ^= Alpha_exp[num + NN - Log_alpha[den]];
+		if(loc[y - root] < rs_format->parity)
+			parity[loc[y - root]] ^= Alpha_exp[num + NN - Log_alpha[den]];
+		else
+			data[loc[y - root] - rs_format->parity] ^= Alpha_exp[num + NN - Log_alpha[den]];
 		}
 
 	if(erasure != NULL)

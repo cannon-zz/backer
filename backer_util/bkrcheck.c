@@ -197,7 +197,7 @@ void gen_formated()
 	int i;
 
 	printf("\nFormat Parameters:\n" \
-	       "\tBuffer size:       %u bytes (%u sectors)\n" \
+	       "\tBuffer size:       %u bytes (%u frames)\n" \
 	       "\tSector size:       %u bytes\n" \
 	       "\tSector leader:     %u bytes\n" \
 	       "\tSector trailer:    %u bytes\n" \
@@ -207,7 +207,7 @@ void gen_formated()
 	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
 	       "\tData rate:         %u bytes/second\n\n" \
 	       "Writing '\\0's.  ",
-	       format.buffer_size, format.buffer_size/format.sector_size,
+	       format.buffer_size, format.buffer_size/format.sector_size/2,
 	       format.sector_size,
 	       format.leader,
 	       format.trailer,

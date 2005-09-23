@@ -1,3 +1,43 @@
+1.104 (2001/3/4)
+	*** INCOMPATIBLE FORMAT CHANGE ***
+
+	read() and write() now lock out other processes to prevent
+	re-entrance.
+
+	Separated the device layer code completely from the kernel
+	interface.  They're still in one file but share no data.  This was
+	done so that bkrencode's source code could be split.
+
+	Cleaned up the sector locator algorithm to work with the new stdio
+	device layer for bkrencode.  As a side benefit the compiled code is
+	tighter but I'm not sure if the performance has gone up or down.
+
+	Completely new tape format!  There are no longer blocks --- just
+	sectors.  This was accomplished by getting the Reed-Solomon
+	coder/decoder to handle parity symbols that are stored in a
+	separate buffer which allows the formating code to group all the
+	parity symbols together in one part of the sector while all the
+	data symbols are in another part of the sector.  This removes the
+	need to process the sector one block at a time:  all the data
+	symbols can be inserted at once, a single sector header added, then
+	the parity symbols are computed "block"-by-"block".  The results:
+	(i) higher tape capacity (no more block headers);  (ii) longer
+	sector key meaning more robust framing;  (iii) less CPU overhead
+	due to fewer function calls and loop iterations;  (iv) sector data
+	can be selectively randomized meaning we have visual BOR and EOR
+	marks again (I've missed these!);  (v) the MTIOCGET reports
+	consistent block number and residual counts since these now both
+	refer to sectors i.e. the block (sector) number changes every time
+	the residual count goes to 0.
+
+	Ported the driver to the 2.4 kernel series which it now requires.
+	It might work with 2.2 kernels but if it doesn't then it probably
+	wouldn't take much work to get it working.  It will definitely not
+	work with 2.0 kernels any more.  There is still no devfs support,
+	however.
+
+	Lots of other little changes here and there.
+
 1.103 (2001/2/20)
 	*** INCOMPATIBLE FORMAT CHANGE ***
 
@@ -8,7 +48,7 @@
 	wasn't adjusting the sector header offset for the unused space at
 	the start of a sector (no modes use this so it's not an issue).
 
-	Removed block_capacity from bkrformat.  Nothing 's used it for
+	Removed block_capacity from bkrformat.  Nothing's used it for
 	while.
 
 	Re-allocated bits in the block header structure so that all unused

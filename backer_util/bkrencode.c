@@ -70,11 +70,13 @@ int main(int argc, char *argv[])
 	 */
 
 	device.direction = STOPPED;
-	sector.data = NULL;
+	device.alloc_size = BUFFER_SIZE;
+	sector.buffer = NULL;
 	direction = WRITING;
 	mtget.mt_dsreg = DEFAULT_MODE;
 
-	if((device.buffer = (unsigned char *) malloc(BUFFER_SIZE)) == NULL)
+	device.buffer = (unsigned char *) malloc(device.alloc_size);
+	if(device.buffer == NULL)
 		{
 		errno = ENOMEM;
 		perror(PROGRAM_NAME);
@@ -204,43 +206,42 @@ int main(int argc, char *argv[])
 	got_sigint = 0;
 
 	/*
-	 * Transfer data one block at a time until EOF is reached.
+	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
 	setbuf(stderr, NULL);
-	bkr_device_reset(mtget.mt_dsreg, BUFFER_SIZE);
+	bkr_device_reset(mtget.mt_dsreg);
+	bkr_format_reset(mtget.mt_dsreg, direction);
+	bkr_device_start_transfer(direction);
 	switch(direction)
 		{
 		case READING:
-		bkr_format_reset(mtget.mt_dsreg, READING);
-		bkr_device_start_transfer(READING);
-		while(!feof(stdin))
+		while(1)
 			{
 			errno = 0;
-			result = block.read(0, 1);
+			result = sector.read(0, 1);
 			if(result == 0)
 				break;
 			if(result < 0)
 				errno = -result;
-			while((block.offset < block.end) && !errno)
-				block.offset += fwrite(block.offset, 1, block.end - block.offset, stdout);
+			while((sector.offset < sector.end) && !errno)
+				sector.offset += fwrite(sector.offset, 1, sector.end - sector.offset, stdout);
 			if(errno)
 				{
 				perror(PROGRAM_NAME);
 				exit(-1);
 				}
 			}
+		fflush(stdout);
 		break;
 
 		case WRITING:
-		bkr_format_reset(mtget.mt_dsreg, WRITING);
-		bkr_device_start_transfer(WRITING);
 		bkr_write_bor(1);
 		while(!feof(stdin) & !got_sigint)
 			{
-			while((block.offset < block.end) && !feof(stdin))
-				block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
-			result = block.write(0, 1);
+			while((sector.offset < sector.end) && !feof(stdin))
+				sector.offset += fread(sector.offset, 1, sector.end - sector.offset, stdin);
+			result = sector.write(0, 1);
 			if(result < 0)
 				errno = -result;
 			if(errno)
@@ -256,7 +257,6 @@ int main(int argc, char *argv[])
 		default:
 		}
 	bkr_device_stop_transfer();
-	fclose(stdout);
 
 	exit(0);
 }
@@ -271,130 +271,4 @@ int main(int argc, char *argv[])
 void sigint_handler(int num)
 {
 	got_sigint = 1;
-}
-
-
-/*
- * ============================================================================
- *
- *         "Device" I/O functions --- read stdin and write stdout.
- *
- * ============================================================================
- *
- * The read function must ensure that at least length bytes are available
- * starting at device.tail.  The write function must ensure that at least
- * length bytes of free space is available starting at device.head.  The
- * flush function function must ensure the buffer has been completely
- * commited to the output stream.
- *
- * These functions pass on any error codes returned by the file system.
- */
-
-int  bkr_device_reset(int mode, unsigned max_buffer)
-{
-	device.size = 0;
-
-	switch(BKR_DENSITY(mode))
-		{
-		case BKR_HIGH:
-		device.bytes_per_line = BYTES_PER_LINE_HIGH;
-		break;
-
-		case BKR_LOW:
-		device.bytes_per_line = BYTES_PER_LINE_LOW;
-		break;
-
-		default:
-		return(-ENXIO);
-		}
-
-	switch(BKR_VIDEOMODE(mode))
-		{
-		case BKR_NTSC:
-		device.frame_size = device.bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
-		break;
-
-		case BKR_PAL:
-		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
-		break;
-
-		default:
-		return(-ENXIO);
-		}
-
-	device.size = max_buffer - max_buffer % device.frame_size;
-
-	return(0);
-}
-
-
-int  bkr_device_start_transfer(direction_t direction)
-{
-	device.direction = direction;
-	device.head = 0;
-	device.tail = 0;
-	memset(device.buffer, 0, BUFFER_SIZE);
-	return(0);
-}
-
-
-void bkr_device_stop_transfer(void)
-{
-	device.direction = STOPPED;
-	return;
-}
-
-
-int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
-{
-	int  result;
-
-	if(bytes_in_buffer() >= length)
-		return(0);
-	length -= bytes_in_buffer();
-
-	if(device.head + length >= device.size)
-		{
-		result = fread(device.buffer + device.head, 1, device.size - device.head, stdin);
-		if(result < device.size - device.head)
-			return(-errno);
-		length -= device.size - device.head;
-		device.head = 0;
-		}
-	result = fread(device.buffer + device.head, 1, length, stdin);
-	if(result < length)
-		return(-errno);
-	device.head += length;
-
-	return(0);
-}
-
-int bkr_device_write(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
-{
-	int  result;
-
-	if(bytes_in_buffer() < length)
-		length = bytes_in_buffer();
-
-	if(device.tail + length >= device.size)
-		{
-		result = fwrite(device.buffer + device.tail, 1, device.size - device.tail, stdout);
-		if(result < device.size - device.tail)
-			return(-errno);
-		length -= device.size - device.tail;
-		device.tail = 0;
-		}
-	result = fwrite(device.buffer + device.tail, 1, length, stdout);
-	if(result < length)
-		return(-errno);
-	device.tail += length;
-
-	return(0);
-}
-
-int bkr_device_flush(jiffies_t bailout)
-{
-	bkr_device_write(bytes_in_buffer(), 0, bailout);
-	fflush(stdout);
-	return(0);
 }

@@ -1,3 +1,9 @@
+1.104 (2001/3/4)
+	Split bkrencode's standard I/O device layer into a separate file.
+	This faciliates its use in a new utility (TBA).  Also cleaned up
+	bkrencode and it's I/O layer a bit... might be a bit faster now but
+	I've never benchmarked it so I can't tell.
+
 1.103 (2001/2/20)
 	Brought the utilities in line with the new /dev layout.  This
 	included deleting bkrmode.

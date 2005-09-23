@@ -22,6 +22,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <gtk/gtk.h>
 
@@ -29,11 +30,12 @@
 
 
 #define  PROGRAM_NAME    "bkrmonitor"
-#define  PROC_ENTRY      "/proc/driver/backer"
-#define  DEFAULT_UPDATE  50                     /* milliseconds */
+#define  DEFAULT_UPDATE  100                    /* milliseconds */
 #define  MIN_UPDATE      20                     /* milliseconds */
 #define  DECAY_INTERVAL  60                     /* sectors */
-#define  MAX_UNITS       3
+
+#define  __STRINGIFY(x)  #x
+#define  STRINGIFY(x)    __STRINGIFY(x)
 
 
 /*
@@ -49,7 +51,7 @@ void  read_proc(FILE *);
  */
 
 FILE  *procfile = NULL;
-int  update_interval = -1;
+int  update_interval = DEFAULT_UPDATE;
 int  monitor_device = 0;
 struct
 	{
@@ -57,8 +59,8 @@ struct
 	GtkWidget  *vmode, *density, *format;
 	GtkWidget  *sector;
 	GtkWidget  *total;
-	GtkWidget  *symbol, *block, *frame, *overrun, *underflow;
-	GtkWidget  *worst, *best, *least, *most;
+	GtkWidget  *symbol, *block, *frame, *overrun, *underrun;
+	GtkWidget  *worst, *best, *smallest, *largest;
 	GtkWidget  *buffer_status;
 	} widgets;
 struct
@@ -70,22 +72,23 @@ struct
 struct
 	{
 	char  state[sizeof("suspended")];
-	unsigned int   mode;
-	unsigned long  sector_number;
-	unsigned int   total_errors;
-	unsigned int   worst_block;
-	unsigned int   parity;
-	unsigned int   recent_block;
-	unsigned int   bad_blocks;
-	unsigned int   frame_errors;
-	unsigned int   overrun_errors;
-	unsigned int   underflow_errors;
-	unsigned int   worst_key;
-	unsigned int   best_nonkey;
-	unsigned int   least_skipped;
-	unsigned int   most_skipped;
-	unsigned int   bytes_in_buffer;
-	unsigned int   buffer_size;
+	unsigned int  mode;
+	int  sector_number;
+	unsigned int  total_errors;
+	unsigned int  worst_block;
+	unsigned int  parity;
+	unsigned int  recent_block;
+	unsigned int  bad_blocks;
+	unsigned int  frame_errors;
+	unsigned int  overrun_errors;
+	unsigned int  underrun_errors;
+	unsigned int  worst_key;
+	unsigned int  max_key_weight;
+	unsigned int  best_nonkey;
+	unsigned int  smallest_field;
+	unsigned int  largest_field;
+	unsigned int  bytes_in_buffer;
+	unsigned int  buffer_size;
 	} proc_data;
 
 
@@ -111,10 +114,10 @@ int main(int argc, char *argv[])
 		switch(i)
 			{
 			case 'd':
-			if(optarg[0] == 's')
+			if(!strcmp(optarg, "stdin"))
 				{
 				procfile = stdin;
-				monitor_device = 0;
+				monitor_device = -1;
 				}
 			else
 				{
@@ -132,26 +135,29 @@ int main(int argc, char *argv[])
 			puts(
 	"Usage:  " PROGRAM_NAME " [options]\n" \
 	"the following options are recognized:\n" \
-	"       -d num      Monitor device number num (default 0, \"s\" = stdin)\n" \
-	"       -t num      Set the update interval to num milliseconds\n" \
-	"       -h          Display usage");
+	"	-d num      Monitor device number num (default 0, \"stdin\" = stdin)\n" \
+	"	-t num      Set the update interval to num milliseconds\n" \
+	"	-h          Display usage");
 			exit(1);
 			}
 	if(update_interval < MIN_UPDATE)
-		update_interval = DEFAULT_UPDATE;
+		update_interval = MIN_UPDATE;
 
 	/*
 	 * Open proc file and get initial data.
 	 */
 
-	if(procfile == NULL)
-		procfile = fopen(PROC_ENTRY, "r");
-	if(procfile == NULL)
+	if(monitor_device >= 0)
 		{
-		perror(PROGRAM_NAME " : " PROC_ENTRY);
-		exit(1);
+		sprintf(message, PROGRAM_NAME ": /proc/sys/dev/backer/%u/status", monitor_device);
+		procfile = fopen(message + sizeof(PROGRAM_NAME ":"), "r");
+		if(procfile == NULL)
+			{
+			perror(message);
+			exit(1);
+			}
+		read_proc(procfile);
 		}
-	read_proc(procfile);
 
 	/*
 	 * Create the program's window
@@ -161,7 +167,10 @@ int main(int argc, char *argv[])
 
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_policy(GTK_WINDOW(window), FALSE, FALSE, TRUE);
-	sprintf(message, "Backer Monitor (Unit %u)", monitor_device);
+	if(monitor_device >= 0)
+		sprintf(message, "Backer Monitor (Unit %u)", monitor_device);
+	else
+		sprintf(message, "Backer Monitor (stdin)");
 	gtk_window_set_title(GTK_WINDOW(window), message);
 	gtk_container_set_border_width(GTK_CONTAINER(window), 7);
 	gtk_signal_connect(GTK_OBJECT(window), "destroy", GTK_SIGNAL_FUNC(gtk_exit), NULL);
@@ -221,9 +230,9 @@ int main(int argc, char *argv[])
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
 	widget = gtk_label_new("Framing Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 4, 5);
-	widget = gtk_label_new("Overrun Errors");
+	widget = gtk_label_new("Over-run Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 5, 6);
-	widget = gtk_label_new("Underflows Detected");
+	widget = gtk_label_new("Under-runs");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 6, 7);
 
 	widgets.sector = gtk_label_new("0");
@@ -244,8 +253,8 @@ int main(int argc, char *argv[])
 	widgets.overrun = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 5, 6);
 
-	widgets.underflow = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 6, 7);
+	widgets.underrun = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underrun, 1, 2, 6, 7);
 
 	/* Health information */
 
@@ -256,22 +265,22 @@ int main(int argc, char *argv[])
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
 	widget = gtk_label_new("Closest Non-Key");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
-	widget = gtk_label_new("Least Skipped");
+	widget = gtk_label_new("Smallest Video Field");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 2, 3);
-	widget = gtk_label_new("Most Skipped");
+	widget = gtk_label_new("Largest Video Field");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
 
-	widgets.worst = gtk_label_new("0");
+	widgets.worst = gtk_label_new("  0/???");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.worst, 1, 2, 0, 1);
 
-	widgets.best = gtk_label_new("0");
+	widgets.best = gtk_label_new("  0/???");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.best, 1, 2, 1, 2);
 
-	widgets.least = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.least, 1, 2, 2, 3);
+	widgets.smallest = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.smallest, 1, 2, 2, 3);
 
-	widgets.most = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.most, 1, 2, 3, 4);
+	widgets.largest = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.largest, 1, 2, 3, 4);
 
 	/* Errors and I/O buffer bar graphs */
 
@@ -331,11 +340,15 @@ gint update_status(gpointer data)
 	switch(BKR_VIDEOMODE(proc_data.mode))
 		{
 		case BKR_NTSC:
-		gtk_label_set_text(GTK_LABEL(widgets.vmode), "NSTC");
+		gtk_label_set_text(GTK_LABEL(widgets.vmode), "NTSC");
 		break;
 
 		case BKR_PAL:
 		gtk_label_set_text(GTK_LABEL(widgets.vmode), "PAL");
+		break;
+
+		default:
+		gtk_label_set_text(GTK_LABEL(widgets.vmode), "???");
 		break;
 		}
 
@@ -347,6 +360,10 @@ gint update_status(gpointer data)
 
 		case BKR_LOW:
 		gtk_label_set_text(GTK_LABEL(widgets.density), "LOW");
+		break;
+
+		default:
+		gtk_label_set_text(GTK_LABEL(widgets.vmode), "???");
 		break;
 		}
 
@@ -362,6 +379,10 @@ gint update_status(gpointer data)
 
 		case BKR_EP:
 		gtk_label_set_text(GTK_LABEL(widgets.format), "EP");
+		break;
+
+		default:
+		gtk_label_set_text(GTK_LABEL(widgets.vmode), "???");
 		break;
 		}
 
@@ -382,7 +403,7 @@ gint update_status(gpointer data)
 	gtk_progress_set_value(GTK_PROGRESS(error_rate.widget), error_rate.rate);
 	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), proc_data.bytes_in_buffer);
 
-	sprintf(text, "%lu", proc_data.sector_number);
+	sprintf(text, "%+09d", proc_data.sector_number);
 	gtk_label_set_text(GTK_LABEL(widgets.sector), text);
 
 	sprintf(text, "%u", proc_data.total_errors);
@@ -400,20 +421,20 @@ gint update_status(gpointer data)
 	sprintf(text, "%u", proc_data.overrun_errors);
 	gtk_label_set_text(GTK_LABEL(widgets.overrun), text);
 
-	sprintf(text, "%u", proc_data.underflow_errors);
-	gtk_label_set_text(GTK_LABEL(widgets.underflow), text);
+	sprintf(text, "%u", proc_data.underrun_errors);
+	gtk_label_set_text(GTK_LABEL(widgets.underrun), text);
 
-	sprintf(text, "%u", proc_data.worst_key);
+	sprintf(text, "%3u/%-3u", proc_data.worst_key, proc_data.max_key_weight);
 	gtk_label_set_text(GTK_LABEL(widgets.worst), text);
 
-	sprintf(text, "%u", proc_data.best_nonkey);
+	sprintf(text, "%3u/%-3u", proc_data.best_nonkey, proc_data.max_key_weight);
 	gtk_label_set_text(GTK_LABEL(widgets.best), text);
 
-	sprintf(text, "%u", proc_data.least_skipped);
-	gtk_label_set_text(GTK_LABEL(widgets.least), text);
+	sprintf(text, "%u", proc_data.smallest_field);
+	gtk_label_set_text(GTK_LABEL(widgets.smallest), text);
 
-	sprintf(text, "%u", proc_data.most_skipped);
-	gtk_label_set_text(GTK_LABEL(widgets.most), text);
+	sprintf(text, "%u", proc_data.largest_field);
+	gtk_label_set_text(GTK_LABEL(widgets.largest), text);
 
 	return(TRUE);
 }
@@ -427,43 +448,36 @@ gint update_status(gpointer data)
 
 void read_proc(FILE *file)
 {
-	int unit;
-
-	while(!feof(file) && !ferror(file))
-		{
-		fscanf(file, "%*17c%u %s\n"
-		             "%*17c%u\n"
-		             "%*17c%lu\n"
-		             "%*17c%u\n"
-		             "%*17c%u / %u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u\n"
-		             "%*17c%u / %u\n",
-		       &unit, proc_data.state,
-		       &proc_data.mode,
-		       &proc_data.sector_number,
-		       &proc_data.total_errors,
-		       &proc_data.worst_block, &proc_data.parity,
-		       &proc_data.recent_block,
-		       &proc_data.bad_blocks,
-		       &proc_data.frame_errors,
-		       &proc_data.overrun_errors,
-		       &proc_data.underflow_errors,
-		       &proc_data.worst_key,
-		       &proc_data.best_nonkey,
-		       &proc_data.least_skipped,
-		       &proc_data.most_skipped,
-		       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
-		if(unit == monitor_device)
-			break;
-		}
+	fscanf(file, "%*17c%s\n"
+	             "%*17c%u\n"
+	             "%*17c%d\n"
+	             "%*17c%u\n"
+	             "%*17c%u / %u\n"
+	             "%*17c%u\n"
+	             "%*17c%u\n"
+	             "%*17c%u\n"
+	             "%*17c%u\n"
+	             "%*17c%u\n"
+	             "%*17c%u / %u\n"
+	             "%*17c%u\n"
+	             "%*17c%u\n"
+	             "%*17c%u\n"
+	             "%*17c%u / %u\n",
+	       proc_data.state,
+	       &proc_data.mode,
+	       &proc_data.sector_number,
+	       &proc_data.total_errors,
+	       &proc_data.worst_block, &proc_data.parity,
+	       &proc_data.recent_block,
+	       &proc_data.bad_blocks,
+	       &proc_data.frame_errors,
+	       &proc_data.overrun_errors,
+	       &proc_data.underrun_errors,
+	       &proc_data.worst_key, &proc_data.max_key_weight,
+	       &proc_data.best_nonkey,
+	       &proc_data.smallest_field,
+	       &proc_data.largest_field,
+	       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
 	fseek(file, 0L, SEEK_SET);
 
 	return;

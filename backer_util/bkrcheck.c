@@ -20,8 +20,6 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -30,7 +28,7 @@
 
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
-#include <sys/stat.h>
+#include <sys/poll.h>
 #include <sys/termios.h>
 
 #include "backer.h"
@@ -40,33 +38,97 @@
 #define  PROGRAM_NAME  "bkrcheck"
 
 /*
- * Function prototypes
- */
-
-void  gen_formated(void);
-void  gen_raw(void);
-
-/*
  * To hell with it... just make stuff global.
  */
 
 int  length;
-int  sector_capacity;
-int  bytes_per_line;
 unsigned char  *data;
 struct mtget  mtget;
 bkr_format_info_t  format_info[] = BKR_FORMAT_INFO_INITIALIZER;
-bkr_format_info_t  *fmt = NULL;
+bkr_format_info_t  *fmt;
 char  *devname = DEFAULT_DEVICE;
 
+
+/*
+ * Formated mode test
+ */
+
+void gen_formated(void)
+{
+	int  frames, sector_capacity;
+
+	frames = BKR_BUFFER_SIZE/fmt->frame_size;
+	sector_capacity = bkr_sector_capacity(fmt);
+
+	printf("\nFormat Parameters:\n" \
+	       "\tBuffer capacity:   %u frames (%.1f seconds)\n" \
+	       "\tVideo field size:  %u bytes\n" \
+	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
+	       "\tData rate:         %u bytes/second\n" \
+	       "\nWriting '\\0's to %s...  ",
+	       frames, frames / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 30.0 : 25.0),
+	       fmt->field_size,
+	       sector_capacity, 100.0*sector_capacity/fmt->field_size,
+	       sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50),
+	       devname);
+
+	length = sector_capacity;
+	data = (unsigned char *) malloc(length);
+	memset(data, 0, length);
+}
+
+
+/*
+ * Raw mode test
+ */
+
+void gen_raw(void)
+{
+	int i, j;
+
+	i = BKR_BUFFER_SIZE/fmt->frame_size;
+
+	printf("\nFormat Parameters:\n" \
+	       "\tBuffer capacity:   %u frames (%.1f seconds)\n" \
+	       "\tVideo frame size:  %u bytes\n" \
+	       "\tData rate:         %u bytes/second\n" \
+	       "\nWriting test pattern to %s...  ",
+	       i, i / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 30.0 : 25.0),
+	       fmt->frame_size,
+	       fmt->frame_size * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 30 : 25),
+	       devname);
+
+	length = fmt->frame_size;
+	data = (unsigned char *) malloc(length);
+	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
+		{
+		case BKR_PAL:
+		for(i = 0; i < length/2; i++)
+			data[i] = i/fmt->bytes_per_line + 1;
+		for(j = 0; i < length; i++, j++)
+			data[i] = j/fmt->bytes_per_line + 1;
+		break;
+
+		case BKR_NTSC:
+		for(i = 0; i < (length+fmt->bytes_per_line)/2; i++)
+			data[i] = i/fmt->bytes_per_line + 1;
+		for(j = 0; i < length; i++, j++)
+			data[i] = j/fmt->bytes_per_line + 1;
+		break;
+		}
+}
+
+
+/*
+ * Entry point.
+ */
 
 int main(int argc, char *argv[])
 {
 	int  i;
 	struct termios oldterm, newterm;
-	struct stat stats = { st_size : -1 };
-	double  time;
 	int  term, outfile;
+	char  msg[100];
 
 	/*
 	 * Opening banner
@@ -88,19 +150,12 @@ int main(int argc, char *argv[])
 			case 'h':
 			default:
 			puts(
-	"Usage:  bkrcheck [options] [filname]\n" \
+	"Usage:  bkrcheck [options]\n" \
 	"the following options are recognized:\n" \
 	"	-f devname   Use device devname (default " DEFAULT_DEVICE ")\n" \
-	"	-h           Display usage\n" \
-	"	filename     Calculate tape required for filename (incl. BOR + EOR)");
+	"	-h           Display usage");
 			exit(1);
 			break;
-			}
-	if(optind < argc)
-		if(stat(argv[optind], &stats) < 0)
-			{
-			perror(PROGRAM_NAME);
-			exit(1);
 			}
 
 	/*
@@ -110,58 +165,17 @@ int main(int argc, char *argv[])
 	outfile = open(devname, O_WRONLY);
 	if(outfile < 0)
 		{
-		perror(PROGRAM_NAME);
+		sprintf(msg, PROGRAM_NAME ": %s", devname);
+		perror(msg);
 		exit(1);
 		}
 	ioctl(outfile, MTIOCGET, &mtget);
 
-	if(BKR_DENSITY(mtget.mt_dsreg) == BKR_HIGH)
-		bytes_per_line = BYTES_PER_LINE_HIGH;
-	else
-		bytes_per_line = BYTES_PER_LINE_LOW;
-
-	if(BKR_FORMAT(mtget.mt_dsreg) == BKR_RAW)
-		{
-		fmt = &format_info[bkr_mode_to_format((mtget.mt_dsreg & ~BKR_FORMAT(-1)) | BKR_SP)];
-		fmt->video_size *= 2;
-		if(BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC)
-			fmt->video_size += bytes_per_line;
-		}
-	else
-		{
-		fmt = &format_info[bkr_mode_to_format(mtget.mt_dsreg)];
-		sector_capacity = bkr_sector_capacity(fmt);
-		}
+	fmt = &format_info[bkr_mode_to_format(mtget.mt_dsreg)];
 
 	puts("\nDevice Mode:");
-	bkr_display_mode(mtget.mt_dsreg);
+	bkr_display_mode(stderr, mtget.mt_dsreg);
 
-	/*
-	 * If we are computing a tape length, do so and quit.
-	 */
-
-	if(stats.st_size != -1)
-		{
-		if(BKR_FORMAT(mtget.mt_dsreg) == BKR_RAW)
-			{
-			i = fmt->video_size/2;
-			time = 0;
-			}
-		else
-			{
-			i = sector_capacity;
-			time = BOR_LENGTH + EOR_LENGTH;
-			}
-
-		time += rint((double) stats.st_size / i / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
-
-		printf("\n%s will occupy %dh:", argv[optind], (int) floor(time / 3600.0));
-		time = fmod(time, 3600.0);
-		printf("%02dm:", (int) floor(time / 60.0));
-		time = fmod(time, 60.0);
-		printf("%02ds of tape.\n\n", (int) rint(time));
-		exit(0);
-		}
 
 	/*
 	 * Adjust terminal mode
@@ -169,7 +183,7 @@ int main(int argc, char *argv[])
 
 	if((term = open("/dev/tty", O_RDWR)) < 0)
 		{
-		perror(PROGRAM_NAME": /dev/tty");
+		perror(PROGRAM_NAME ": /dev/tty");
 		exit(1);
 		}
 	ioctl(term, TCGETS, &oldterm);
@@ -191,13 +205,13 @@ int main(int argc, char *argv[])
 	 * Dump data until 'q' is pressed.
 	 */
 
+	sprintf(msg, PROGRAM_NAME ": %s", devname);
 	puts("Press 'q' to quit.");
 	do
 		{
-		i = write(outfile, data, length);
-		if(i < 0)
+		if(write(outfile, data, length) < 0)
 			{
-			perror(PROGRAM_NAME);
+			perror(msg);
 			break;
 			}
 		}
@@ -213,63 +227,4 @@ int main(int argc, char *argv[])
 	close(outfile);
 	free(data);
 	exit(0);
-}
-
-
-/*
- * Formated mode test
- */
-
-void gen_formated()
-{
-	printf("\nFormat Parameters:\n" \
-	       "\tBuffer capacity:   %u frames\n" \
-	       "\tVideo field size:  %u bytes\n" \
-	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
-	       "\tData rate:         %u bytes/second\n\n" \
-	       "Writing '\\0's to %s...  ",
-	       65536/fmt->video_size/2,
-	       fmt->video_size,
-	       sector_capacity, 100.0*sector_capacity/fmt->video_size,
-	       sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50),
-	       devname);
-
-	length = sector_capacity;
-	data = (unsigned char *) malloc(length);
-	memset(data, 0, length);
-}
-
-
-/*
- * Raw mode test
- */
-
-void gen_raw(void)
-{
-	int i, j;
-
-	printf("\nFormat Parameters:\n" \
-	       "\tBuffer capacity:   %u frames\n" \
-	       "\tVideo frame size:  %u bytes\n",
-	       65536/fmt->video_size,
-	       fmt->video_size);
-
-	length = fmt->video_size;
-	data = (unsigned char *) malloc(length);
-	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
-		{
-		case BKR_PAL:
-		for(i = 0; i < length/2; i++)
-			data[i] = i/bytes_per_line + 1;
-		for(j = 0; i < length; i++, j++)
-			data[i] = j/bytes_per_line + 1;
-		break;
-
-		case BKR_NTSC:
-		for(i = 0; i < (length+bytes_per_line)/2; i++)
-			data[i] = i/bytes_per_line + 1;
-		for(j = 0; i < length; i++, j++)
-			data[i] = j/bytes_per_line + 1;
-		break;
-		}
 }

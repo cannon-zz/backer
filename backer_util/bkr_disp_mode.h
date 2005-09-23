@@ -20,4 +20,11 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-void bkr_display_mode(unsigned int);
+#ifndef _BKR_DISP_MODE_H
+#define _BKR_DISP_MODE_H
+
+#include <stdio.h>
+
+void bkr_display_mode(FILE *, unsigned int);
+
+#endif /* _BKR_DISP_MODE_H */

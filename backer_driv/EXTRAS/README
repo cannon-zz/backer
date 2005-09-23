@@ -9,29 +9,52 @@ format.gnumeric
 ===============
 
 In version 3.1 of the driver, the code for calculating the format
-parameters in backer_fmt.c was replaced with a look-up table.
-format.gnumeric is a Gnumeric spread sheet for computing the format
-parameters allowing new, consistent, look-up tables to be produced.  This
-will be needed by anyone who wishes to experiment with the tape format.
-When the spread sheet is loaded, you will see two worksheets.  The first
-sheet contains some initial data and extra calculations of interest.  The
-second sheet corresponds to the data table in backer_fmt.h.
+parameters in backer_fmt.c was replaced with a look-up table.  In 3.101 the
+ability to dynamically load format tables into the driver on a
+device-by-device basis was added.  format.gnumeric is a Gnumeric spread
+sheet for computing the format parameters allowing new, consistent, look-up
+tables to be produced.  This will be needed by anyone who needs to
+customize the tape format for their video equipment or who needs to work
+around a faulty Backer device.
 
-The columns shaded in green are the columns that can be adjusted.  The
-other columns must not be edited directly because they are either computed
-parameters or are determined by the Backer device's hardware
-characteristics.
+The columns shaded in green are the columns that are meant to be adjusted.
+The other columns must not be edited directly because they are either
+computed parameters or are determined by the Backer device's hardware
+characteristics.  In extreme cases, you might find that you need to edit
+the "Even Field Size" and "Interlace" columns.  Faulty Backers have been
+observed that generate the wrong number of lines per video field.  These
+can be brought back to life, so to speak, by loading a custom format into
+the driver to work around the problem.
 
 When adjusting numbers, the columns to pay particular attention to are the
 "Buffer Size" and the "Data Size" columns.  Both must be integers.
 
-If you edit the numbers and want to modify backer_fmt.h, follow these
-steps.  Select "Save As" from the "File" menu and for "File format" select
-"Text File Export".  Enter a file name and click "OK".  Add Sheet2 to the
-"Sheets to export" list and click "Next".  For the "Separator" select
-"Space" and for "Quoting" select "Never" then click "Finish".  You now have
-a text file but you'll have to open it in a text editor and delete the
-first line which contains the column headings.  Finally, you'll also have
-to delete the "Parity" column.  After doing those three things, you should
-have a text file that can be pasted directly into backer_fmt.h but you
-might want to do some more editing to make it look nice.
+Once a format table has been arrived at, there are two options for loading
+it into the driver and both techniques require an ASCII copy of the
+contents of the Gnumeric work sheet.  To dump the work sheet to an ASCII
+file, follow these steps.  Select "Save As" from the "File" menu and for
+"File format" select "Text File Export".  Enter a file name and click "OK".
+Add "Sheet1" to the "Sheets to export" list and click "Next".  For the
+"Separator" select "Space" and for "Quoting" select "Never" then click
+"Finish".  You now have the work sheet in ASCII form but you will have to
+open it in a text editor and perform some modifications before it can be
+used.  You must delete the first line (containing the column headings) as
+well as all text prior to the first open brace ("{") on each line.
+Finally, the "Parity" column must be deleted along with the extra comma.
+
+If you wish to use the new format table as the global default for the
+driver, replace the table in backer.h with the new table and recompile the
+driver and utilities.  Note that after doing the editing described above,
+the ASCII dump of the work sheet will already contain the commas and braces
+needed for proper C syntax so no further editing is necessary.
+
+If you wish to load the table into the driver at runtime (for example to
+use it with only one specific Backer device) then all braces and commas
+must be removed from the file leaving nothing but 180 numbers.  To load
+this table into the driver, simply copy it to the appropriate format_table
+file in the /proc filesystem.  For example:
+
+	cp format.txt /proc/sys/dev/backer/0/format_table
+
+to replace device number 0's format table with the new one.  The new table
+will take effect at the start of the next data transfer.

@@ -1,27 +1,26 @@
-                            WORKING WITH THE DRIVER
-                            =======================
+                               INTRODUCTION
+                               ============
 
+A Linux 2.4.x device driver for the Backer tape backup devices manufactured
+by Danmere Technologies Inc. (now 4-TV).
+
+
+
+                          WORKING WITH THE DRIVER
+                          =======================
 
 See INSTALL for instructions on compiling, installing and loading the
 driver.
 
 See the man pages in DOCUMENTATION/ for information about the driver
-itself.  You can run a file through man by specifying it on the command
-line eg.
+itself.  Note that you can view a specific man page by naming the file on
+the command line eg.
 
-		man ./backer.4
+	$ man ./backer.4
 
-(the ./ is needed so man knows to look for a file by this name rather than
-a man page).
-
-
-NOTE:
------
-
-THE EXTERNAL, PARALLEL PORT, VERSION OF THE BACKER DEVICE IS NOT SUPPORTED
-AT THIS TIME.  The beginnings of a low-level module for external Backer
-support is included with this driver and the documentation explains its use
-but it does not work.  DO NOT SCREW WITH IT.  You've been warned.
+NOTE:  ALTHOUGH THE backer_parport MODULE IS DISTRIBUTED WITH THIS PACKAGE
+AND THE DOCUMENTATION DESCRIBES ITS USE, IT HAS NOT BEEN TESTED AND
+PROBABLY DOES NOT WORK.
 
 
 TROUBLESHOOTING
@@ -31,38 +30,66 @@ WON'T COMPILE.  Well... it compiles just fine on my own machine so it would
 help if you could find the problem and let me know what it was.  Otherwise
 you'd better just contact me and we'll have to sort it out.
 
+
 DRIVER WON'T LOAD.  Be sure you are logged in as root.  Check
 /var/log/messages for complaints about unavailable resources.  If there's a
 problem reserving a DMA buffer, try freeing some memory or rebooting your
 system and loading the driver soon after start-up.
 
+
 DRIVER LOADS BUT YOU CAN'T OPEN THE DEVICE FILES.  If the error message is
 "Permission denied" then check the permissions of the /dev entries.  They
-must allow you access them.  Be sure that at least one of the low-level
+must allow you to access them.  Be sure that at least one of the low-level
 modules is loaded.  Make sure that the minor numbers for the device files
 correspond to the correct unit number (see the man page for the mapping of
 minor numbers to unit numbers).
+
 
 YOU CAN OPEN THE DEVICE BUT YOU CAN'T TRANSFER DATA.  As above, make sure
 the minor numbers for the device files actually correspond to a valid unit.
 Do the following test to see what error message you see
 
-	cat /dev/zero > /dev/tape
+	$ cat /dev/zero > /dev/tape
 
 If you see "Device or resource busy" then check to see that no other
 process is transferring data and that the DMA channel is available (check
-/proc/dma).  If you see "Connection timed out" then make sure the driver is
-configured for the correct DMA channel.  If you see "Out of memory" then
-your system has run out of memory.
+/proc/dma).  If you see "Out of memory" then your system has run out of
+memory.
 
-YOU GET MANY ERRORS WHEN READING TAPES.  Is the tape you are using of good
-quality?  Are your video cables OK?  Generally if the picture you see on TV
-while recording looks nice and crisp then the cables are fine.  Is your
-computer fast enough to process the data in real time?  This can be checked
-by seeing if your problems go away when you use bkrencode to process the
-data stream offline.  It might be that the data format is not appropriate
-for your video equipment.  If you have Gnumeric, you can use the work sheet
-provided in the EXTRAS/ directory to experiment with different format
-parameters.  It's best to only re-compile bkrencode at first and test your
-changes with it then re-compile the driver when you know the new format
-works.
+
+YOU GET MANY ERRORS WHEN READING TAPES.  Here are some common causes of
+read errors:
+
+	-Poor quality, worn, or damaged video tape.  Try using a good
+	 quality, never-before-used, tape and see if that improves things.
+	-Dirty video heads.  This can be checked by playing a commercial
+	 video (eg. a purchased movie) or any other tape known to have a
+	 high-quality video signal recorded on it.  If the picture looks
+	 crisp and clear then the heads are clean.
+	-Poor quality video cables.  Make sure you are using real video
+	 cables and not audio cables (both use the same RCA connectors).
+	 Generally video cables are thicker and consist of a single
+	 cylindrical wire while audio cables might have two wires (bonded
+	 together) coming out of *each* plug.  Also, for some reason the
+	 video cables I've seen tend to have the colour yellow involved one
+	 way or another while audio cables have the colours red and white.
+	-Power line noise.  Spikes on the power line will propogate through
+	 the VCR and be recorded as a horizontal bar in the video image.
+	 They will also corrupt the signal during playback.  Do not engage
+	 or disengage heavy duty electrical equipment on the same circuit
+	 that your VCR and computer are plugged into.  Especially do not
+	 turn on or off any device with electric motors or large
+	 transformers on the same circuit (these include electric fans,
+	 television sets, and flourescent lights).  Note that the problem
+	 is only in turning them on and off --- it is find to have them
+	 plugged into the same circuit and even to use them.
+	-Static discharge.  As above, static discharges in the vicinity of
+	 the computer or VCR can interfere with the video signal.  It helps
+	 to have both the computer and VCR plugged into the same outlet and
+	 to have as short a video cable connecting them as possible.
+
+If you have assured yourself that none of these problems apply to you, it
+is possible that the video format used by this software is not suitable for
+your video equipment.  I have only my own equipment to test the software
+with and my equipment might not be representative.  Please contact me and
+we can discuss the problem.

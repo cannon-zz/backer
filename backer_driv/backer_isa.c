@@ -26,15 +26,17 @@
 #include <linux/module.h>
 #include <linux/init.h>
 
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/list.h>
-#include <linux/malloc.h>
 #include <linux/pci.h>
+#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/types.h>
 #include <linux/vmalloc.h>
+#include <linux/wait.h>
 
 #include <asm/dma.h>
 #include <asm/io.h>
@@ -42,13 +44,6 @@
 #include "backer.h"
 #include "backer_device.h"
 #include "backer_unit.h"
-
-
-/*
- * WORKAROUND defined == enable work-arounds & disable experimental code
- */
-
-#define  WORKAROUND
 
 
 /*
@@ -61,11 +56,12 @@ MODULE_AUTHOR("Kipp Cannon (kcannon@users.sourceforge.net)");
 MODULE_DESCRIPTION("Backer 16 & 32 device driver --- ISA device support");
 MODULE_SUPPORTED_DEVICE("backer_isa");
 
-#define  BKR_MAX_INSMOD_DEVICES  3
-#define  BKR_MAX_INSMOD_OPTIONS  6	/* must do this manually */
-static int  isa[2*BKR_MAX_INSMOD_DEVICES] __initdata = { };
-MODULE_PARM(isa, "2-" __MODULE_STRING(BKR_MAX_INSMOD_OPTIONS) "i");
-MODULE_PARM_DESC(isa, "isa=port,dma[,port,dma...]");
+static char  *units = "";
+MODULE_PARM(units, "s");
+MODULE_PARM_DESC(units, "units=port:dma[:port:dma...]");
+
+static int  adjust = 0;
+MODULE_PARM(adjust, "i");
 
 EXPORT_NO_SYMBOLS;
 
@@ -74,20 +70,31 @@ EXPORT_NO_SYMBOLS;
  * ========================================================================
  *                         Constants/macros/etc.
  * ========================================================================
+ *
+ * In order to guarantee that data starts on the first available line of
+ * video, the Backer hardware needs the driver to pause between writing the
+ * configuration byte and starting the data transfer.  On my hardware this
+ * pause must be between 546 +/- 2 microseconds and 608 +/- 2 microseconds
+ * inclusively for NTSC.  This range corresponds, within error, to 8.5
+ * through 9.5 line periods for NTSC.
+ *							-Kipp
  */
 
 #define  MODULE_NAME            "backer_isa"
 #define  DMA_IO_TO_MEM          0x14    /* demand mode, inc addr, auto-init */
 #define  DMA_MEM_TO_IO          0x18    /* demand mode, inc addr, auto-init */
-#define  DMA_HOLD_OFF           0x01ff  /* stay this far back from transfer */
 #define  DMA_BUFFER_SIZE        65536   /* must match dma_offset_t */
-#define  MAX_UPDATE_FREQ        10      /* max DMA update rate in Hz */
-#define  MIN_SYNC_FREQ          50      /* min sync frequency in Hz */
+#define  DMA_HOLD_OFF           0x01ff  /* stay this far back from transfer */
+#define  MIN_SYNC_FREQUENCY     50      /* min horiz sync frequency in Hz */
+#define  MIN_FRAME_FREQUENCY    20      /* min frame rate in Hz */
+#define  MAX_ADJUST_MAGNITUDE   (4 * BKR_LINE_PERIOD)
 #define  INTERNAL_BUFFER        4
 
-#if (MAX_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
-#error "One of the FREQ parameters is too high"
+#if (MIN_SYNC_FREQUENCY > HZ/2) || (MIN_FRAME_FREQUENCY > HZ/2)
+#error "One of the *_FREQUENCY parameters is too high"
 #endif
+
+#define  STRUCT_FROM_MEMBER(type, member, addr)  (type *) ((void *) addr - ((void *) &((type *) NULL)->member - NULL))
 
 
 /*
@@ -103,15 +110,15 @@ static char bkr_isa_resource_name[] = "Danmere Technologies Inc. Backer Tape Int
 
 typedef struct
 	{
-	unsigned char  *buffer;         /* location of DMA buffer */
-	unsigned int  size;             /* DMA buffer in use */
-	dma_offset_t  head;             /* DMA buffer head */
-	dma_offset_t  tail;             /* DMA buffer tail */
-	unsigned int  ioport;           /* I/O port */
+	unsigned char  *dma_buffer;     /* DMA buffer */
+	unsigned int  dma_size;         /* DMA buffer in use */
+	dma_offset_t  dma_head;         /* DMA buffer head */
+	dma_offset_t  dma_tail;         /* DMA buffer tail */
+	struct resource  ioresource;    /* I/O port */
 	unsigned int  dma;              /* DMA channel number */
 	dma_addr_t  dma_addr;           /* DMA buffer's bus address */
-	int  error;                     /* pending error */
 	struct timer_list  timer;       /* data mover timer entry */
+	int  adjust;                    /* adjustment to start-up pause */
 	} bkr_isa_private_t;
 
 
@@ -146,36 +153,30 @@ static inline int get_dreq_status(unsigned int dmanr)
 /*
  * update_dma_offset()
  *
- * Retrieves the offset within the DMA buffer at which the next transfer
- * will occur.  During read operations this is the buffer's head; during
- * write operations it is the tail.  Returns 0 on success, -EAGAIN if no
- * DMA activity is detected.
+ * Waits for a high-to-low transition of the DREQ status bit then retrieves
+ * the offset within the DMA buffer at which the next transfer will occur.
+ * During read operations this is the buffer's head; during write
+ * operations it is the tail.
  *
  * NOTE:  the low byte retrieved by this function is not reliable and this
  * should be compensated for by leaving a "hold off" allowance.
  */
 
-static int update_dma_offset(bkr_isa_private_t *isa, dma_offset_t *offset)
+static void update_dma_offset(bkr_isa_private_t *private, dma_offset_t *offset)
 {
 	unsigned long  flags;
 	jiffies_t  bailout;
+	int  dma = private->dma;
 
-	bailout = jiffies + HZ/MIN_SYNC_FREQ;
+	bailout = jiffies + HZ/MIN_SYNC_FREQUENCY;
 
-	while(!get_dreq_status(isa->dma))
-		 if(time_after_eq(jiffies, bailout))
-			return(-EAGAIN);
-
-	while(get_dreq_status(isa->dma))
-		if(time_after_eq(jiffies, bailout))
-			return(-EAGAIN);
+	while(!get_dreq_status(dma) && time_before(jiffies, bailout));
+	while(get_dreq_status(dma) && time_before(jiffies, bailout));
 
 	flags = claim_dma_lock();
-	clear_dma_ff(isa->dma);
-	*offset = isa->size - get_dma_residue(isa->dma);
+	clear_dma_ff(dma);
+	*offset = private->dma_size - get_dma_residue(dma);
 	release_dma_lock(flags);
-
-	return(0);
 }
 
 
@@ -197,67 +198,61 @@ static int update_dma_offset(bkr_isa_private_t *isa, dma_offset_t *offset)
 static void bkr_isa_do_move(unsigned long data)
 {
 	int  tmp, count;
-	bkr_device_t  *device = (bkr_device_t *) data;
-	bkr_isa_private_t  *isa = (bkr_isa_private_t *) device->private;
+	bkr_unit_t  *unit = (bkr_unit_t *) data;
+	bkr_device_t  *device = &unit->device;
+	bkr_isa_private_t  *private = (bkr_isa_private_t *) device->private;
 
 	switch(device->state)
 		{
 		case BKR_READING:
-		isa->error = update_dma_offset(isa, &isa->head);
-
-		count = bytes_in_buffer(isa->head, isa->tail, isa->size);
-		count -= DMA_HOLD_OFF;
+		update_dma_offset(private, &private->dma_head);
+		count = bytes_in_buffer(private->dma_head, private->dma_tail, private->dma_size) - DMA_HOLD_OFF;
 		if(count < 0)
 			count = 0;
-		tmp = space_in_buffer(device->head, device->tail, device->size);
+		tmp = space_in_buffer(device->io_head, device->io_tail, device->io_size);
 		if(count > tmp)
 			count = tmp;
-		tmp = isa->size - isa->tail;
+		tmp = private->dma_size - private->dma_tail;
 		if(count > tmp)
 			count = tmp;
-		tmp = device->size - device->head;
+		tmp = device->io_size - device->io_head;
 		if(count > tmp)
 			count = tmp;
-
-		memcpy(device->buffer + device->head, isa->buffer + isa->tail, count);
-
-		isa->tail += count;
-		device->head = (device->head + count) & BKR_OFFSET_MASK;
+		memcpy(device->io_buffer + device->io_head, private->dma_buffer + private->dma_tail, count);
+		private->dma_tail += count;
+		device->io_head = (device->io_head + count) & BKR_OFFSET_MASK;
 		break;
 
 		case BKR_WRITING:
-		isa->error = update_dma_offset(isa, &isa->tail);
-
-		count = space_in_buffer(isa->head, isa->tail, isa->size);
-		count -= DMA_HOLD_OFF;
+		update_dma_offset(private, &private->dma_tail);
+		count = space_in_buffer(private->dma_head, private->dma_tail, private->dma_size) - DMA_HOLD_OFF;
 		if(count < 0)
 			count = 0;
-		tmp = bytes_in_buffer(device->head - device->head % device->frame_size, device->tail, device->size);
+		tmp = bytes_in_buffer(device->io_head - device->io_head % device->frame_size, device->io_tail, device->io_size);
 		if(count > tmp)
 			count = tmp;
-		tmp = isa->size - isa->head;
+		tmp = private->dma_size - private->dma_head;
 		if(count > tmp)
 			count = tmp;
-		tmp = device->size - device->tail;
+		tmp = device->io_size - device->io_tail;
 		if(count > tmp)
 			count = tmp;
-
-		memcpy(isa->buffer + isa->head, device->buffer + device->tail, count);
-
-		isa->head += count;
-		if(isa->head == isa->size)
-			isa->head = 0;
-		device->tail += count;
-		if(device->tail == device->size)
-			device->tail = 0;
+		memcpy(private->dma_buffer + private->dma_head, device->io_buffer + device->io_tail, count);
+		private->dma_head += count;
+		if(private->dma_head == private->dma_size)
+			private->dma_head = 0;
+		device->io_tail += count;
+		if(device->io_tail == device->io_size)
+			device->io_tail = 0;
 		break;
 
 		default:
 		return;
 		}
 
-	isa->timer.expires = jiffies + HZ/MAX_UPDATE_FREQ;
-	add_timer(&isa->timer);
+	wake_up_interruptible(&unit->io_queue);
+	private->timer.expires = jiffies + HZ/MIN_FRAME_FREQUENCY;
+	add_timer(&private->timer);
 }
 
 
@@ -270,23 +265,6 @@ static void bkr_isa_do_move(unsigned long data)
  */
 
 /*
- * bkr_isa_*_use_count()
- *
- * Lock and unlock module.
- */
-
-static void  bkr_isa_inc_use_count(void)
-{
-	MOD_INC_USE_COUNT;
-}
-
-static void  bkr_isa_dec_use_count(void)
-{
-	MOD_DEC_USE_COUNT;
-}
-
-
-/*
  * bkr_isa_start()
  *
  * Start the tape <---> memory data transfer.
@@ -294,8 +272,14 @@ static void  bkr_isa_dec_use_count(void)
 
 static int bkr_isa_start(bkr_device_t *device, bkr_state_t direction)
 {
+	bkr_isa_private_t  *private = (bkr_isa_private_t *) device->private;
+	bkr_unit_t  *unit = STRUCT_FROM_MEMBER(bkr_unit_t, device, device);
 	unsigned long  flags;
-	bkr_isa_private_t  *isa = (bkr_isa_private_t *) device->private;
+	int  dma_mode, pause;
+
+	/*
+	 * Do first 'cause vmalloc() might allow a task switch.
+	 */
 
 	device->state = direction;
 
@@ -303,50 +287,63 @@ static int bkr_isa_start(bkr_device_t *device, bkr_state_t direction)
 	 * Allocate and initialize the secondary buffer.
 	 */
 
-	device->buffer = (unsigned char *) vmalloc(device->size);
-	if(device->buffer == NULL)
+	device->io_buffer = (unsigned char *) vmalloc(device->io_size);
+	if(device->io_buffer == NULL)
 		{
 		device->state = BKR_STOPPED;
 		return(-ENOMEM);
 		}
-	device->head = 0;
-	device->tail = 0;
-	memset(device->buffer, 0, device->size);
+	memset(device->io_buffer, 0, device->io_size);
+
+	/*
+	 * Set some direction-specific things.
+	 */
+
+	private->dma_size = DMA_BUFFER_SIZE;
+	if(direction == BKR_WRITING)
+		{
+		private->dma_size -= DMA_BUFFER_SIZE % device->frame_size;
+		dma_mode = DMA_MEM_TO_IO;
+		}
+	else
+		dma_mode = DMA_IO_TO_MEM;
 
 	/*
 	 * Initialize the DMA channel and buffer.
 	 */
 
-	if(request_dma(isa->dma, bkr_isa_resource_name) < 0)
+	if(request_dma(private->dma, bkr_isa_resource_name) < 0)
 		{
 		device->state = BKR_STOPPED;
-		vfree(device->buffer);
+		vfree(device->io_buffer);
 		return(-EBUSY);
 		}
 
-	isa->size = DMA_BUFFER_SIZE;
-	if(direction == BKR_WRITING)
-		isa->size -= DMA_BUFFER_SIZE % device->frame_size;
-	isa->head = 0;
-	isa->tail = 0;
-	memset(isa->buffer, 0, DMA_BUFFER_SIZE);
+	private->dma_head = private->dma_tail = 0;
+	memset(private->dma_buffer, 0, DMA_BUFFER_SIZE);
 
 	flags = claim_dma_lock();
-	disable_dma(isa->dma);
-	clear_dma_ff(isa->dma);
-	set_dma_mode(isa->dma, (direction == BKR_WRITING) ? DMA_MEM_TO_IO : DMA_IO_TO_MEM);
-	set_dma_addr(isa->dma, isa->dma_addr);
-	set_dma_count(isa->dma, isa->size);
-	enable_dma(isa->dma);
+	disable_dma(private->dma);
+	clear_dma_ff(private->dma);
+	set_dma_mode(private->dma, dma_mode);
+	set_dma_addr(private->dma, private->dma_addr);
+	set_dma_count(private->dma, private->dma_size);
+	enable_dma(private->dma);
 	release_dma_lock(flags);
 
 	/*
 	 * Work the card's control bits.
 	 */
 
-	outb(device->control, isa->ioport);
-	device->control |= (direction == BKR_WRITING) ? BKR_BIT_TRANSMIT : BKR_BIT_RECEIVE;
-	outb(device->control, isa->ioport);
+	if(BKR_VIDEOMODE(device->mode) == BKR_NTSC)
+		pause = BKR_LINE_PERIOD * (BKR_FIRST_LINE_NTSC - 1);
+	else
+		pause = BKR_LINE_PERIOD * (BKR_FIRST_LINE_PAL - 1);
+	pause += private->adjust;
+	outb(device->control & ~(BKR_BIT_TRANSMIT | BKR_BIT_RECEIVE), private->ioresource.start);
+	if(device->mode == BKR_WRITING)
+		udelay(pause);
+	outb(device->control, private->ioresource.start);
 
 	/*
 	 * Force an immediate update of the DMA buffer and add the data
@@ -354,11 +351,10 @@ static int bkr_isa_start(bkr_device_t *device, bkr_state_t direction)
 	 * by simply calling the function directly.
 	 */
 
-	isa->error = 0;
-	init_timer(&isa->timer);
-	isa->timer.function = bkr_isa_do_move;
-	isa->timer.data = (unsigned long) device;
-	isa->timer.function(isa->timer.data);
+	init_timer(&private->timer);
+	private->timer.function = bkr_isa_do_move;
+	private->timer.data = (unsigned long) unit;
+	bkr_isa_do_move((unsigned long) unit);
 
 	return(0);
 }
@@ -375,31 +371,27 @@ static int bkr_isa_start(bkr_device_t *device, bkr_state_t direction)
 
 static void bkr_isa_stop(bkr_device_t *device)
 {
-	bkr_isa_private_t  *isa = (bkr_isa_private_t *) device->private;
+	bkr_isa_private_t  *private = (bkr_isa_private_t *) device->private;
 
 	/*
 	 * Stop and reset the ISA card.
 	 */
 
-	outb(0, isa->ioport);
-
-	device->control &= ~(BKR_BIT_TRANSMIT | BKR_BIT_RECEIVE);
+	outb(0, private->ioresource.start);
 	device->state = BKR_STOPPED;
 
 	/*
 	 * Stop the data mover.
 	 */
 
-	del_timer(&isa->timer);
+	del_timer_sync(&private->timer);
 
 	/*
 	 * Free resources.
-	 * FIXME:  make sure the timer func is not running before freeing
-	 * device->buffer
 	 */
 
-	vfree(device->buffer);
-	free_dma(isa->dma);
+	vfree(device->io_buffer);
+	free_dma(private->dma);
 
 	return;
 }
@@ -410,21 +402,14 @@ static void bkr_isa_stop(bkr_device_t *device)
  *
  * Doesn't actually "read" data... just makes sure the requested length of
  * data starting at device.tail is available in the I/O buffer.  Returns 0
- * on success, -EAGAIN if the data isn't available or any pending error
- * code.
+ * on success, -EAGAIN if the data isn't available.
  */
 
 static int bkr_isa_read(bkr_device_t *device, unsigned int length)
 {
 	int  result = 0;
-	bkr_isa_private_t  *isa = (bkr_isa_private_t *) device->private;
 
-	if(isa->error)
-		{
-		result = isa->error;
-		isa->error = 0;
-		}
-	else if(bytes_in_buffer(device->head, device->tail, device->size) < length)
+	if(bytes_in_buffer(device->io_head, device->io_tail, device->io_size) < length)
 		result = -EAGAIN;
 
 	return(result);
@@ -436,21 +421,14 @@ static int bkr_isa_read(bkr_device_t *device, unsigned int length)
  *
  * Doesn't actually "write" data... just makes sure the requested amount of
  * space is available starting at the I/O buffer head.  Returns 0 on
- * success, -EAGAIN if the space isn't available or or any pending error
- * code.
+ * success, -EAGAIN if the space isn't available.
  */
 
 static int bkr_isa_write(bkr_device_t *device, unsigned int length)
 {
 	int  result = 0;
-	bkr_isa_private_t  *isa = (bkr_isa_private_t *) device->private;
 
-	if(isa->error)
-		{
-		result = isa->error;
-		isa->error = 0;
-		}
-	else if(space_in_buffer(device->head, device->tail, device->size) < length)
+	if(space_in_buffer(device->io_head, device->io_tail, device->io_size) < length)
 		result = -EAGAIN;
 
 	return(result);
@@ -460,70 +438,72 @@ static int bkr_isa_write(bkr_device_t *device, unsigned int length)
 /*
  * bkr_isa_flush()
  *
- * Pad the data stream to the next frame boundary then wait for the buffers
- * to empty.  Returns 0 when the data has been flushed, -EAGAIN if the data
- * cannot be immediately flushed or any error code returned by
- * update_dma_offset() or bkr_device_write().
+ * Flushes outbound data from the I/O and DMA buffers.  Returns 0 if the
+ * data has all be written to tape or -EAGAIN if data is still in the
+ * buffers.
  */
 
 static int bkr_isa_flush(bkr_device_t *device)
 {
+	bkr_isa_private_t  *private = (bkr_isa_private_t *) device->private;
+	jiffies_t  bailout;
 	int  count, result;
-	bkr_isa_private_t  *isa = (bkr_isa_private_t *) device->private;
 
 	/*
-	 * Fill the secondary buffer to a frame boundary.
+	 * Fill the I/O buffer to a frame boundary.
 	 */
 
-	count = device->head % device->frame_size;
+	count = device->io_head % device->frame_size;
 	if(count != 0)
 		{
 		count = device->frame_size - count;
 		result = bkr_isa_write(device, count);
 		if(result < 0)
 			return(result);
-		memset(device->buffer + device->head, 0, count);
-		device->head += count;
-		if(device->head == device->size)
-			device->head = 0;
+		memset(device->io_buffer + device->io_head, 0, count);
+		device->io_head += count;
+		if(device->io_head == device->io_size)
+			device->io_head = 0;
 		}
 
 	/*
-	 * Don't proceed until the secondary buffer is empty.
+	 * Don't proceed until the I/O buffer is empty.
 	 */
 
-	result = bkr_isa_write(device, device->size - 1);
+	result = bkr_isa_write(device, device->io_size - 1);
 	if(result < 0)
 		return(result);
 
 	/*
 	 * Pad out the DMA buffer by the size of the card's internal
-	 * buffer.  FIXME: what if count < 0?
+	 * buffer.
 	 */
 
-	count = INTERNAL_BUFFER - isa->head % device->frame_size;
+	count = INTERNAL_BUFFER - private->dma_head % device->frame_size;
 	if(count > 0)
 		{
-		if(space_in_buffer(isa->head, isa->tail, isa->size) < count)
+		if(space_in_buffer(private->dma_head, private->dma_tail, private->dma_size) < count)
 			return(-EAGAIN);
-		memset(isa->buffer + isa->head, 0, count);
-		isa->head += count;
+		memset(private->dma_buffer + private->dma_head, 0, count);
+		private->dma_head += count;
 		}
 
 	/*
 	 * Wait for the DMA buffer to empty.
 	 */
 
-#ifdef WORKAROUND
-	while((bytes_in_buffer(isa->head, isa->tail, isa->size) >= device->bytes_per_line) && !result)
-#else
-	while(bytes_in_buffer(isa->head, isa->tail, isa->size) && !result)
-#endif
+	result = 0;
+	bailout = jiffies + HZ/MIN_FRAME_FREQUENCY;
+	do
 		{
-		result = update_dma_offset(isa, &isa->tail);
-		if(bytes_in_buffer(isa->head, isa->tail, isa->size) >= device->frame_size)
+		update_dma_offset(private, &private->dma_tail);
+		if((bytes_in_buffer(private->dma_head, private->dma_tail, private->dma_size) >= device->frame_size) || time_after_eq(jiffies, bailout))
+			{
 			result = -EAGAIN;
+			break;
+			}
 		}
+	while(bytes_in_buffer(private->dma_head, private->dma_tail, private->dma_size) >= 7*INTERNAL_BUFFER);
 
 	return(result);
 }
@@ -539,8 +519,7 @@ static int bkr_isa_flush(bkr_device_t *device)
 
 static bkr_device_ops_t  bkr_isa_dev_ops =
 	{
-	bkr_isa_inc_use_count,
-	bkr_isa_dec_use_count,
+	THIS_MODULE,
 	bkr_isa_start,
 	bkr_isa_stop,
 	bkr_isa_read,
@@ -558,41 +537,39 @@ static bkr_device_ops_t  bkr_isa_dev_ops =
 static bkr_unit_t * __init bkr_isa_new(int ioport, int dma, char *msg)
 {
 	bkr_unit_t  *unit;
-	bkr_isa_private_t  *isa;
+	bkr_isa_private_t  *private;
 
-	if(request_region(ioport, 1, bkr_isa_resource_name) == NULL)
+	unit = bkr_unit_register(PM_ISA_DEV, &bkr_isa_dev_ops, sizeof(bkr_isa_private_t));
+	if(unit == NULL)
+		goto no_unit;
+	private = (bkr_isa_private_t *) unit->device.private;
+
+	private->ioresource = (struct resource) { bkr_isa_resource_name, ioport, ioport };
+	if(request_resource(&ioport_resource, &private->ioresource))
 		goto no_ioport;
 
-	unit = bkr_device_register(BKR_ISA_DEVICE, &bkr_isa_dev_ops);
-	if(unit == NULL)
-		goto cant_register;
+	private->dma = dma;
+	private->adjust = adjust;
 
-	isa = (bkr_isa_private_t *) kmalloc(sizeof(bkr_isa_private_t), GFP_KERNEL);
-	if(isa == NULL)
-		goto no_private_mem;
-	unit->device.private = isa;
-
-	isa->buffer = (unsigned char *) pci_alloc_consistent(NULL, DMA_BUFFER_SIZE, &isa->dma_addr);
-	if(isa->buffer == NULL)
+	private->dma_buffer = (unsigned char *) pci_alloc_consistent(NULL, DMA_BUFFER_SIZE, &private->dma_addr);
+	if(private->dma_buffer == NULL)
 		{
-		printk(KERN_WARNING MODULE_NAME ": %s: can't allocate DMA buffer\n", unit->name);
+		printk(KERN_INFO MODULE_NAME ": %s: can't allocate DMA buffer", unit->name);
 		goto no_dma_buffer;
 		}
 
-	isa->ioport = ioport;
-	isa->dma = dma;
-
-	printk(KERN_INFO MODULE_NAME ": %s: %s I/O port %#x, DMA channel %u\n", unit->name, msg, ioport, dma);
+	printk(KERN_INFO MODULE_NAME ": %s: %s I/O port %#x, DMA channel %u", unit->name, msg, ioport, dma);
+	if(private->adjust)
+		printk(", adjusted %+d µs", private->adjust);
+	printk("\n");
 
 	return(unit);
 
 	no_dma_buffer:
-		kfree(isa);
-	no_private_mem:
-		bkr_device_unregister(unit);
-	cant_register:
-		release_region(ioport, 1);
+		release_resource(&private->ioresource);
 	no_ioport:
+		bkr_unit_unregister(unit);
+	no_unit:
 		return(NULL);
 }
 
@@ -608,27 +585,33 @@ static int __init backer_isa_init(void)
 {
 	unsigned long  flags;
 	jiffies_t  bailout;
-	unsigned int  count = 0;
-	unsigned int  ioport;
-	unsigned int  i, dma[2], num_dma;
+	int  count = 0;
+	int  ioport;
+	int  i, dma[2], num_dma;
+
+	/*
+	 * Do some initialization.
+	 */
+
+	if(adjust < -MAX_ADJUST_MAGNITUDE)
+		adjust = -MAX_ADJUST_MAGNITUDE;
+	else if(adjust > +MAX_ADJUST_MAGNITUDE)
+		adjust = +MAX_ADJUST_MAGNITUDE;
 
 	/*
 	 * Register any user-requested devices.
 	 */
 
-	for(i = 0; i < 2*BKR_MAX_INSMOD_DEVICES; )
+	while(*units != '\0')
 		{
-		ioport = isa[i++];
-		dma[0] = isa[i++];
-		if((dma[0] == 0) || (ioport == 0))
+		ioport = simple_strtoul(units, &units, 0);
+		if(*(units++) != ':')
 			break;
-		if(check_region(ioport, 1))
-			/* FIXME: we need to do this check because
-			 * otherwise the kernel lets us request an I/O port
-			 * that we already own */
-			continue;
+		dma[0] = simple_strtoul(units, &units, 0);
 		if(bkr_isa_new(ioport, dma[0], "using") != NULL)
 			count++;
+		if(*units == ':')
+			units++;
 		}
 	if(count)
 		return(0);
@@ -658,7 +641,7 @@ static int __init backer_isa_init(void)
 		 * Do a write-read test.
 		 */
 
-		if(check_region(ioport, 1))
+		if(check_resource(&ioport_resource, ioport, 1))
 			continue;
 		outb(BKR_BIT_NTSC_VIDEO, ioport);
 		if((inb(ioport) & ~BKR_BIT_DATA & ~BKR_BIT_SYNC & ~BKR_BIT_FRAME_BUSY) != 0)
@@ -669,8 +652,9 @@ static int __init backer_isa_init(void)
 		 */
 
 		outb(BKR_BIT_DMA_REQUEST, ioport);
+		udelay(BKR_LINE_PERIOD * (BKR_FIRST_LINE_PAL - 1) + adjust);
 		outb(BKR_BIT_DMA_REQUEST | BKR_BIT_TRANSMIT, ioport);
-		for(i = 0, bailout = jiffies + HZ/MIN_SYNC_FREQ; 1; )
+		for(i = 0, bailout = jiffies + HZ/MIN_SYNC_FREQUENCY; time_before(jiffies, bailout); )
 			{
 			if(get_dreq_status(dma[i]))
 				{
@@ -679,12 +663,8 @@ static int __init backer_isa_init(void)
 					count++;
 				break;
 				}
-			if(time_after_eq(jiffies, bailout))
-				{
-				if(++i >= num_dma)
-					break;
-				bailout = jiffies + HZ/MIN_SYNC_FREQ;
-				}
+			if(++i >= num_dma)
+				i = 0;
 			}
 		}
 
@@ -707,20 +687,19 @@ static int __init backer_isa_init(void)
 static void __exit backer_isa_exit(void)
 {
 	bkr_unit_t  *unit;
-	bkr_isa_private_t  *isa;
+	bkr_isa_private_t  *private;
 	struct list_head  *curr;
 
 	for(curr = bkr_unit_list.next; curr != &bkr_unit_list; )
 		{
 		unit = list_entry(curr, bkr_unit_t, list);
 		curr = curr->next;
-		if(unit->device.type != BKR_ISA_DEVICE)
+		if(unit->device.ops->owner != THIS_MODULE)
 			continue;
-
-		isa = (bkr_isa_private_t *) unit->device.private;
-		pci_free_consistent(NULL, DMA_BUFFER_SIZE, isa->buffer, isa->dma_addr);
-		release_region(isa->ioport, 1);
-		bkr_device_unregister(unit);
+		private = (bkr_isa_private_t *) unit->device.private;
+		release_resource(&private->ioresource);
+		pci_free_consistent(NULL, DMA_BUFFER_SIZE, private->dma_buffer, private->dma_addr);
+		bkr_unit_unregister(unit);
 		}
 }
 

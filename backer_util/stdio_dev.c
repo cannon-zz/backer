@@ -34,20 +34,21 @@
  * write keeps it as empty as possible.  The flush function flushes first
  * the buffer and then stdout.
  *
- * These functions pass on any error codes returned by the file system.
+ * These functions pass on any error codes returned by the standard
+ * library.
  */
 
 static int bkr_stdio_start(bkr_device_t *device, bkr_state_t direction)
 {
-	device->buffer = (unsigned char *) malloc(device->size);
-	if(device->buffer == NULL)
+	device->io_buffer = (unsigned char *) malloc(device->io_size);
+	if(device->io_buffer == NULL)
 		return(-ENOMEM);
 
 	device->state = direction;
 
-	device->head = 0;
-	device->tail = 0;
-	memset(device->buffer, 0, device->size);
+	device->io_head = 0;
+	device->io_tail = 0;
+	memset(device->io_buffer, 0, device->io_size);
 
 	return(0);
 }
@@ -56,7 +57,7 @@ static int bkr_stdio_start(bkr_device_t *device, bkr_state_t direction)
 static void bkr_stdio_stop(bkr_device_t *device)
 {
 	device->state = BKR_STOPPED;
-	free(device->buffer);
+	free(device->io_buffer);
 	return;
 }
 
@@ -65,22 +66,23 @@ static int bkr_stdio_read(bkr_device_t *device, unsigned int length)
 {
 	int  tmp, desired;
 
-	desired = device->size / 2 - bytes_in_buffer(device->head, device->tail, device->size);
+	desired = device->io_size / 2 - bytes_in_buffer(device->io_head, device->io_tail, device->io_size);
 	if(desired <= 0)
 		return(0);
 
-	if(desired > device->size - device->head)
+	tmp = device->io_size - device->io_head;
+	if(desired > tmp)
 		{
-		tmp = fread(device->buffer + device->head, 1, device->size - device->head, stdin);
-		device->head = (device->head + tmp) & BKR_OFFSET_MASK;
-		if(device->head != 0)
+		tmp = fread(device->io_buffer + device->io_head, 1, tmp, stdin);
+		device->io_head = (device->io_head + tmp) & BKR_OFFSET_MASK;
+		if(device->io_head != 0)
 			goto done;
 		desired -= tmp;
 		}
-	device->head = (device->head + fread(device->buffer + device->head, 1, desired, stdin)) & BKR_OFFSET_MASK;
+	device->io_head = (device->io_head + fread(device->io_buffer + device->io_head, 1, desired, stdin)) & BKR_OFFSET_MASK;
 
 	done:
-	if(bytes_in_buffer(device->head, device->tail, device->size) >= length)
+	if(bytes_in_buffer(device->io_head, device->io_tail, device->io_size) >= length)
 		return(0);
 	if(feof(stdin))
 		return(-EPIPE);
@@ -92,17 +94,24 @@ static int bkr_stdio_read(bkr_device_t *device, unsigned int length)
 
 static int bkr_stdio_write(bkr_device_t *device, unsigned int length)
 {
-	if(device->tail + bytes_in_buffer(device->head, device->tail, device->size) >= device->size)
+	int  tmp, desired;
+
+	desired = bytes_in_buffer(device->io_head, device->io_tail, device->io_size);
+
+	tmp = device->io_size - device->io_tail;
+	if(desired >= tmp)
 		{
-		device->tail += fwrite(device->buffer + device->tail, 1, device->size - device->tail, stdout);
-		if(device->tail < device->size)
+		tmp = fwrite(device->io_buffer + device->io_tail, 1, tmp, stdout);
+		desired -= tmp;
+		device->io_tail += tmp;
+		if(device->io_tail < device->io_size)
 			goto done;
-		device->tail = 0;
+		device->io_tail = 0;
 		}
-	device->tail += fwrite(device->buffer + device->tail, 1, bytes_in_buffer(device->head, device->tail, device->size), stdout);
+	device->io_tail += fwrite(device->io_buffer + device->io_tail, 1, desired, stdout);
 
 	done:
-	if(space_in_buffer(device->head, device->tail, device->size) >= length)
+	if(space_in_buffer(device->io_head, device->io_tail, device->io_size) >= length)
 		return(0);
 	if(ferror(stdout))
 		return(-errno);
@@ -122,9 +131,9 @@ static int bkr_stdio_flush(bkr_device_t *device)
  * Device operations.
  */
 
-bkr_device_ops_t  stdio_ops =
+bkr_device_ops_t  bkr_stdio_ops =
 	{
-	NULL, NULL,
+	NULL,
 	bkr_stdio_start,
 	bkr_stdio_stop,
 	bkr_stdio_read,

@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BACKER 4 "August 15, 2001" "Linux" "Special Files"
+.TH BACKER 4 "December 30, 2001" "Linux" "Special Files"
 .SH NAME
 backer \- Backer video tape based storage device.
 .SH INTRODUCTION
@@ -30,30 +30,30 @@ to be stored on video tape using a standard video cassette recorder.
 Backer devices were manufactured in two configurations:  internal, ISA,
 interface cards and an external version that plugs into an ECP-compatible
 parallel port.  This driver provides access to both varieties through the
-use of two hardware-specific interface modules called
+use of two hardware-specific interface modules:
 .IR backer_isa (4)
 and
-.IR backer_parport (4)
-respectively.
+.IR backer_parport (4).
 .SH CONFIGURATION
 .SS MODULES
 The driver is loaded by loading the main module
-.RS
+.RS 3
 .sp
-modprobe backer
+\fB$\fP modprobe backer
 .sp
 .RE
-which in turn requests the module ``backer_lowlevel''.  This is is a dummy
+which in turn requests the module ``backer_lowlevel''.  This is a dummy
 name that is meant to be re-directed to the desired hardware module(s)
 through the use of appropriate options in
 .IR modules.conf (5).
 For example, the line
-.RS
+.RS 3
 .sp
-add probeall backer_lowlevel backer_isa
+probeall backer_lowlevel backer_isa
 .sp
 .RE
-would cause the ISA interface module to be loaded.
+would cause the ISA interface module to be loaded along with the main
+module.
 .SS DEVICE FILES
 Each Backer unit attached to the system is represented by a set of
 character device files.  By default they are owned by root:root with mode
@@ -90,23 +90,13 @@ modules register them.  The three letter file name identifies the video
 mode, the bit density, and the data format selected by accessing that
 particular file.
 .PP
-Depending on how the driver was compiled, some mode combinations might not
-be available.  To adjust mode availability, see the \fBbkr_modes[]\fP array
-in the sources.
-.PP
-If a backer device is to be used as the system's default tape device then
-it is helpful to create a symbolic link named \fB/dev/tape\fP that points
-to the preferred unit and mode.
+If a Backer is to be used as the system's default tape device then it is
+helpful to create a symbolic link named \fB/dev/tape\fP that points to the
+preferred unit and mode.
 .SS OPTIONS
 The main module,
 .IR backer (4),
-accepts the following option.
-.TP
-\fBtimeout=\fInum\fP
-Specify the operation timeout in seconds.  A reasonable value is 10
-seconds;  it should probably not be set below 4.
-.PP
-See the man pages for
+does not have any options.  See the man pages for
 .IR backer_isa (4)
 and
 .IR backer_parport (4)
@@ -119,12 +109,30 @@ standard tape devices.  It is not possible to provide a fully functional
 tape interface because the tape transport itself (your VCR) is not under
 computer control.  This means that every task requires operator assistance
 to complete in that somebody must manually press Play, Record, Rewind,
-etc..  Apart from the lack of automation, however, the driver should be
-able to inter-operate with any software designed for use with tape devices
-such as
+etc..
+.PP
+From a software perspective, the most important difference between the
+Backer device and normal tape devices is the intrinsic block size.  For
+reasons related to their tape format and drive hardware, most tape devices
+require data to be transfered to and from them in ``blocks'' ---
+drive-specific fixed sized quantities of data that are always some multiple
+of 512 bytes.  The Backer device also has a preferred block size, namely
+the quantity of data stored in one video frame.  Unfortunately, Backer's
+block size is not a multiple of 512 bytes and is not even the same from one
+format to the next.  This can cause some difficulties with very picky
+software but in principal nothing that can't be worked around.  The
+compromise arrived at in this case is for the Backer device driver to
+perform partial software ``re-blocking'' of the data stream:  happily
+accepting arbitrary transfer requests but returning short counts if unable
+to completely fill the request immediately.
+.PP
+Apart from these two difficulties --- lack of automation and non-standard
+block size --- the driver should be able to inter-operate with any software
+designed for use with tape devices such as
 .IR mt (1)
 and
 .IR tar (1).
+See the \fBEXAMPLES\fP section below for more details.
 .PP
 The Backer hardware is compatible with both NTSC and PAL video equipment
 and it can modulate the data stream into the video signal at two bit
@@ -146,9 +154,12 @@ For obvious practical reasons, only one transfer can occur at a time on
 each unit so once a transfer has been started on a file descriptor, all
 other reads and writes on all other descriptors corresponding to the same
 unit will fail.  Since the hardware is not full duplex, if a device is
-opened with mode \fBO_RDWR\fP the first read or write call selects the
-transfer direction and any subsequent calls in the other direction fail
-until the device is closed and re-opened.
+opened with mode \fBO_RDWR\fP the first
+.IR read (2)
+or
+.IR write (2)
+call selects the transfer direction and any subsequent calls in the other
+direction fail until the device is closed and re-opened.
 .PP
 Data written to and read from the non-raw files is clean, synchronous and
 commensurate:  it will be retrieved error-free;  the, say, 2000th byte
@@ -160,29 +171,30 @@ The raw device files provide access to the actual tape data.  When writing,
 the first byte written is placed in the first position in the top line of
 the first video field and so on.  When reading, all the pleasantries of the
 raw video signal are present:  tape noise, missing video lines, etc..  The
-interface provided by these files allows the requisite tape data processing
-to be performed in user space thus not only permitting tapes in formats
-foreign to the driver itself to be read and written but also allowing
-computers too slow to perform the processing in real time to make use of
-higher bandwidth modes.  See
+interface provided by these files allows the requisite data formating and
+signal processing to be performed in user space thus not only permitting tapes
+in formats foreign to the driver itself to be read and written but also
+allowing computers too slow to perform the processing in real time to make use
+of higher bandwidth modes.  See
 .IR bkrencode (8)
 for more information on using this feature.
 .SS "STATUS INFORMATION"
 Hardware and driver status information is provided through the \fB/proc\fP
-file system by the file \fB /proc/driver/backer\fP.  For each device in the
-system, a sequence of data fields is displayed starting with the device
-unit number.
+file system by the files \fB/proc/sys/dev/backer/\fP\fIn\fP\fB/status\fP.
+Each device in the system has its own status file which contains a sequence
+of data fields starting with the device's current operating state.
 .PP
 The meaning of each field in this file is given below and indicated after
-each field heading is the transfer direction in which the field is
-meaningful.  For example, a field marked ``reading'' does not have meaning
-during write operations.  Between transfers, all fields will retain their
-values from the end of the last transfer.  The information is displayed in
-unsigned decimal format and the meaning of the fields is as follows.
+each field heading is(are) the transfer direction(s) in which the field is
+meaningful.  For example, a field marked ``reading'' is meaningless when
+the device is writing.  Between transfers, when the device is stopped or
+suspended, all fields will retain their values from the end of the last
+transfer.  All numeric fields except the sector number (see below) are
+displayed in unsigned decimal format.  The meaning of the fields is as
+follows.
 .TP
-\fBUnit\fP (reading/writing)
-The unit number to which the following fields apply and that unit's
-operating state:  reading, stopped, suspended or writing.
+\fBCurrent State\fP (reading/writing)
+The unit's state:  STOPPED, READING, WRITING, or SUSPENDED.
 .TP
 \fBCurrent Mode\fP (reading/writing)
 A number indicating the video mode, bit density and data format of the
@@ -190,9 +202,17 @@ current transfer.  The masks and flags used to interpret this number can be
 found in the header file, \fBbacker.h\fP.
 .TP
 \fBSector Number\fP (reading/writing)
-The current sector number being transfered to/from user space.  The
-driver's buffers introduce a delay between this and the sector being
-transfered to/from the tape.
+The sectors of every recording are numbered in increasing, sequential,
+order to provide a means by which buffer over- and underflows can be
+identified during playback.  The sector number is a 25 bit signed integer
+and so takes on values in the range -16777216 to +16777215 inclusively.
+The numbering is arranged so that the first data sector of a recording is
+sector number 0.  The sequence can wrap back to 0 if the data stream is
+very long but this will take at least 4660 minutes (about 3.2 days) and so
+is unlikely to occur in the context of normal, VCR-based, operation.  This
+field shows the sector currently being transfered to/from user space.  The
+driver's buffers introduce a delay of several seconds between this and the
+sector being transfered to/from the tape.
 .TP
 \fBByte Errors\fP (reading)
 Shows the total number of bad symbols that have been successfully corrected
@@ -236,19 +256,22 @@ Apart from wasting several tens of kilobytes of tape, underflows are
 non-destructive.
 .TP
 \fBWorst Key\fP (reading)
-The lowest correlation value assigned to a string of bytes identified as
-a sector key.
+The first field shows the lowest correlation value assigned to a string of
+bytes identified as a sector key.  The second field shows the maximum
+possible correlation value (the correlation value assigned to a perfect
+match).
 .TP
 \fBClosest Non-Key\fP (reading)
 The highest correlation value assigned to a string of bytes identified as
 not being a sector key.
 .TP
-\fBLeast Skipped\fP (reading)
-The least number of bytes which were skipped before locating a sector
-key.
+\fBSmallest Field\fP (reading)
+The size in bytes of the smallest video field encountered so far during
+playback.
 .TP
-\fBMost Skipped\fP (reading)
-The most number of bytes which were skipped before locating a sector key.
+\fBLargest Field\fP (reading)
+The size in bytes of the largest video field encountered so far during
+playback.
 .TP
 \fBI/O Buffer\fP (reading/writing)
 The first field shows the number of bytes in the I/O buffer.  The second
@@ -257,16 +280,42 @@ completely full whilst writing and completely empty whilst reading.
 .PP
 The worst key and closest non-key must have a comfortable margin between
 them if one is going to uniquely identify sector keys in the data stream.
-The difference between the least and most skipped numbers shows the
+The difference between the smallest and largest video fields shows the
 variability in the number of lines generated by a VCR during playback.
+.SS "FORMAT TABLE"
+The parameters describing each of the driver's data formats are stored,
+internally, in look-up tables.  Each Backer device has its own format table
+which is initialized from a global default and can be accessed via the file
+\fB/proc/sys/dev/backer/\fP\fIn\fP\fB/format_table\fP or via the
+.IR sysctl (2)
+system call.  To access Backer parameters via
+.IR sysctl (2),
+the following vectors should be used for the \fBname\fP field:  for
+accessing status information use \fB{ CTL_DEV, DEV_BACKER, BACKER_STATUS
+}\fP; and for the format table use \fB{ CTL_DEV, DEV_BACKER, BACKER_FORMAT
+}\fP.  Both \fBlinux/sysctl.h\fP and \fBbacker.h\fP must be included for
+these constants to be defined.
+.PP
+For each of the 12 data formats there are 15 signed integer parameters ---
+180 in total --- describing such things as the number of bytes in each
+video field, the number of parity bytes to use in each block, etc..  The
+\fBformat_table\fP file is simply a white-space separated list of the 180
+parameters.  See \fBbacker.h\fP and the driver source code for information
+on the parameters and techniques for construction of new parameter tables.
+.PP
+\fIWARNING\fP:  It is possible to corrupt your kernel (crash your system)
+by loading invalid format tables into the driver.  This interface is only
+meant to provide an experienced user with an easier method for tuning the
+driver's behaviour than modifying its source code.  Competance is assumed.
+Use with care!
 .SH EXAMPLES
 The examples below assume that \fB/dev/tape\fP is a link to the desired
 device.
 .SS "BASIC USE"
 To save a file to tape, press Record and type
-.RS
+.RS 3
 .sp
-cp \fIfilename\fP /dev/tape
+\fB$\fP cp \fIfilename\fP /dev/tape
 .sp
 .RE
 On your television, when the recording first starts, you will see the
@@ -275,69 +324,71 @@ last for several seconds.  That will be followed by what, for the most
 part, is random noise until the recording ends with the end-of-record (EOR)
 mark.  To verify the recording, position the tape just before or at the
 beginning of the recording,  press Play and type
-.RS
+.RS 3
 .sp
-cmp /dev/tape \fIfilename\fP
+\fB$\fP cmp /dev/tape \fIfilename\fP
 .sp
 .RE
 To retrieve the file, position the tape at the start of the recording, as
 above, and type
-.RS
+.RS 3
 .sp
-cp /dev/tape \fIfilename\fP
+\fB$\fP cp /dev/tape \fIfilename\fP
 .sp
 .RE
 If the computer isn't fast enough to process the data in real time then
-buffer over- and underflows will be seen.  In this case it will be necessary
-to use off-line processing.  See
+buffer over- and underflows will be seen.  In this case it will be
+necessary to use off-line processing.  See
 .IR bkrencode (8)
 for more information.
+.SS "STRICT REBLOCKING"
+For software, such as
+.IR tar (1),
+that insists on interacting with a tape device by reading and writing some
+multiple of 512 bytes, it is necessary to perform stricter re-blocking than
+that done by the Backer device driver.  This can be accomplished by
+directing the data stream through a Linux pipe since the kernel will
+perform the necessary re-blocking.  If the software in question can be
+directed to read and write through
+.IR stdin (3)
+and
+.IR stdout (3)
+then simply do so.  For example
+.RS 3
+.sp
+\fB$\fP tar -x < /dev/tape \fIfilename\fP
+.sp
+.RE
+If the software must be given a file name then an intermediate FIFO is
+required.  Here is an example
+.RS 3
+.sp 
+\fB$\fP mkfifo pipe
+.br
+\fB$\fP cp /dev/tape pipe &
+.br
+\fB$\fP tar -xf pipe \fIfilename\fP
+.br
+\fB$\fP rm pipe
+.sp
+.RE
+See below for more information on the use of
+.IR tar (1)
+with the Backer device.
 .SS "USE WITH tar"
 .IR tar (1)
-processes data in ``records'' and the larger the record size the more
-infrequently tar accesses the device.  If the time that elapses is too
-long, then the driver's buffer can underflow (when writing) or overflow
-(when reading).  This is true for all tape devices but older versions of
-this driver were particularly bad due to Backer's relatively high transfer
-speed for its buffer size which is limited by hardware to 64 kilobytes.  In
-the past it was necessary to instruct tar to use a smaller than normal
-record size as a work-around but the introduction of a large secondary
-buffer in version 3.100 of the driver solved these problems and it is no
-longer necessary to take any special precautions when using tar.  On faster
-computers it is even possible to use
-.IR bzip2 (1)
-for compression since the driver can now buffer enough data to accommodate
-even bzip2's painful duty cycle.
-.PP
-An example of making a backup using
-.IR gzip (1)
-compression is
-.RS
+was mentioned above as an example of a program that requires strict block
+sizes to be adhered to when reading and writing.  Although this problem can
+be overcome through the use of Linux pipes, GNU
+.IR tar (1)
+can also perform the re-blocking on its own if provided with the \fB-B\fP
+or \fB--read-full-blocks\fP command line options.  For example
+.RS 3
 .sp
-tar -c -z -f /dev/tape [other options...]
+\fB$\fP tar -xBf /dev/tape \fIfilename\fP
 .sp
 .RE
-and the corresponding restore command is
-.RS
-.sp
-tar -x -z -f /dev/tape [other options...]
-.sp
-.RE
-.PP
-If your computer still has trouble keeping up with the data stream then try
-changing the \fB-z\fP to \fB-Z\fP to use
-.IR compress (1)
-rather than gzip.  The compression will not be as good but there will be
-less CPU overhead.  If it still doesn't work try it without any compression
-at all.  If, on the other hand, your computer has no trouble processing
-data at the required speed then you might try using bzip2 for compression
-by using a command like
-.RS
-.sp
-tar -c --use-compress-program bzip2 -f /dev/tape [other options...]
-.sp
-.RE
-to write a tape.
+is sufficient.
 .SS "MACHINE-TO-MACHINE COPYING"
 If two computers with Backers are available then it is possible to use the
 Backers to copy data between them.  This is accomplished by cross wiring
@@ -345,15 +396,16 @@ the cards (output of ``transmitter'' to input of ``receiver'') then at the
 transmitting machine writing data to a device file while at the receiving
 machine reading the data from the corresponding device file.  Any of the
 non-raw modes can be chosen as long as both machines are speaking the same
-one but PAL/high/SP (phs) is recommended since it has the highest code
-rate.
+one but high-density SP mode PAL (phs) is recommended since it has the
+highest code rate.
 .SH IOCTLS
 The following
 .IR ioctl (2)
 calls are understood.
 .IP \fBMTIOCTOP\fP
 Accepts a pointer to an \fBmtop\fP structure which is used to access
-several sub-commands.  The following sub-commands are understood:
+several sub-commands.  The following sub-commands are understood (all
+others result in \fB-EINVAL\fP):
 .\".RS +0.5i
 .RS
 .TP
@@ -362,10 +414,6 @@ Does nothing.
 .TP
 \fBMTRESET\fP
 Does nothing.
-.TP
-\fBMTSETDRVBUFFER\fP
-With the \fBmt_count\fP field set to (\fBMT_ST_TIMEOUTS\fP | \fItimeout\fP)
-the operation timeout is set to \fItimeout\fP seconds.
 .RE
 .IP \fBMTIOCGET\fP
 Accepts a pointer to an \fBmtget\fP structure which is filled with the tape
@@ -404,14 +452,10 @@ current sector number.
 For the definitions of the structures mentioned above or for more
 information generally on these calls see \fBsys/mtio.h\fP and
 \fBbacker.h\fP.
-.PP
-The ``block'' (sector) numbers returned by \fBMTIOCGET\fP and
-\fBMTIOCPOS\fP are numbered from 0 starting with the first sector in the
-recording which is the start of the BOR mark.  The first data sector will
-have some later number.
 .SH ERRORS
 The following is a list of the error codes that can be generated by the
-driver and the reasons for them.
+driver's main module and the reasons for them.  See the documentation for
+the low level modules for the error codes they can generate.
 .IP \fBEAGAIN\fP
 .PD 0
 .RS +0.5i
@@ -425,11 +469,33 @@ The current operation would block and non-blocking I/O has been selected.
 .RS +0.5i
 .TP 2
 o
+The device inodes could not be created in the devfs filesystem.
+.TP 2
+o
 An attempt was made to start a transfer or change the direction of a
 transfer while one was already in progress on the same unit.
 .TP 2
 o
-The unit's DMA channel could not be reserved on I/O.
+An attempt was made to start a transfer with the device in the
+``suspended'' state.  Backers do not have hardware power management
+capabilities but the device driver does participate in the system's power
+management by informing the kernel of device activity and rejecting I/O
+requests while the system is suspended.
+.TP 2
+o
+An attempt was made to read or write data on a file descriptor that is
+already being used for a read or write operation.  This indicates that two
+processes have the exact same file descriptor and have tried to use it
+simultaneously --- this might be a bug in the user application.
+.RE
+.PD 1
+.IP \fBEFAULT\fP
+.PD 0
+.RS +0.5i
+.TP 2
+o
+A memory priveledge violation occured (the user has passed an address to
+the driver that the user does not have access to).
 .RE
 .PD 1
 .IP \fBEINTR\fP
@@ -450,16 +516,6 @@ A call was made to
 with an unrecognized ioctl function or sub-function.
 .RE
 .PD 1
-.IP \fBESPIPE\fP
-.PD 0
-.RS +0.5i
-.TP 2
-o
-A call was made to
-.IR lseek (2).
-The device is not seekable.
-.RE
-.PD 1
 .IP \fBENODATA\fP
 .PD 0
 .RS +0.5i
@@ -477,7 +533,7 @@ corrected or if the sector is lost in a buffer overrun.
 .RS +0.5i
 .TP 2
 o
-No devices could be found at module load time.
+The minor number requested does not correspond to any registered unit.
 .RE
 .PD 1
 .IP \fBENOMEM\fP
@@ -485,16 +541,20 @@ No devices could be found at module load time.
 .RS +0.5i
 .TP 2
 o
-A unit's DMA buffer could not be allocated at module load time.
-.TP 2
-o
 Some internal structures could not be allocated on device open.
 .TP 2
 o
-The I/O buffer could not be allocated on read/write.
+The sector buffer could not be allocated on read/write.
+.RE
+.PD 1
+.IP \fBESPIPE\fP
+.PD 0
+.RS +0.5i
 .TP 2
 o
-The sector buffer could not be allocated on read/write.
+A call was made to
+.IR lseek (2).
+The device is not seekable.
 .RE
 .PD 1
 .IP \fBETIMEDOUT\fP
@@ -502,8 +562,16 @@ The sector buffer could not be allocated on read/write.
 .RS +0.5i
 .TP 2
 o
-The current operation timed out.  Perhaps the driver is not configured for
-the correct I/O port or DMA channel or perhaps the VCR is not connected.
+The current operation timed out.  For the external version, this condition
+indicates that no data is being sent or received through the parallel port.
+Perhaps there is a faulty connection between the VCR and the Backer or
+between the Backer and the computer;  perhaps the
+.IR backer_parport (4)
+low-level driver has been configured for the wrong parallel port;  or
+perhaps the Linux parport subsystem has not been properly configured for
+the parallel port.  For the internal Backer, this condition should never
+occur.  If it does, this indicates the presence of a bug in the driver ---
+please submit a bug report.
 .RE
 .PD 1
 .SH NOTES
@@ -517,9 +585,9 @@ utility in version 3.1 and a new sector key locator algorithm in version
 3.2, it became possible to reliably record data in EP modes.  Overall, EP
 recordings to not offer significantly higher capacity than LP recordings
 made on the same tape because the longer length of an EP recording is
-partially offset its lower data rate.  If, however, your VCR is like mine
-and does not have an LP mode then an EP recording is your only choice if
-you want the higher capacity.
+partially offset by its lower data rate.  If, however, your VCR is like
+mine and does not have an LP mode then an EP recording is your only choice
+if you want the higher capacity.
 .SS "RECORDING LONGEVITY"
 Backer's don't seem to be able to recover their data from tapes that have
 been sitting for a long time.  My one data point in this matter is a tape
@@ -566,18 +634,14 @@ started then it will return 0 or the last error code is one is pending.
 The
 .IR close (2)
 system call will block until all of the buffers have been flushed.  This
-generally takes several seconds.
+generally takes several seconds and is considered bad design... sue me.
 .SH FILES
 .IP /dev/backer/*/*
-The device file names.
-.IP /proc/driver/backer
+The device files.
+.IP /proc/sys/dev/backer/*/status
 Driver and hardware status information.
-.SH BUGS
-Sometimes, when writing to tape, the Backer hardware skips the first line
-of data in the DMA buffer.  This shifts the video image up one line and
-makes it hard for the driver to stop the card at a proper frame boundary.
-The cause of this is unknown and the tape format is designed to work around
-the problem.
+.IP /proc/sys/dev/backer/*/format_table
+Device format parameter table.
 .SH "SEE ALSO"
 .IR mt (1),
 .IR tar (1),

@@ -1,3 +1,98 @@
+3.101 (2001/12/30)
+	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
+
+	Documentation updates.
+
+	Cleaned up the ISA DMA channel search, offset retrieval, and buffer
+	flushing algorithms a little bit.
+
+	Made the sector order checking algorithm safe against wrap-around
+	then shifted the sector numbering so that the first data sector
+	in a recording is sector number 0.
+
+	Did some assorted clean-ups in the formating code.
+
+	Major work on backer_parport.c --- it might even work...
+
+	Removed CONFIG_BACKER_TIMEOUT from the Makefile --- decided it was
+	over-design.  The default timeout is now hard-coded in the source.
+
+	Removed the ability to disable various modes at compile time ---
+	decided it was over-design.
+
+	Increased the maximum timeout to 1.5 minutes and imposed a minimum
+	timeout of 15 seconds to account for the time needed to flush the
+	now large I/O buffer.
+
+	Changed the delimiter from ',' to ':' for backer_isa's isa= option
+	and removed the restriction on the number of devices that can be
+	specified.
+
+	Changed the isa= and port= options in backer_isa and backer_parport
+	respectively to units= for both for cross-module consistency.
+
+	Changed the unit locking mechanism from spinlocks to semaphores to
+	completely prevent re-entrance in the kernel interface just to be
+	on the safe side.
+
+	I *believe* I have finally fixed the off-by-one-line bug in the ISA
+	driver!  I can only verify the fix in NTSC mode so the PAL version
+	of the fix is a "best guess" but a verification should be
+	forth-coming.
+
+	Updated the resource allocation in backer_isa to match current
+	kernel practices.
+
+	Moved the format information table from a static array in
+	bkr_format.c to an entry in the device info structure.  This is
+	done with the intention of eventually allowing each installed
+	device to have its own format table (Backers using different video
+	field sizes have been observed in the wild).
+
+	Moved the /proc interface from the single /proc/driver/backer file
+	to the sysctl hierarchy under /proc/sys/dev/backer.  Each device
+	now has a separate subdirectory with its own status file.
+
+	Increased the BOR length to 5 seconds for good luck.
+
+	Added the sysctl interface /proc/sys/dev/backer/*/format_table for
+	dynamically loading format tables into the driver.
+
+	Added an I/O wait queue to each unit and elliminated polling from
+	the main module.
+
+	Added the poll method;  the driver should now support the select(2)
+	and poll(2) system calls.
+
+	Made some minor Reed-Solomon encoder and decoder performance
+	improvements.
+
+	Driver now requires a kernel with snprintf().  This function is
+	known to be present in 2.4.13 and later kernels.
+
+	Made some changes to the tape format.  Rather than explicitly
+	recording the sector type as a field within each sector header, the
+	three types of sectors (BOR, DATA and EOR) are identified by the
+	sign of the sector number and the amount of data in the sector:
+	BOR sectors have negative numbers, EOR sectors are empty, DATA
+	sectors are neither of the above.
+
+	Made some more behaviour improvements to the read() and write()
+	calls which has also simplified them somewhat.  Most importantly,
+	the new semantics guarantee returns to user-space if the data
+	stream gets stuck.  This has (mostly) elliminated the need for a
+	driver-wide timeout since a hung read or write operation can now be
+	killed from outside the kernel.  For this reason, the timeout
+	option for the main module along with the timeout-setting ioctl()
+	have been removed.  A more significant side effect of the
+	improvements, however, is that tar now requires the
+	--read-full-blocks option when reading from this driver.
+
+	Changed the "Least Skipped" and "Most Skipped" fields in the status
+	interface to "Smallest Field" and "Largest Field" respectively.
+	These now indicated the range of video field sizes encountered so
+	far during playback.
+
 3.100 (2001/8/15)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
 
@@ -47,7 +142,7 @@
 
 	Re-implemented the driver's ability to start reading before a valid
 	data stream is coming off the tape and increased the default
-	timeout.
+	timeout to 15 seconds (again).
 
 	Removed the reset() function from the device level API.
 

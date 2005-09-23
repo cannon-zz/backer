@@ -1,7 +1,8 @@
 /*
  * Global definitions for Reed-Solomon encoder/decoder
  *
- * Copyright (C) 2000 Kipp C. Cannon
+ * Copyright (C) 2000,2001 Kipp C. Cannon
+ * Portions Copyright (C) 1999 Phil Karn, KA9Q
  */
 
 #ifndef RS_H
@@ -75,11 +76,11 @@ typedef int gf;
 
 typedef struct
 	{
-	int  n;                         /* code word size in symbols */
-	int  k;                         /* data symbols used in code */
-	int  parity;                    /* parity symbols used in code */
-	int  remainder_start;           /* initializer for encoder's remainder index */
-	gf  g[MAX_PARITY+1];            /* generator polynomial g(x) in alpha rep */
+	int  n;                 /* code word size in symbols */
+	int  k;                 /* data symbols used in code */
+	int  parity;            /* parity symbols used in code */
+	int  remainder_start;   /* initializer for encoder's remainder index */
+	gf  g[MAX_PARITY+1];    /* generator polynomial g(x) in alpha rep */
 	} rs_format_t;
 
 /*

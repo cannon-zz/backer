@@ -5,6 +5,7 @@
  * written by Phil Karn which was distributed under the name rs-2.0.
  *
  * Copyright (C) 2000,2001 Kipp C. Cannon
+ * Portions Copyright (C) 1999 Phil Karn, KA9Q
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -144,11 +145,11 @@ static void generate_GF(int p)
 			Alpha_exp[i] = (Alpha_exp[i] & NN) ^ Alpha_exp[MM];
 		}
 
+	memcpy(&Alpha_exp[NN], Alpha_exp, NN * sizeof(gf));
+
 	for(i = 0; i < NN; i++)
 		Log_alpha[Alpha_exp[i]] = i;
 	Log_alpha[0] = INFINITY;
-
-	memcpy(&Alpha_exp[NN], Alpha_exp, NN * sizeof(gf));
 }
 
 
@@ -195,16 +196,26 @@ static void generate_poly(rs_format_t *rs_format)
  * but the parity symbols and data symbols taken together do form a single
  * logical code word with the parity symbols appearing below the data
  * symbols.  The code symbols that are returned from this encoder are given
- * with the lowest order term at offset 0 in the (logically combined) array
- * so we have
+ * with the lowest order term at offset 0 in the (logically combined)
+ * array.  So if c(x) is the resultant code polynomial, i.e.
  *
- *    c(x) = c_NN * x^NN + c_(NN-1) * x^(NN-1) + ... + c_0 * x^0
+ *    c(x) = c_NN * x^NN + c_(NN-1) * x^(NN-1) + ... + c_0 * x^0,
  *
- * and
+ * and block[] is a hypothetical array with NN+1 elements then c(x) is
+ * stored in block[] as
  *
- *             block[] = { c_0, ..., c_NN }
+ *    block[] = { c_0, ..., c_NN }
  *
- * with the parity symbols at the bottom of the array.
+ * and block[] is mapped into the parity[] and data[] arrays as follows
+ *
+ *    block[0]                     = parity[0]
+ *    block[1]                     = parity[1]
+ *      ...
+ *    block[rs_format->parity - 1] = parity[rs_format->parity - 1]
+ *    block[rs_format->parity    ] = data[0]
+ *    block[rs_format->parity + 1] = data[1]
+ *      ...
+ *    block[rs_format->n - 1     ] = data[rs_format->k - 1]
  *
  * The encoding algorithm is the long division algorithm but where we only
  * care about the remainder.  The remainder is computed in place and the
@@ -228,29 +239,30 @@ void reed_solomon_encode(data_t *parity, data_t *data, rs_format_t *rs_format)
 	data_t  *b;                     /* current remainder symbol */
 	gf  *g;                         /* current gen. poly. symbol */
 	gf   feedback;                  /* feed-back multiplier */
+	rs_format_t  format = *rs_format;  /* make local copy */
 
-	if(rs_format->parity == 0)
+	if(format.parity == 0)
 		return;
 
-	memset(parity, 0, rs_format->parity * sizeof(data_t));
+	memset(parity, 0, format.parity * sizeof(data_t));
 
 	/*
 	 * At the start of each iteration, b points to the most significant
 	 * symbol in the remainder for that iteration.
 	 */
 
-	b = &parity[rs_format->remainder_start];
+	b = &parity[format.remainder_start];
 
-	for(d = &data[rs_format->k - 1]; d >= data; d--)
+	for(d = &data[format.k - 1]; d >= data; d--)
 		{
 		feedback = Log_alpha[*d ^ *b];
 		if(feedback != INFINITY)
 			{
 			b--;
-			for(g = &rs_format->g[rs_format->parity - 1]; b >= parity; g--, b--)
+			for(g = &format.g[format.parity - 1]; b >= parity; g--, b--)
 				if(*g != INFINITY)
 					*b ^= Alpha_exp[feedback + *g];
-			for(b = &parity[rs_format->parity - 1]; g > rs_format->g; b--, g--)
+			for(b = &parity[format.parity - 1]; g > format.g; b--, g--)
 				if(*g != INFINITY)
 					*b ^= Alpha_exp[feedback + *g];
 			*b = Alpha_exp[feedback + *g];
@@ -258,7 +270,7 @@ void reed_solomon_encode(data_t *parity, data_t *data, rs_format_t *rs_format)
 		else
 			*b = 0;
 		if(--b < parity)
-			b = &parity[rs_format->parity - 1];
+			b = &parity[format.parity - 1];
 		}
 }
 
@@ -291,8 +303,9 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	static gf root[MAX_PARITY];     /* roots of lambda */
 	static gf loc[MAX_PARITY];      /* error locations (reciprocals of root[]) */
 	int  count = 0;                 /* number of roots of lambda */
+	rs_format_t  format = *rs_format;  /* make local copy */
 
-	if(rs_format->parity == 0)
+	if(format.parity == 0)
 		return(0);
 
 	/*
@@ -303,13 +316,13 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 * errors to correct.
 	 */
 
-	for(x = &s[rs_format->parity]; x > s; *(--x) = parity[0]);
+	for(x = &s[format.parity]; x > s; *(--x) = parity[0]);
 
-	for(j = 1; j < rs_format->parity; j++)
+	for(j = 1; j < format.parity; j++)
 		if(parity[j] != 0)
 			{
 			tmp = modNN(Log_alpha[parity[j]] + LOG_BETA*J0*j);
-			for(x = s; x < &s[rs_format->parity]; x++)
+			for(x = s; x < &s[format.parity]; x++)
 				{
 				*x ^= Alpha_exp[tmp];
 				#if (LOG_BETA==1)
@@ -320,11 +333,11 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 				#endif /* LOG_BETA */
 				}
 			}
-	for(; j < rs_format->n; j++)
-		if(data[j - rs_format->parity] != 0)
+	for(; j < format.n; j++)
+		if(data[j - format.parity] != 0)
 			{
-			tmp = modNN(Log_alpha[data[j - rs_format->parity]] + LOG_BETA*J0*j);
-			for(x = s; x < &s[rs_format->parity]; x++)
+			tmp = modNN(Log_alpha[data[j - format.parity]] + LOG_BETA*J0*j);
+			for(x = s; x < &s[format.parity]; x++)
 				{
 				*x ^= Alpha_exp[tmp];
 				#if (LOG_BETA==1)
@@ -335,7 +348,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 				#endif /* LOG_BETA */
 				}
 			}
-	for(x = &s[rs_format->parity-1]; *x == 0; x--)
+	for(x = &s[format.parity-1]; *x == 0; x--)
 		{
 		if(x == s)
 			return(0);
@@ -349,7 +362,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 */
 
 	lambda[0] = 1;
-	memset(&lambda[1], 0, rs_format->parity*sizeof(gf));
+	memset(&lambda[1], 0, format.parity*sizeof(gf));
 
 	if(no_eras > 0)
 		{
@@ -370,12 +383,12 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 * Control Codes, section 7.5.
 	 */
 
-	for(i = rs_format->parity; i > deg_lambda; i--)
+	for(i = format.parity; i > deg_lambda; i--)
 		b[i] = INFINITY;
 	for(; i >= 0; i--)
 		b[i] = Log_alpha[lambda[i]];
 
-	for(j = no_eras; j < rs_format->parity; j++)	/* j+1 is "r", the step number */
+	for(j = no_eras; j < format.parity; j++)	/* j+1 is "r", the step number */
 		{
 		/* compute discrepancy */
 		discr = 0;
@@ -388,13 +401,13 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 		if(discr == INFINITY)
 			{
 			/* b(x) <-- x*b(x) */
-			memmove(&b[1], &b[0], rs_format->parity * sizeof(gf));
+			memmove(&b[1], &b[0], format.parity * sizeof(gf));
 			b[0] = INFINITY;
 			continue;
 			}
 
 		/* temp(x) <-- lambda(x) - discr*x*b(x) */
-		for(i = rs_format->parity; i >= 1; i--)
+		for(i = format.parity; i >= 1; i--)
 			{
 			if(b[i-1] != INFINITY)
 				temp[i] = lambda[i] ^ Alpha_exp[discr + b[i-1]];
@@ -407,7 +420,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 			{
 			deg_lambda = j+1 + no_eras - deg_lambda;
 			/* b(x) <-- discr^-1 * lambda(x) */
-			for(i = rs_format->parity; i >= 0; i--)
+			for(i = format.parity; i >= 0; i--)
 				{
 				if(lambda[i] != 0)
 					b[i] = modNN(NN - discr + Log_alpha[lambda[i]]);
@@ -418,15 +431,15 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 		else
 			{
 			/* b(x) <-- x*b(x) */
-			memmove(&b[1], &b[0], rs_format->parity * sizeof(gf));
+			memmove(&b[1], &b[0], format.parity * sizeof(gf));
 			b[0] = INFINITY;
 			}
 
 		/* lambda(x) <-- temp(x) */
-		memcpy(lambda, temp, (rs_format->parity + 1) * sizeof(gf));
+		memcpy(lambda, temp, (format.parity + 1) * sizeof(gf));
 		}
 
-	for(i = rs_format->parity; i > deg_lambda; i--)
+	for(i = format.parity; i > deg_lambda; i--)
 		lambda[i] = INFINITY;
 	for(; i >= 0; i--)
 		lambda[i] = Log_alpha[lambda[i]];
@@ -471,7 +484,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 #else
 		loc[count] = k;
 #endif
-		if(loc[count] >= rs_format->n)
+		if(loc[count] >= format.n)
 			return(-1);
 		if(++count == deg_lambda)
 			break;
@@ -490,16 +503,16 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 * (modulo x^(n-k)) in alpha rep.  Also find deg(omega).
 	 */
 
-	memset(omega, 0, rs_format->parity * sizeof(gf));
+	memset(omega, 0, format.parity * sizeof(gf));
 	for(i = deg_lambda; i >= 0; i--)
 		{
 		if(lambda[i] == INFINITY)
 			continue;
-		for(k = rs_format->parity - 1, y = &s[k - i]; y >= s; k--, y--)
+		for(k = format.parity - 1, y = &s[k - i]; y >= s; k--, y--)
 			if(*y != INFINITY)
 				omega[k] ^= Alpha_exp[lambda[i] + *y];
 		}
-	for(x = &omega[rs_format->parity - 1]; (x >= omega) && (*x == 0); x--)
+	for(x = &omega[format.parity - 1]; (x >= omega) && (*x == 0); x--)
 		*x = INFINITY;
 	for(deg_omega = x - omega; x >= omega; x--)
 		*x = Log_alpha[*x];
@@ -521,7 +534,7 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 */
 
 	/* this is now the degree of lambda'(x) */
-	deg_lambda = min(deg_lambda, rs_format->parity-1) & ~1;
+	deg_lambda = min(deg_lambda, format.parity-1) & ~1;
 
 	for(y = &root[count - 1]; y >= root; y--)
 		{
@@ -546,10 +559,10 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 		num = modNN(Log_alpha[num] + (J0-1) * *y);
 
 		/* Apply error to block */
-		if(loc[y - root] < rs_format->parity)
+		if(loc[y - root] < format.parity)
 			parity[loc[y - root]] ^= Alpha_exp[num + NN - Log_alpha[den]];
 		else
-			data[loc[y - root] - rs_format->parity] ^= Alpha_exp[num + NN - Log_alpha[den]];
+			data[loc[y - root] - format.parity] ^= Alpha_exp[num + NN - Log_alpha[den]];
 		}
 
 	if(erasure != NULL)

@@ -25,6 +25,6 @@
 
 #include "backer_device.h"
 
-extern bkr_device_ops_t  stdio_ops;
+extern bkr_device_ops_t  bkr_stdio_ops;
 
 #endif /* _STDIO_DEV_H_ */

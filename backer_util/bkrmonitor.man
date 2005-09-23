@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BKRMONITOR 8 "August 15, 2001" "Linux" "Backer"
+.TH BKRMONITOR 8 "December 30, 2001" "Linux" "Backer"
 .SH NAME
 bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
@@ -31,23 +31,68 @@ The \fBbkrmonitor\fP utility is a GTK+ application for monitoring the
 status of the
 .IR backer (4)
 driver.  It works by repeatedly parsing the contents of
-\fB/proc/driver/backer\fP and displaying the information graphically.
+\fB/proc/sys/dev/backer/\fP\fIdevice\fP\fB/status\fP and displaying the
+information graphically.
 .PP
 See
 .IR backer (4)
 for the meaning of the information displayed.
+.PP
+The status file to be read can be specified by providing a device number
+with the \fB-d\fP option.  It is also possible to specify ``stdin'' instead
+of a device number in which case status information is read from
+.IR stdin (3).
+This feature may be used in conjunction with the \fB-d\fP option of
+.IR bkrencode (8)
+to monitor that utility's decoding status.  See \fBEXAMPLES\fP below for
+more information.
 .SS OPTIONS
 .TP
 \fB\-d\fP \fIdevice\fP
 Monitor device number \fIdevice\fP.  The default is 0.  If \fIdevice\fP is
-"s" then program input is read from stdin rather than from
-\fB/proc/driver/backer\fP.
+``stdin'' then program input is read from
+.IR stdin (3)
+rather than from the \fB/proc\fP file system.
 .TP
 \fB\-h\fP
 Print a usage message.
 .TP
 \fB\-t\fP \fIinterval\fP
 Set the update interval to \fIinterval\fP milliseconds.
+.SH EXAMPLES
+Here is an example procedure by which the status of
+.IR bkrencode (8)
+can be monitored.  First a FIFO must be created.  This can be done with
+.IR mkfifo (1)
+by typing
+.RS 3
+.sp
+\fB$\fP mkfifo pipe
+.sp
+.RE
+or with
+.IR mknod (1)
+by typing
+.RS 3
+.sp
+\fB$\fP mknod pipe p
+.sp
+.RE
+Both of these result in a FIFO called ``pipe'' being created in the current
+directory which can later be deleted with
+.IR rm (1).
+The next step is to link \fBbkrmonitor\fP to
+.IR bkrencode (8)
+through the pipe.  This is accomplished by typing, for example,
+.RS 3
+.sp
+\fB$\fP bkrmonitor -d stdin <pipe &
+.br
+\fB$\fP bkrencode -u -d <tape.raw >tape.dat 2>pipe
+.sp
+.RE
+where the raw tape data is in tape.raw and the decoded data is being saved
+in tape.dat.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),

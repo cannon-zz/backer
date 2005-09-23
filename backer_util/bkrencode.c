@@ -38,6 +38,9 @@
 
 #define  PROGRAM_NAME    "bkrencode"
 
+#define  __STRINGIFY(x)  #x
+#define  STRINGIFY(x)    __STRINGIFY(x)
+
 /*
  * Function prototypes
  */
@@ -59,31 +62,38 @@ unsigned int  got_sigint;
 int main(int argc, char *argv[])
 {
 	int  tmp, result;
-	int  skip_bad = 0, dump_status = 0;
+	int  skip_bad = 0, time_only = 0, dump_status = 0, verbose = 0;
 	bkr_state_t  direction;
 	char  *devname = DEFAULT_DEVICE;
 	struct mtget  mtget = { mt_dsreg : DEFAULT_MODE };
 	bkr_device_t  device;
-	bkr_sector_t  sector;
+	bkr_stream_t  stream;
+	char  msg[100];
+	unsigned long  data_length = 0;
 
 	/*
 	 * Some setup stuff
 	 */
 
 	device.state = BKR_STOPPED;
-	device.ops = &stdio_ops;
-	sector.buffer = NULL;
+	device.ops = &bkr_stdio_ops;
+	memcpy(device.format_info, BKR_FORMAT_INFO_INITIALIZER, sizeof(BKR_FORMAT_INFO_INITIALIZER));
+	stream.buffer = NULL;
 	direction = BKR_WRITING;
 
 	/*
 	 * Process command line options
 	 */
 
-	while((result = getopt(argc, argv, "D:F:df::hsuV:")) != EOF)
+	while((result = getopt(argc, argv, "d::f::hstuvD:F:V:")) != EOF)
 		switch(result)
 			{
 			case 'd':
 			dump_status = 1;
+			if(optarg != NULL)
+				if(*optarg == 's')
+					break;
+			fcntl(STDERR_FILENO, F_SETFL, O_NONBLOCK);
 			break;
 
 			case 'f':
@@ -96,8 +106,16 @@ int main(int argc, char *argv[])
 			skip_bad = 1;
 			break;
 
+			case 't':
+			time_only = 1;
+			break;
+
 			case 'u':
 			direction = BKR_READING;
+			break;
+
+			case 'v':
+			verbose = 1;
 			break;
 
 			case 'D':
@@ -160,17 +178,17 @@ int main(int argc, char *argv[])
 	"Backer tape data encoder/unencoder.\n" \
 	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
-	"	-D <h/l>  Set the data rate to high or low\n" \
-	"	-F <s/e>  Set the data format to SP or EP\n" \
-	"	-V <p/n>  Set the video mode to PAL or NTSC\n" \
-	/*
-	"	-d        Dump status info to stderr (unencoding only)\n" \
-	*/
+	"	-D<h/l>   Set the data rate to high or low\n" \
+	"	-F<s/e>   Set the data format to SP or EP\n" \
+	"	-V<p/n>   Set the video mode to PAL or NTSC\n" \
+	"	-d[s]     Dump unencoding status info to stderr [synchronously]\n" \
 	"	-f [dev]  Get the format to use from the Backer device dev\n" \
-	"                  (default " DEFAULT_DEVICE ")\n" \
+	"	          (default " DEFAULT_DEVICE ")\n" \
 	"	-h        Display usage message\n" \
 	"	-s        Skip bad sectors\n" \
-	"	-u        Unencode tape data (default is to encode)\n", stderr);
+	"	-t        Compute time only (do not encode or decode data)\n" \
+	"	-u        Unencode tape data (default is to encode)\n" \
+	"	-v        Be verbose\n", stderr);
 			exit(1);
 			}
 
@@ -180,25 +198,26 @@ int main(int argc, char *argv[])
 
 	if(mtget.mt_dsreg == -1)
 		{
+		sprintf(msg, PROGRAM_NAME ": %s", devname);
 		if((tmp = open(devname, O_RDONLY)) < 0)
 			{
-			perror(PROGRAM_NAME);
+			perror(msg);
 			exit(1);
 			}
 		if(ioctl(tmp, MTIOCGET, &mtget) < 0)
 			{
-			perror(PROGRAM_NAME);
+			perror(msg);
 			exit(1);
 			}
 		close(tmp);
 		}
 	device.mode = mtget.mt_dsreg;
 
-	if(!dump_status)
+	if(!dump_status && verbose)
 		{
 		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
 		        (direction == BKR_READING) ? "DECODING" : "ENCODING");
-		bkr_display_mode(device.mode);
+		bkr_display_mode(stderr, device.mode);
 		}
 
 	/*
@@ -216,7 +235,7 @@ int main(int argc, char *argv[])
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
-	bkr_format_reset(&device, &sector, device.mode, direction);
+	bkr_format_reset(&device, &stream, device.mode, direction);
 	device.ops->start(&device, direction);
 	switch(direction)
 		{
@@ -224,32 +243,28 @@ int main(int argc, char *argv[])
 		while(1)
 			{
 			errno = 0;
-			result = sector.read(&device, &sector);
-			if(result > 0)
-				{
-				/* EOF */
-				break;
-				}
+			result = stream.read(&device, &stream);
 			if(result < 0)
 				{
 				if(result == -EPIPE)
 					break;
 				if((result == -ENODATA) && skip_bad)
 					{
-					fprintf(stderr, PROGRAM_NAME": skipping bad sector (%d total)\n", skip_bad++);
+					if(verbose)
+						fprintf(stderr, PROGRAM_NAME ": skipping bad sector (%d total)\n", skip_bad++);
 					continue;
 					}
-				fprintf(stderr, "Sector: %u\n", sector.header.number);
+				sprintf(msg, PROGRAM_NAME ": stdin (at sector %+08d)", stream.header.number);
 				errno = -result;
-				perror(PROGRAM_NAME": stdin");
+				perror(msg);
 				exit(1);
 				}
 			if(dump_status)
 				{
 				fprintf(stderr,
-				        "Unit            : 0 READING\n"
+				        "Current State   : READING\n"
 				        "Current Mode    : %u\n"
-				        "Sector Number   : %u\n"
+				        "Sector Number   : %+08d\n"
 				        "Byte Errors     : %u\n"
 				        "In Worst Block  : %u / %u\n"
 				        "Recently        : %u\n"
@@ -257,36 +272,44 @@ int main(int argc, char *argv[])
 				        "Framing Errors  : %u\n"
 				        "Overrun Errors  : %u\n"
 				        "Underflows      : %u\n"
-				        "Worst Key       : %u\n"
+				        "Worst Key       : %u / "STRINGIFY(BKR_MAX_KEY_WEIGHT)"\n"
 				        "Closest Non-Key : %u\n"
-				        "Least Skipped   : %u\n"
-				        "Most Skipped    : %u\n"
+				        "Smallest Field  : %u\n"
+				        "Largest Field   : %u\n"
 				        "I/O Buffer      : %u / %u\n",
 				        device.mode,
-				        sector.header.number,
-				        sector.health.total_errors,
-				        sector.errors.symbol, sector.rs_format.parity,
-				        sector.errors.recent_symbol,
-				        sector.errors.block,
-				        sector.errors.frame,
-				        sector.errors.overrun,
-				        sector.errors.underflow,
-				        sector.health.worst_key,
-				        sector.health.best_nonkey,
-				        sector.health.least_skipped,
-				        sector.health.most_skipped,
-				        bytes_in_buffer(device.head, device.tail, device.size), device.size);
+				        stream.header.number,
+				        stream.health.total_errors,
+				        stream.errors.symbol, stream.rs_format.parity,
+				        stream.errors.recent_symbol,
+				        stream.errors.block,
+				        stream.errors.frame,
+				        stream.errors.overrun,
+				        stream.errors.underrun,
+				        stream.health.worst_key,
+				        stream.health.best_nonkey,
+				        stream.health.smallest_field,
+				        stream.health.largest_field,
+				        bytes_in_buffer(device.io_head, device.io_tail, device.io_size), device.io_size);
+				stream.errors.recent_symbol = 0;
 				}
-			while(sector.offset < sector.end)
-				{
-				sector.offset += fwrite(sector.offset, 1, sector.end - sector.offset, stdout);
-				if(ferror(stdout))
+			result = stream.end - stream.pos;
+			if(result == 0)	/* EOF? */
+				break;
+			data_length += result;
+			if(!time_only)
+				while(stream.pos < stream.end)
 					{
-					perror(PROGRAM_NAME": stdout");
-					exit(1);
+					stream.pos += fwrite(stream.pos, 1, stream.end - stream.pos, stdout);
+					if(ferror(stdout))
+						{
+						perror(PROGRAM_NAME": stdout");
+						exit(1);
+						}
 					}
-				}
 			}
+		if(time_only)
+			fprintf(stdout, PROGRAM_NAME ": decoded recording length: %lu bytes\n", data_length);
 		fflush(stdout);
 		break;
 
@@ -294,29 +317,45 @@ int main(int argc, char *argv[])
 		while(!feof(stdin) & !got_sigint)
 			{
 			errno = 0;
-			while((sector.offset < sector.end) && !feof(stdin))
+			while((stream.pos < stream.end) && !feof(stdin))
 				{
-				sector.offset += fread(sector.offset, 1, sector.end - sector.offset, stdin);
+				stream.pos += fread(stream.pos, 1, stream.end - stream.pos, stdin);
 				if(ferror(stdin))
 					{
 					perror(PROGRAM_NAME": stdin");
 					break;
 					}
 				}
-			result = sector.write(&device, &sector);
-			if(result < 0)
+			if(!time_only)
 				{
-				errno = -result;
-				perror(PROGRAM_NAME": stdout");
-				exit(1);
+				result = stream.write(&device, &stream);
+				if(result < 0)
+					{
+					errno = -result;
+					perror(PROGRAM_NAME": stdout");
+					exit(1);
+					}
 				}
+			else
+				stream.pos = stream.buffer;
+			data_length++;
 			}
-		do
-			result = bkr_sector_write_eor(&device, &sector);
-		while(result == -EAGAIN);
-		do
-			result = device.ops->flush(&device);
-		while(result == -EAGAIN);
+		if(!time_only)
+			{
+			while(bkr_sector_write_eor(&device, &stream) == -EAGAIN);
+			while(device.ops->flush(&device) == -EAGAIN);
+			}
+
+		tmp = (BKR_VIDEOMODE(device.mode) == BKR_PAL) ? 50 : 60;
+		data_length += (BOR_LENGTH + EOR_LENGTH) * tmp;
+		if(time_only)
+			{
+			fprintf(stdout, "%luh", data_length / 3600 / tmp);
+			data_length %= 3600 * tmp;
+			fprintf(stdout, " %lum", data_length / 60 / tmp);
+			data_length %= 60 * tmp;
+			fprintf(stdout, " %.1fs\n", (float) data_length / tmp);
+			}
 		break;
 
 		default:

@@ -67,95 +67,6 @@
  */
 
 
-/*
- * The meaning of some of the variables used in sector formating is as
- * follows.  The diagram shows the layout for a complete frame (two
- * sectors) starting on an odd field of video.
- *
- *    --       --  +-------------+
- *    ^   leader   |   leader    |
- *    |        --  +-------------+  --
- *    |            |     A       |   ^
- *    |            |     C       |   |
- *    |            |     T R     |   |
- *    |            |     I E     |   |
- *  video_size     |     V G     |   active_size
- *    |            |     E I     |   |
- *    |            |       O     |   |
- *    |            |       N     |   |
- *    |            |             |   v
- *    |        --  +-------------+  --
- *    v  trailer   |   trailer   |
- *    --       --  +-------------+  <-- one extra line in NTSC
- *                 |   leader    |
- *                 +-------------+
- *                 |     A       |
- *                 |     C       |
- *                 |     T R     |
- *                 |     I E     |
- *                 |     V G     |
- *                 |     E I     |
- *                 |       O     |
- *                 |       N     |
- *                 |             |
- *                 +-------------+
- *                 |   trailer   |
- *                 +-------------+
- *
- * The "extra line" is a consequence of the interleaving of the image and
- * is a 1/2 width line occuring in the odd video field of the card's NTSC
- * signal.  The formating code handles this by inserting a dummy line.  PAL
- * also has a 1/2 width line but in this case its presence makes both video
- * fields have the same number of lines so it's just absorbed into the
- * trailer.  (Note:  although they are 1/2 width lines, a full line of data
- * is output by the Backer hardware).
- *
- * Zoomed in on the active area of a single sector, the meaning of a few
- * more variables is shown below.  offset always points to the next byte to
- * be read/written and if equal to end then the sector is empty/full
- * respectively.
- *
- * If the sector contains less than its maximum capacity of data, then the
- * actual number of bytes in the sector is represented as a 12 bit number
- * whose high 8 bits are placed in the last available byte of the data area
- * and low 4 bits are stored in the header.  The number thusly represented
- * is not simply the count of bytes in the sector but the count of bytes
- * encoded in such a way that the low 4 bits are never all 0 which allows
- * the 0 value to be used to indicate that the sector is full.
- *
- * Logically, the data portion of the sector (including the header) is
- * divided into blocks.  Associated with each block is a group of parity
- * symbols used for error control.  The parity symbols for all the blocks
- * are grouped together at the top end of the sector's active area.
- *
- * The active area of the sector is not written linearly to tape but is
- * instead interleaved in order to distribute burst errors among separate
- * blocks.  The final distance, in bytes, between adjacent bytes of a given
- * block when written to tape is given by the interleave parameter.
- *
- *             --  +-------------+ -- <-- buffer (pointer)
- *             ^   |             |  ^
- *             |   |             |  |
- *             |   |             |  |
- *             |   |             |  |
- *             |   |      D      |  |
- *     data_size   |      A      |  |
- *             |   |      T      |  buffer_size
- *             |   |      A      |  |
- *             |   |             |  |
- *             |   |             |  | <--- end (pointer as appropriate)
- *             |   |             |  |
- *             |   +- hi 8 bits -+  |
- *             |   +-------------+  |
- *             v   |    Header   |  |
- *             --  +-------------+  |
- *             ^   |             |  |
- *   parity_size   |    Parity   |  |
- *             v   |             |  v
- *             --  +-------------+ --
- */
-
-
 #ifndef BACKER_FMT_H
 #define BACKER_FMT_H
 
@@ -175,55 +86,47 @@
 #elif !defined __LITTLE_ENDIAN && defined __BIG_ENDIAN
 #define __BYTE_ORDER __BIG_ENDIAN
 #else
-#error Oh oh:  byte order problems!  figure it out yourself.
+#error Oh oh:  byte order problems!  Figure it out yourself.
 #endif
 #endif
+
 
 /*
  * Paramters
  */
 
-#define  BKR_LEADER            0xe2     /* leader is filled with this */
-#define  BKR_TRAILER           0x33     /* trailer is filled with this */
-#define  BKR_FILLER            0x33     /* unused space is filled with this */
-#define  BOR_LENGTH            4        /* second(s) */
-#define  EOR_LENGTH            1        /* second(s) */
+#define  BOR_LENGTH    5                /* second(s) */
+#define  EOR_LENGTH    1                /* second(s) */
+#define  BKR_MAX_KEY_WEIGHT  64
 
 
 /*
  * Header structure
  *
- * T-200 at EP = 600 minutes = 2160000 NTSC sectors = 22 bit sector number
+ * 26 bit sector number = about 155 hours in NTSC, or 186 hours in PAL.
  */
-
-typedef enum
-	{
-	BOR_SECTOR = 0,                 /* sector is a BOR marker */
-	EOR_SECTOR,                     /* sector is an EOR marker */
-	DATA_SECTOR                     /* sector contains data */
-	} bkr_sector_type_t;
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 
 typedef struct
 	{
-	u_int32_t  number : 22;         /* sector number */
-	u_int32_t  low_used : 4;        /* low 4 bits of usage */
-	u_int32_t  type : 6;            /* sector type */
+	int32_t  number : 25;           /* sector number */
+	u_int32_t  low_used : 4;        /* low 4 bits of encoded usage */
+	u_int32_t  id : 3;              /* stream id */
 	} bkr_sector_header_t;
 
-#define  SECTOR_HEADER_INITIALIZER  ((bkr_sector_header_t) { 0, 0, BOR_SECTOR })
+#define  SECTOR_HEADER_INITIALIZER  ((bkr_sector_header_t) { -1, 0, 0 })
 
 #else /* __BYTE_ORDER */
 
 typedef struct
 	{
-	u_int32_t  type : 6;           /* sector type */
-	u_int32_t  low_used : 4;       /* low 4 bits of usage */
-	u_int32_t  number : 22;        /* sector number */
+	u_int32_t  id : 3;             /* stream id */
+	u_int32_t  low_used : 4;       /* low 4 bits of encoded usage */
+	int32_t  number : 25;          /* sector number */
 	} bkr_sector_header_t;
 
-#define  SECTOR_HEADER_INITIALIZER  ((bkr_sector_header_t) { BOR_SECTOR, 0, 0 })
+#define  SECTOR_HEADER_INITIALIZER  ((bkr_sector_header_t) { 0, 0, -1 })
 
 #endif /* __BYTE_ORDER */
 
@@ -239,75 +142,41 @@ typedef struct
 	unsigned int  block;
 	unsigned int  frame;
 	unsigned int  overrun;
-	unsigned int  underflow;
+	unsigned int  underrun;
 	} bkr_errors_t;
 
 #define  BKR_ERRORS_INITIALIZER  ((bkr_errors_t) {0, 0, 0, 0, 0, 0})
 
 typedef struct
 	{
-	unsigned int  total_errors;
+	unsigned int  total_errors;     /* total bad bytes corrected */
 	unsigned int  worst_key;
 	unsigned int  best_nonkey;
-	unsigned int  least_skipped;
-	unsigned int  most_skipped;
+	int  last_field_offset;         /* offset of last field in I/O buffer */
+	unsigned int  smallest_field;   /* smallest video field so far */
+	unsigned int  largest_field;    /* largest video field so far */
 	} bkr_health_t;
 
-#define  BKR_HEALTH_INITIALIZER  ((bkr_health_t) { 0, ~0, 0, ~0, 0})
+#define  BKR_HEALTH_INITIALIZER  ((bkr_health_t) { 0, BKR_MAX_KEY_WEIGHT, 0, -1, ~0, 0})
 
-typedef enum
+struct bkr_stream_t
 	{
-	NRZ,                            /* Non-return to zero */
-	GCR                             /* Group code record */
-	} modulation_t;
-
-typedef struct
-	{
-	unsigned int  video_size;       /* see diagram above */
-        unsigned int  leader;           /* see diagram above */
-        unsigned int  trailer;          /* see diagram above */
-	unsigned int  active_size;      /* see diagram above */
-	unsigned int  key_interval;     /* key byte spacing */
-	unsigned int  key_length;       /* number of key bytes */
-	modulation_t  modulation;       /* modulation type */
-	unsigned int  modulation_pad;   /* extra space for modulation overhead */
-	unsigned int  buffer_size;      /* see diagram above */
-	unsigned int  interleave;       /* block interleave */
-	unsigned int  data_size;        /* see diagram above */
-	unsigned int  parity_size;      /* see diagram above */
-	} bkr_format_info_t;
-
-#define BKR_FORMAT_INFO_INITIALIZER                                                       \
-	{ { 1012,  32, 28,  952,  45, 21, NRZ,  21,  931,  7,  861,  70 },      /* nls */ \
-	  { 1012,  40, 32,  940,  42, 22, GCR, 124,  816, 12,  720,  96 },      /* nle */ \
-	  { 1220,  40, 36, 1144,  47, 24, NRZ,  24, 1120,  8, 1040,  80 },      /* pls */ \
-	  { 1220,  48, 36, 1136,  39, 29, GCR, 152,  984, 12,  888,  96 },      /* ple */ \
-	  { 2530,  80, 70, 2380, 119, 20, NRZ,  20, 2360, 20, 2160, 200 },      /* nhs */ \
-	  { 2530, 100, 70, 2360,  81, 29, GCR, 288, 2072, 28, 1848, 224 },      /* nhe */ \
-	  { 3050, 100, 90, 2860, 130, 22, NRZ,  22, 2838, 22, 2618, 220 },      /* phs */ \
-	  { 3050, 120, 90, 2840,  88, 32, GCR, 344, 2496, 26, 2288, 208 } }     /* phe */
-
-
-struct bkr_sector_t
-	{
-	unsigned char  *buffer;         /* uninterleaved data buffer */
-	unsigned char  *offset;         /* location of next byte */
+	unsigned char  *buffer;         /* uninterleaved sector buffer */
+	unsigned char  *pos;            /* location of next byte */
 	unsigned char  *end;            /* see diagram above */
 	bkr_format_info_t  fmt;         /* sector format information */
 	rs_format_t  rs_format;         /* Reed-Solomon format information */
-	int  oddfield;                  /* current video field is odd */
-	int  need_sequence_reset;       /* sector number needs to be reset */
-	int  underflow_detect;          /* 0 == sector is in an underflow */
-	int  found_data;                /* 1 == have found valid data sector */
+	int  need_sequence_reset;       /* sector sequence needs to be reset */
+	int  not_underrunning;          /* 0 == sector is in an underrun */
 	int  op_count;                  /* counter for misc operations */
 	bkr_sector_header_t  header;    /* sector header copy */
-	int  (*read)(bkr_device_t *, struct bkr_sector_t *);   /* read sector */
-	int  (*write)(bkr_device_t *, struct bkr_sector_t *);  /* write sector */
+	int  (*read)(bkr_device_t *, struct bkr_stream_t *);   /* read sector */
+	int  (*write)(bkr_device_t *, struct bkr_stream_t *);  /* write sector */
 	bkr_errors_t  errors;           /* error counts */
 	bkr_health_t  health;           /* health indicators */
 	};
 
-typedef struct bkr_sector_t bkr_sector_t;
+typedef struct bkr_stream_t bkr_stream_t;
 
 
 /*
@@ -315,20 +184,13 @@ typedef struct bkr_sector_t bkr_sector_t;
  * accessed through pointers in the sector data structure.
  */
 
-extern int bkr_format_reset(bkr_device_t *, bkr_sector_t *, int, bkr_state_t);
-extern int bkr_sector_write_eor(bkr_device_t *, bkr_sector_t *);
+extern int bkr_format_reset(bkr_device_t *, bkr_stream_t *, int, bkr_state_t);
+extern int bkr_sector_write_eor(bkr_device_t *, bkr_stream_t *);
 
 
 /*
  * Macros
  */
-
-static inline int bkr_mode_to_format(int mode)
-{
-	return(((BKR_DENSITY(mode) == BKR_HIGH)  << 2) |
-	       ((BKR_VIDEOMODE(mode) == BKR_PAL) << 1) |
-	       (BKR_FORMAT(mode) == BKR_EP));
-}
 
 static inline int bkr_sector_capacity(bkr_format_info_t *fmt)
 {

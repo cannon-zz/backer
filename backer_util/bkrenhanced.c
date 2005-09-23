@@ -35,7 +35,6 @@
 
 #include "backer.h"
 #include "backer_fmt.h"
-#include "bkr_disp_mode.h"
 #include "rs.h"
 
 #define  PROGRAM_NAME    "bkrenhanced"
@@ -115,6 +114,7 @@ int main(int argc, char *argv[])
 	int  current_buffer = 0;
 	pthread_t  write_thread;
 	unsigned int  total_sectors = 0, lost_sectors = 0;
+	char  msg[100];
 
 	/*
 	 * Some setup stuff
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
 	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
 	"	-f [dev]  Get the format to use from the Backer device dev\n" \
-	"                  (default " DEFAULT_DEVICE ")\n" \
+	"	          (default " DEFAULT_DEVICE ")\n" \
 	"	-h        Display usage message\n" \
 	"	-u        Unencode (default is to encode)\n", stderr);
 			exit(-1);
@@ -162,20 +162,24 @@ int main(int argc, char *argv[])
 		{
 		if((i = open(devname, O_RDONLY)) < 0)
 			{
-			perror(PROGRAM_NAME);
+			sprintf(msg, PROGRAM_NAME ": %s", devname);
+			perror(msg);
 			exit(1);
 			}
 		}
+	else if(direction == READING)
+		{
+		i = STDIN_FILENO;
+		sprintf(msg, PROGRAM_NAME ": stdin");
+		}
 	else
 		{
-		if(direction == READING)
-			i = STDIN_FILENO;
-		else
-			i = STDOUT_FILENO;
+		i = STDOUT_FILENO;
+		sprintf(msg, PROGRAM_NAME ": stdout");
 		}
 	if(ioctl(i, MTIOCGET, &mtget) < 0)
 		{
-		perror(PROGRAM_NAME);
+		perror(msg);
 		exit(1);
 		}
 	if(devname != NULL)

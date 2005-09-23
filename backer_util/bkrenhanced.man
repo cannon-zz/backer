@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BKRENHANCED 8 "August 15, 2001" "Linux" "Backer"
+.TH BKRENHANCED 8 "December 30, 2001" "Linux" "Backer"
 .SH NAME
 bkrenhanced \- Backer enhanced redundancy filter.
 .SH SYNOPSIS
@@ -31,36 +31,41 @@ for the
 .IR backer (4)
 device driver.  It works in conjunction with the driver's own error
 correction abilities in order to implement a burst error correcting system
-capable of handling entire lost sectors.  This hopefully allows data to be
+capable of handling entire lost sectors.  This can be used simply to
+provide extra peice of mind but, in particular, it should allow data to be
 reliably recorded in EP (extended play) mode.
 .PP
-File data is read by \fBbkrenhanced\fP in ``groups'' corresponding to 255
-tape sector's worth of data.  Each group is divided into blocks and to each
-block is added parity bytes so that, with parity bytes, each block's size
-is 255 bytes.  The blocks are then interleaved so that every block
-contributes exactly one byte to each sector in the group (notice that a
-group contains as many sectors as there are bytes in each block).  The
-result is that if a sector is lost on playback, it appears as nothing more
-than a single bad byte in each block of the group which is easily handled
-by the Reed-Solomon error correction code.
+\fBbkrenhanced\fP converts the data stream into ``groups'' of 255 sectors
+which, in addition to file data, also contain parity information.  The
+parity information allows each group to be fully recovered even when some
+number of its constituent sectors have been completely lost.
 .PP
-The power of this scheme comes from the fact that the driver itself
+The error-control code used is a Reed-Solomon code.  Reed-Solomon codes
+require two parity bytes for each byte that needs to be corrected
+\fIunless\fP it is known by some other means which byte is bad in which
+case only one parity byte is required in order to correct each bad byte.
+.PP
+The power of \fBbkrenhanced\fP comes from the fact that the driver itself
 implements error control within each sector.  The driver's error control
-code is able to handle the vast majority of tape noise meaning the driver
-feeds essentially error-free sectors to \fBbkrenhanced\fP during playback.
-When a sector is lost (eg. due to tape noise or even a buffer overrun), the
-driver almost always detects the problem and signals user space with
-\fB-ENODATA\fP.  The occurance of this result code is used by
-\fBbkrenhanced\fP to inform its own Reed-Solomon decoder of the locations
-of bad symbols in each block.  Knowing the locations of the errors doubles
-the correction capacity of the error control code making for very efficient
-use of bandwidth.
+code is able to correct the vast majority of tape noise so the driver feeds
+essentially error-free sectors to \fBbkrenhanced\fP during playback.  When
+a sector is lost (eg. due to tape noise or a buffer overrun), the driver
+almost always detects the problem and indicates the loss of the sector to
+user space.  This information is then used by \fBbkrenhanced\fP to inform
+its own Reed-Solomon decoder of the locations of bad bytes in each group of
+sectors.  The combination of sector-level and group-level error control
+codes makes for very efficient use of bandwidth.
 .SS OPTIONS
 .TP
 \fB\-f\fP [\fIdevname\fP]
 Retrieve the mode to use from a Backer device file.  If \fIdevname\fP is
 provided then that file is used, otherwise the mode is retrieved from
-\fBDEVICE_NAME\fP.
+\fBDEVICE_NAME\fP.  Note that if this option is omitted altogether then the
+mode will be retrieved from
+.IR stdin (3)
+or
+.IR stdout (3)
+when decoding or encoding respectively.
 .TP
 \fB\-h\fP
 Print a usage message.
@@ -74,30 +79,26 @@ from the device file.  For example, to make a high density NTSC EP format
 recording type
 .RS 3
 .sp
-bkrenhanced < \fIfilename\fP > /dev/backer/0/nhe
+\fB$\fP bkrenhanced < \fIfilename\fP > /dev/backer/0/nhe
 .sp
 .RE
 and to retrieve it type
 .RS 3
 .sp
-bkrenhanced -u < /dev/backer/0/nhe > \fIfilename\fP
+\fB$\fP bkrenhanced -u < /dev/backer/0/nhe > \fIfilename\fP
 .sp
 .RE
 .SH NOTES
+If data is recorded to tape using \fBbkrenhanced\fP, then it must be
+recovered using \fBbkrenhanced\fP as well.  The parity information added to
+the data stream must be removed to return the data to its original form.
+.PP
 \fBbkrenhanced\fP can really only be used directly with the device driver
 since only in that way can it be provided with the \fB-ENODATA\fP error
 codes needed for it's operation.  The device driver drops all irrecoverable
 sectors from the data stream so the resulting output, if dumped to disk,
-does not retain enough information to even allow regular error correction
-to be performed on it.  The data formating and processing performed by this
-utility might, one day, be migrated into the real formating code.  When
-(if) that occurs, the features provided by this utility will then appear
-natively within both the driver and \fBbkrencode\fP.
-.PP
-Finally, while the motivation for the development of \fBbkrenhanced\fP has
-been the improvement of the reliability of EP recordings, \fBbkrenhanced\fP
-will function with non-EP modes as well and the paranoid may wish to do so
-for extra piece of mind.
+does not retain enough information to allow error correction to be
+performed on it.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),

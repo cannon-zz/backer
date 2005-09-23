@@ -11,16 +11,32 @@ already have it installed and know there are no hardware conflicts.
 If you are installing an internal version of the device for the first time
 then you should first check to see which I/O ports and DMA channels are
 being used by taking a look at the two files /proc/ioports and /proc/dma.
-Set your Backer to a free I/O port and DMA channel then just follow the
-installation instructions that came with the card.
+Set your Backer to a free I/O port and free DMA channel or a DMA channel
+used by a device you know you will never want to use along with the Backer.
+Then, follow the installation instructions that came with the card.
 
-The external version plugs into a parallel port.  You will need to insure
-that you have an ECP parallel port, that the Linux parport driver is
-installed, and that the parport driver recognizes that your parallel port
-is an ECP port.  See the file /proc/sys/dev/parport/parport0/modes (or
-which ever file corresponds to the port to which the Backer device is
-attached) to make sure that ECP mode is supported.
+The external version plugs into a parallel port.  Before you can use this
+driver to interface with your external Backer, however, you will first need
+to make sure your kernel's parallel port subsystem is properly configured.
+Specifically, you need to do the following:
 
+	-insure that you have a PC-style ECP parallel port
+	-insure the Linux parport driver is installed
+	-insure the parport driver recognizes the port as a PC-style ECP
+	 port
+	-insure the parport driver knows the port's interrupt line number
+	-insure the parport driver knows the port's DMA channel number
+
+To check the last three points, look at the files
+
+	/proc/sys/dev/parport/<port name>/modes
+	/proc/sys/dev/parport/<port name>/irq
+	/proc/sys/dev/parport/<port name>/dma
+
+where <port name> is the name of the parallel port to which your Backer is
+attached (eg. ``parport0'').  In the modes file you must see "PCSPP", "ECP"
+and "DMA" all listed and the two files irq and dma must contain the correct
+numbers for the port.
 
 
 SOFTWARE
@@ -31,48 +47,41 @@ Here are the steps for installing the Backer device driver.
 1.  Configure the Makefile for your system.  The parameters that should be
 set are:
 
-	BKR_MAJOR
-	DEV_DIR
-	MAN_DIR
-	MODULES_DIR
-	CONFIG_BACKER_TIMEOUT
+	Parameter	Default Setting
+	---------------------------------
+	BKR_MAJOR  	60
+	DEV_DIR    	/dev
+	MAN_DIR    	/usr/man
+	MODULES_DIR	/lib/modules/misc
 
 BKR_MAJOR is the major number the device inodes will have.  You can set
 this to anything your system isn't using.  It currently defaults to 60
 which is in one of the blocks of numbers set aside for ``experimental and
 local use''.  You only need to change it if you already have something
 using 60 or will want to use 60 for something else.  (NOTE:  a trick that
-you might opt for is to set this to 0 which will result in an unused number
-being assigned automatically when the driver is loaded).
+you might opt for if you are using the device file system is to set this to
+0 which will result in an unused number being assigned automatically when
+the driver is loaded).
 
-DEV_DIR is the root directory of the device file hierarchy.  This option
-will only be used when making the device inodes if you are not using devfs.
+DEV_DIR is the root directory of the device file hierarchy.  This is only
+used by the install script and only when making the device inodes if you
+are not using devfs.
 
-MAN_DIR is the top of the man page hierarchy.  The man pages are put in
-MAN_DIR/man4/.
+MAN_DIR is the top of the man page hierarchy.  The install script will
+place the man pages in MAN_DIR/man4/.
 
 MODULES_DIR is the directory where the compiled driver modules will be
-placed.
-
-CONFIG_BACKER_TIMEOUT can be set at module load time so there's no need to
-set it at compile time unless you know that you want to tweak the driver's
-behaviour to your own tastes.  It sets the length of time the driver will
-wait for an operation to finish before deciding something's wrong and
-aborting.  It should not be less than the length of the BOR mark or the
-driver will timeout while waiting for data to start during playback.  It
-also must not be less than the time required to empty the DMA buffer or the
-driver will timeout while flushing its buffers at the end of a recording.
-If this means nothing to you, then just leave it.
+installed.
 
 
 2.  Compile the driver by typing
 
-	make
+	$ make
 
 
-3.  Install the driver, device inodes and man page by typing
+3.  Install the drivers, device inodes and man pages by typing
 
-	make install
+	$ make install
 
 This puts the driver modules into MODULES_DIR and runs depmod -a to rebuild
 the module dependency database.  Then it checks to see if devfs is in use
@@ -83,7 +92,7 @@ If devfs is not being used but the install script can't determine that fact
 then you will have to manually instruct make to create the device inodes by
 typing
 
-	make devs
+	$ make devs
 
 Note:  the Makefile does not know how many Backer devices you have
 installed in your system so it assumes you have just one when creating the
@@ -94,24 +103,25 @@ using devfs then all device files will be created automatically when the
 driver is loaded.
 
 Note:  the goofs in charge of Linux kernel development are having
-themselves some kind of a spat which means that the policy regarding the
-use of major and minor numbers is undefined.  It is likely, however, that
-in the future major and minor numbers will cease to be manifested in user
-space which means the actual name of the device file will be its only
-identification.  For this reason, people who do not use devfs are advised
-to adhere to the names generated by the Makefile (and found in the man
-page) since the driver might require those names in the future.
+themselves some kind of a spat regarding the use of major and minor
+numbers.  This means their proper use is somewhat undefined.  It is
+possible, however, that in the future major and minor numbers will cease to
+be manifested in user space which means the actual name of the device file
+will be its only identification.  For this reason, people who do not use
+devfs are encouraged to adhere to the names generated by the Makefile (and
+found in the man page) since the driver might require those names in the
+future.
 
 
 4.  Specify the low-level module(s) that should be used by adding the
 following line to /etc/modules.conf
 
-	add probeall backer_lowlevel <modules...>
+	probeall backer_lowlevel <modules...>
 
 where <modules...> is replaced with the names of the desired low-level
 module(s).  For example,
 
-	add probeall backer_lowlevel backer_isa
+	probeall backer_lowlevel backer_isa
 
 would cause the ISA interface module to be loaded.  If you need to specify
 options for the low-level module(s), add whichever of the following lines
@@ -127,9 +137,9 @@ See the man pages for available options.
 standard magnetic tape drive and if you want to use your Backer as your
 default tape device then you should create a symbolic link called /dev/tape
 that points to your preferred device.  This is done by typing something
-like (using the nhs device file as an example)
+like
 
-	ln -s backer/0/nhs /dev/tape
+	$ ln -s backer/0/nhs /dev/tape
 
 which would select high density NTSC in SP mode as the default tape format.
 
@@ -139,12 +149,12 @@ you are running devfsd.  To configure devfsd to automatically create and
 remove the /dev/tape link as the driver is loaded and unloaded, add
 something like the following lines to your /etc/devfsd.conf
 
-	REGISTER	backer	EXECUTE	ln -s backer/0/nhs /dev/tape
-	UNREGISTER	backer	EXECUTE rm -f /dev/tape
+REGISTER        ^backer/0/nhs$  CFUNCTION GLOBAL symlink $devname tape
+UNREGISTER      ^backer/0/nhs$  CFUNCTION GLOBAL unlink tape
 
 and then tell devfsd to re-read its config file by doing
 
-	killall -HUP devfsd
+	$ killall -HUP devfsd
 
 
 6.  OPTIONAL.  To let your system take care of automatically loading and
@@ -153,14 +163,11 @@ unloading the driver add things like the following lines to
 
 	alias /dev/backer backer
 	alias /dev/tape backer
-	options backer <options>
 
 The second line should, obviously, only be added if /dev/tape is a link to
-a backer device.  If you need to pass options to the main module then you
-will need to include the last line.  See the module man page for available
-options.  Re-read the config file by doing
+a backer device.  Re-read the config file by doing
 
-	depmod -a
+	$ depmod -a
 
 
 
@@ -169,45 +176,44 @@ LOADING/UNLOADING THE DRIVER
 
 To load the driver manually, login as root and type
 
-	insmod backer [options]
+	$ insmod backer
 
-Only options for the backer module itself can be given here.  If you need
-to pass options to the hardware support modules, then you must either put
-the options in /etc/modules.conf or you must first load the driver, then
-unload the hardware module in question and reload it with the desired
-options.  Read the man page for details.  Here's an example load sequence:
+If you need to pass options to the hardware support modules, then you must
+either put the options in /etc/modules.conf or you must first load the
+driver, then unload the hardware module in question and reload it with the
+desired options.  Read the man page for details.  Here's an example load
+sequence:
 
-	insmod backer timeout=20
-	rmmod backer_isa
-	insmod backer_isa isa=0x304,1
+	$ insmod backer
+	$ rmmod backer_isa
+	$ insmod backer_isa isa=0x304:1
 
 You'll get an error message if the driver couldn't be loaded.  If that
 happens, check /var/log/messages to see what the problem was.  The driver
 will have printed a little banner and will have complained if it couldn't
 reserve a particular resource.  Note that to allow DMA channels to be
-shared, the driver modules will only request access to then when the device
+shared, the driver modules will only request access to them when the device
 in question is actually in use so successfully loading the driver does not
 guarantee that there are no resource conflicts.
 
 To test the driver type
 
-	cat /dev/zero > /dev/tape
+	$ cat /dev/zero > /dev/tape
 
 (or the appropriate device file for your system) to verify that data is
 being written to video.  On your television set you should see a stable
-pattern of vertical bars for a few seconds (the BOR mark) followed by
-something that looks like noise.  Press CTRL-C to stop the test and be
-patient for a couple of seconds while the EOR mark is written and the DMA
-buffer empties.
+pattern consisting mostly of vertical bars followed, a few seconds later,
+by what looks like noise or ``snow''.  Press CTRL-C to stop the test and be
+patient for several seconds while the buffers are cleared.
 
 
 To unload the module you need to first unload the low-level module(s)
 followed by the main module by typing
 
-	rmmod <low-level modules...> backer
+	$ rmmod <low-level modules...> backer
 
 For example, type
 
-	rmmod backer_isa backer
+	$ rmmod backer_isa backer_parport backer
 
-if you are only using the ISA low-level module.
+to unload everything.

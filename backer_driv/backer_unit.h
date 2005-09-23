@@ -23,29 +23,46 @@
 #ifndef  _BACKER_UNIT_H
 #define  _BACKER_UNIT_H
 
+#include <asm/semaphore.h>
+
 #include <linux/devfs_fs_kernel.h>
 #include <linux/list.h>
 #include <linux/pm.h>
-#include <linux/spinlock.h>
+#include <linux/sysctl.h>
+#include <linux/wait.h>
 
 #include "backer_device.h"
 #include "backer_fmt.h"
 
+#define  BKR_NAME_LENGTH  3             /* including trailing \0 */
+
+typedef struct
+	{
+	struct ctl_table_header  *header;
+	ctl_table  dev_dir[2];
+	ctl_table  driver_dir[2];
+	ctl_table  unit_dir[2];
+	ctl_table  entries[3];
+	}  bkr_sysctl_table_t;
+
 typedef struct
 	{
 	struct list_head  list;         /* next/prev in list */
-	char  name[9];                  /* name ("backerXX") */
+	char  name[BKR_NAME_LENGTH];    /* name */
 	unsigned int  number;           /* unit number */
-	spinlock_t  lock;               /* unit lock */
+	struct semaphore  state_lock;   /* device state locking semaphore */
+	struct semaphore  io_lock;      /* I/O locking semaphore */
 	bkr_device_t  device;           /* device state descriptor */
-	bkr_sector_t  sector;           /* format state descriptor */
+	bkr_stream_t  stream;           /* format state descriptor */
+	wait_queue_head_t  io_queue;    /* I/O wait queue */
 	struct pm_dev  *pm_handle;      /* power management handle */
 	devfs_handle_t  devfs_handle;   /* devfs directory handle */
+	bkr_sysctl_table_t  sysctl;     /* sysctl interface table */
 	} bkr_unit_t;                   /* unit information */
 
 extern struct list_head  bkr_unit_list;
 
-extern bkr_unit_t  *bkr_device_register(bkr_device_type_t, bkr_device_ops_t *);
-extern void  bkr_device_unregister(bkr_unit_t *);
+extern bkr_unit_t  *bkr_unit_register(pm_dev_t, bkr_device_ops_t *, int);
+extern void  bkr_unit_unregister(bkr_unit_t *);
 
 #endif /* _BACKER_UNIT_H */

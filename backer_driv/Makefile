@@ -1,11 +1,10 @@
 #
 # Some things to set for your system
 #
-#    BKR_MAJOR             : the major number for the /dev files
-#    DEV_DIR               : the /dev directory on your system
-#    MAN_DIR               : the man pages go in $(MAN_DIR)/man4/
-#    MODULES_DIR           : install directory for the driver
-#    CONFIG_BACKER_TIMEOUT : operation timeout in seconds.
+#    BKR_MAJOR   : the major number for the /dev files
+#    DEV_DIR     : the /dev directory on your system
+#    MAN_DIR     : the man pages go in $(MAN_DIR)/man4/
+#    MODULES_DIR : install directory for the driver
 #
 # Major numbers that your system is probably not using (because they are
 # for other kinds of tape devices) and so can probably be used with this
@@ -18,11 +17,10 @@
 #	206: OnStream SC-x0 tape devices
 #
 
-BKR_MAJOR             = 60
-DEV_DIR               = /dev
-MAN_DIR               = /usr/man
-MODULES_DIR           = /lib/modules/misc
-CONFIG_BACKER_TIMEOUT = 15
+BKR_MAJOR   = 60
+DEV_DIR     = /dev
+MAN_DIR     = /usr/share/man
+MODULES_DIR = /lib/modules/misc
 
 
 #
@@ -31,17 +29,17 @@ CONFIG_BACKER_TIMEOUT = 15
 # The targets you should know about are:
 #
 #   all: (default)
-#	build the driver, backer.o.
+#	build the driver modules.
 #   install: 
-#	copy the driver modules to MODULES_DIR, run depmod -a, generate
+#	copy the driver modules to $(MODULES_DIR), run depmod, generate
 #	device inodes if devfs is known to not be in use, put man pages in
-#	$(PREFIX)/man/man4.
+#	$(MAD_DIR)/man4.
 #   devs:
 #	force creation of device inodes.
 #   uninstall:
 #	unload the driver from the kernel, delete the driver modules from
-#	MODULES_DIR, run depmod -a, delete the /dev entries if they exist,
-#	delete the man pages from $(PREFIX)/man/man4.
+#	MODULES_DIR, run depmod, delete the /dev entries if they exist,
+#	delete the man pages from $(MAN_DIR)/man4.
 #   clean:
 #	Delete all intermediate files from the build directory.
 #   realclean:
@@ -50,8 +48,7 @@ CONFIG_BACKER_TIMEOUT = 15
 
 CC = gcc
 INCLUDE_DIR = /usr/include
-CONFIGFLAGS = -DBKR_MAJOR=$(BKR_MAJOR) \
-              -DCONFIG_BACKER_TIMEOUT=$(CONFIG_BACKER_TIMEOUT)
+CONFIGFLAGS = -DBKR_MAJOR=$(BKR_MAJOR)
 KERNELFLAGS  = -D__KERNEL__ -DMODULE
 KERNELFLAGS += -DMODVERSIONS -include $(INCLUDE_DIR)/linux/modversions.h
 CFLAGS = -c -O3 -Wall -Wstrict-prototypes -I$(INCLUDE_DIR) $(KERNELFLAGS) $(CONFIGFLAGS)
@@ -66,35 +63,38 @@ all : $(MODULES)
 
 backer.o : backer_main.o backer_fmt.o rs.o
 	$(LD) $(LDFLAGS) -o $@ $^
-backer_main.c : backer.h backer_device.h backer_unit.h backer_fmt.h
-backer_fmt.c : backer.h backer_device.h backer_fmt.h rs.h
-rs.c : rs.h
-
+backer_main.o : backer.h backer_device.h backer_unit.h backer_fmt.h
+backer_fmt.o : rs.h backer.h backer_device.h backer_fmt.h
+rs.o : rs.h
 backer_isa.o : backer.h backer_device.h backer_unit.h
-
 backer_parport.o : backer.h backer_device.h backer_unit.h
 
+backer_fmt.h : backer.h backer_device.h rs.h
+backer_unit.h : backer_device.h backer_fmt.h
+
 uninstall :
-	@echo "Uninstalling..."
+	@echo -e "\nUninstalling..."
 	if grep backer_isa     -q /proc/modules; then rmmod backer_isa;     fi
 	if grep backer_parport -q /proc/modules; then rmmod backer_parport; fi
 	if grep backer         -q /proc/modules; then rmmod backer;         fi
 	-rm -f $(MODULES:%=$(MODULES_DIR)/%)
 	-rm -f $(MANPAGES:%=$(MAN_DIR)/man4/%.gz)
+	#depmod -ae $(KERNELRELEASE) -F $(LS)/System.map
 	depmod -a
 	if [ -d $(DEV_DIR)/backer ]; then rm -Rf $(DEV_DIR)/backer; fi
-	@echo "Done."
+	@echo -e "Done.\n"
 
 install : all
-	@echo "Installing..."
+	@echo -e "\nInstalling..."
 	install -d -m 0700 $(MODULES_DIR)
 	install -m 0600 $(MODULES) $(MODULES_DIR)
+	#depmod -ae $(KERNELRELEASE) -F $(LS)/System.map
 	depmod -a
-	@if [ -f /proc/mounts ]; then \
+	-@if [ -f /proc/mounts ]; then \
 	   if grep devfs -q /proc/mounts; then \
-	      echo -e "\nATTENTION:  devfs in use:  device inode creation not required.\n"; \
+	      echo -e "devfs in use:  device inode creation not required."; \
 	   else \
-	      echo -e "\nATTENTION:  devfs not in use:  creating device inodes...\n"; \
+	      echo -e "devfs not in use:  creating device inodes..."; \
 	      make devs; \
 	   fi \
 	else \
@@ -104,7 +104,7 @@ install : all
 	install -d -m 0755 $(MAN_DIR)/man4
 	install -m 0644 $(MANPAGES:%=DOCUMENTATION/%) $(MAN_DIR)/man4
 	gzip $(MANPAGES:%=$(MAN_DIR)/man4/%)
-	@echo "Done."
+	@echo -e "Done.\n"
 
 devs :
 	@if [ -d $(DEV_DIR)/backer/0 ]; then \

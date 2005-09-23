@@ -96,7 +96,8 @@ static void gen_ldec(void)
  * special elements are added to the look-up tables to represent this case
  * and all multiplications must first check for this.  We call this special
  * element INFINITY since it is the result of taking the log (base alpha)
- * of zero.
+ * of zero.  Also, we duplicate Alpha_exp[] to reduce our reliance on
+ * modNN().
  *
  * The bits of the parameter p specify the generator polynomial with the
  * LSB being the co-efficient of x^0 and the MSB being the coefficient of
@@ -138,10 +139,6 @@ static void generate_GF(int p)
 	for(i = 0; i < NN; i++)
 		Log_alpha[Alpha_exp[i]] = i;
 	Log_alpha[0] = INFINITY;
-
-	/*
-	 * Duplicate Alpha_exp[] to reduce the use of modNN()
-	 */
 
 	memcpy(&Alpha_exp[NN], Alpha_exp, NN * sizeof(gf));
 }
@@ -186,8 +183,12 @@ static void generate_poly(struct rs_format_t *rs_format)
 /*
  * reed_solomon_encode()
  *
- * The code symbols that are returned from this encoder are given with the
- * lowest order term at offset 0 in the array so we have
+ * The encoder is able to place the parity symbols in a separate location
+ * but the parity symbols and data symbols taken together do form a single
+ * logical code word with the parity symbols appearing below the data
+ * symbols.  The code symbols that are returned from this encoder are given
+ * with the lowest order term at offset 0 in the (logically combined) array
+ * so we have
  *
  *    c(x) = c_NN * x^NN + c_(NN-1) * x^(NN-1) + ... + c_0 * x^0
  *
@@ -195,11 +196,7 @@ static void generate_poly(struct rs_format_t *rs_format)
  *
  *             block[] = { c_0, ..., c_NN }
  *
- * and the parity symbols appear at the bottom of the array.  One must
- * leave enough room for them by having the data start at offset (n-k) in
- * the array.  A side benefit of this is that it reminds the programmer
- * that the array must be allocated large enough to hold not only their
- * data but also the parity symbols.
+ * with the parity symbols at the bottom of the array.
  *
  * The encoding algorithm is the long division algorithm but where we only
  * care about the remainder.  The remainder is computed in place and the
@@ -219,7 +216,7 @@ static void generate_poly(struct rs_format_t *rs_format)
 
 void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_format)
 {
-	int  i;                         /* current data symbol index */
+	data_t  *d;                     /* current data symbol */
 	data_t  *b;                     /* current remainder symbol */
 	gf  *g;                         /* current gen. poly. symbol */
 	gf   feedback;                  /* feed-back multiplier */
@@ -236,9 +233,9 @@ void reed_solomon_encode(data_t *parity, data_t *data, struct rs_format_t *rs_fo
 
 	b = &parity[rs_format->remainder_start];
 
-	for(i = rs_format->n - rs_format->parity - 1; i >= 0; i--)
+	for(d = &data[rs_format->k - 1]; d >= data; d--)
 		{
-		feedback = Log_alpha[data[i] ^ *b];
+		feedback = Log_alpha[*d ^ *b];
 		if(feedback != INFINITY)
 			{
 			b--;

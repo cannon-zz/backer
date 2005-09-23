@@ -38,7 +38,7 @@
 
 #define  PROGRAM_NAME    "bkrencode"
 #define  DEFAULT_MODE    (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
-#define  BUFFER_SIZE     16384
+#define  BUFFER_SIZE     8192
 #define  BAILOUT         1
 
 /*

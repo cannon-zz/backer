@@ -89,9 +89,7 @@ struct bkrstatus                                /* Status structure (read only) 
 struct bkrformat                                /* Format structure (read only) */
 	{
 	unsigned int  buffer_size;              /* == bytes per frame * an integer */
-	unsigned int  sector_size;              /* bytes */
-	unsigned int  leader;                   /* bytes */
-	unsigned int  trailer;                  /* bytes */
+	unsigned int  video_size;               /* bytes */
 	unsigned int  interleave;               /* interleave ratio */
 	unsigned int  block_size;               /* bytes */
 	unsigned int  block_parity;             /* bytes */

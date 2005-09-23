@@ -29,9 +29,9 @@
 #include "backer_fmt.h"
 
 /*
- * The read function ensures that the "DMA" buffer is as full as possible
- * while write keeps it as empty as possible.  The flush function flushes
- * first the buffer and then stdout.
+ * The read function ensures that the "DMA" buffer is about 1/2 full while
+ * write keeps it as empty as possible.  The flush function flushes first
+ * the buffer and then stdout.
  *
  * These functions pass on any error codes returned by the file system.
  */
@@ -40,33 +40,15 @@ int  bkr_device_reset(int mode)
 {
 	device.size = 0;
 
-	switch(BKR_DENSITY(mode))
-		{
-		case BKR_HIGH:
+	if(BKR_DENSITY(mode) == BKR_HIGH)
 		device.bytes_per_line = BYTES_PER_LINE_HIGH;
-		break;
-
-		case BKR_LOW:
+	else
 		device.bytes_per_line = BYTES_PER_LINE_LOW;
-		break;
 
-		default:
-		return(-ENXIO);
-		}
-
-	switch(BKR_VIDEOMODE(mode))
-		{
-		case BKR_NTSC:
+	if(BKR_VIDEOMODE(mode) == BKR_NTSC)
 		device.frame_size = device.bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
-		break;
-
-		case BKR_PAL:
+	else
 		device.frame_size = device.bytes_per_line * LINES_PER_FIELD_PAL * 2;
-		break;
-
-		default:
-		return(-ENXIO);
-		}
 
 	device.size = device.alloc_size - device.alloc_size % device.frame_size;
 
@@ -96,15 +78,20 @@ int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 	if(feof(stdin) && (length > bytes_in_buffer()))
 		return(-EPIPE);
 
-	if(device.head + space_in_buffer() >= device.size)
+	length = (device.size >> 1) - bytes_in_buffer();
+	if((int) length <= 0)
+		return(0);
+
+	if(device.head + length >= device.size)
 		{
 		device.head += fread(device.buffer + device.head, 1, device.size - device.head, stdin);
 		if(device.head < device.size)
 			goto done;
+		length -= device.size - device.head;
 		device.head = 0;
 		}
 
-	device.head += fread(device.buffer + device.head, 1, space_in_buffer(), stdin);
+	device.head += fread(device.buffer + device.head, 1, length, stdin);
 
 	done:
 	if(ferror(stdin))

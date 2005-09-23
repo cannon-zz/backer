@@ -197,24 +197,20 @@ void gen_formated()
 	int i;
 
 	printf("\nFormat Parameters:\n" \
-	       "\tBuffer size:       %u bytes (%u frames)\n" \
-	       "\tSector size:       %u bytes\n" \
-	       "\tSector leader:     %u bytes\n" \
-	       "\tSector trailer:    %u bytes\n" \
+	       "\tBuffer usage:      %u bytes (%u frames)\n" \
+	       "\tVideo field size:  %u bytes\n" \
 	       "\tInterleave ratio:  %u:1\n" \
 	       "\tBlock size:        %u bytes\n" \
 	       "\tParity bytes:      %u (max %u errors per block)\n" \
 	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
 	       "\tData rate:         %u bytes/second\n\n" \
 	       "Writing '\\0's.  ",
-	       format.buffer_size, format.buffer_size/format.sector_size/2,
-	       format.sector_size,
-	       format.leader,
-	       format.trailer,
+	       format.buffer_size, format.buffer_size/format.video_size/2,
+	       format.video_size,
 	       format.interleave,
 	       format.block_size,
 	       format.block_parity, format.block_parity/2,
-	       format.sector_capacity, 100.0*format.sector_capacity/format.sector_size,
+	       format.sector_capacity, 100.0*format.sector_capacity/format.video_size,
 	       format.sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
 
 	length = format.sector_capacity;
@@ -241,10 +237,10 @@ void gen_raw(void)
 		bytes_per_line = BYTES_PER_LINE_LOW;
 
 	printf("\nFormat Parameters:\n" \
-	       "\tBuffer size:       %u bytes (%u sectors)\n" \
-	       "\tSector size:       %u bytes\n",
-	       format.buffer_size, format.buffer_size/format.sector_size,
-	       format.sector_size);
+	       "\tBuffer usage:      %u bytes (%u frames)\n" \
+	       "\tVideo frame size:  %u bytes\n",
+	       format.buffer_size, format.buffer_size/format.video_size,
+	       format.video_size);
 
 	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
 		{

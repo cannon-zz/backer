@@ -58,6 +58,8 @@
 
 /*
  * Global Data
+ *
+ * 2280 = 2 * 2 * 2 * 3 * 5 * 19
  */
 
 /* Read the docs for important info before adjusting these! */
@@ -73,7 +75,7 @@ static struct
 	  {  40,  36,  8, 10 },                 /* FMT LOW  PAL  SP */
 	  {  48,  48,  8, 10 },                 /* FMT LOW  PAL  EP */
 	  {  80,  70, 20, 10 },                 /* FMT HIGH NTSC SP */
-	  { 100,  70, 59,  6 },                 /* FMT HIGH NTSC EP */
+	  { 110, 140, 60, 10 },                 /* FMT HIGH NTSC EP */
 	  { 100,  90, 20, 10 },                 /* FMT HIGH PAL  SP */
 	  { 120, 120, 20, 10 },                 /* FMT HIGH PAL  EP */
 	  {   0,   0,  1,  0 },                 /* RAW LOW  NTSC SP */
@@ -85,7 +87,7 @@ static struct
 	  {   0,   0,  1,  0 },                 /* RAW HIGH PAL  SP */
 	  {   0,   0,  1,  0 } };               /* RAW HIGH PAL  EP */
 
-static unsigned char  weight[] =                /* correlation weights */
+unsigned char  weight[] =                       /* correlation weights */
 	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,
 	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
 	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,
@@ -676,7 +678,7 @@ int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
  * reading/writing.
  */
 
-int bkr_sector_read_raw(f_flags_t f_flags, jiffies_t bailout)
+static int bkr_sector_read_raw(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
 	unsigned int  count;

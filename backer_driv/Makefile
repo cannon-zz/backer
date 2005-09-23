@@ -34,20 +34,19 @@ rs.o :  rs.c rs.h
 install:
 	install -d -m 0755 /lib/modules/misc
 	install -c -m 0644 backer.o /lib/modules/misc
+	depmod -a
 
 devs:
-	mknod -m 660 /dev/backerfsln c $(BKR_MAJOR)  0
-	mknod -m 660 /dev/backerfslp c $(BKR_MAJOR)  1
-	mknod -m 660 /dev/backerfshn c $(BKR_MAJOR)  2
-	mknod -m 660 /dev/backerfshp c $(BKR_MAJOR)  3
-	mknod -m 660 /dev/backerfeln c $(BKR_MAJOR)  4
-	mknod -m 660 /dev/backerfelp c $(BKR_MAJOR)  5
-	mknod -m 660 /dev/backerfehn c $(BKR_MAJOR)  6
-	mknod -m 660 /dev/backerfehp c $(BKR_MAJOR)  7
-	mknod -m 660 /dev/backerrln  c $(BKR_MAJOR)  8
-	mknod -m 660 /dev/backerrlp  c $(BKR_MAJOR)  9
-	mknod -m 660 /dev/backerrhn  c $(BKR_MAJOR) 10
-	mknod -m 660 /dev/backerrhp  c $(BKR_MAJOR) 11
+	mknod -m 666 /dev/backerfsln c $(BKR_MAJOR) 0
+	mknod -m 666 /dev/backerfslp c $(BKR_MAJOR) 1
+	mknod -m 666 /dev/backerfshn c $(BKR_MAJOR) 2
+	mknod -m 666 /dev/backerfshp c $(BKR_MAJOR) 3
+	mknod -m 666 /dev/backerfeln c $(BKR_MAJOR) 4
+	mknod -m 666 /dev/backerfelp c $(BKR_MAJOR) 5
+	mknod -m 666 /dev/backerrln  c $(BKR_MAJOR) 6
+	mknod -m 666 /dev/backerrlp  c $(BKR_MAJOR) 7
+	mknod -m 666 /dev/backerrhn  c $(BKR_MAJOR) 8
+	mknod -m 666 /dev/backerrhp  c $(BKR_MAJOR) 9
 
 uninstall:
 	rm -f /lib/modules/misc/backer.o
@@ -57,8 +56,6 @@ uninstall:
 	rm -f /dev/backerfshp
 	rm -f /dev/backerfeln
 	rm -f /dev/backerfelp
-	rm -f /dev/backerfehn
-	rm -f /dev/backerfehp
 	rm -f /dev/backerrln
 	rm -f /dev/backerrlp
 	rm -f /dev/backerrhn

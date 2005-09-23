@@ -2,7 +2,7 @@
 # Set this to the directory containing the driver sources and
 # be sure to leave off the trailing slash
 #
-DRIVER_DIR = ../backer-driv-1.105
+DRIVER_DIR = ../backer-driv-1.106
 
 #
 # Set this to your prefered device

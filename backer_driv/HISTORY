@@ -1,3 +1,23 @@
+1.106 (2001/3/14)
+	Fixed bug in transfer start code that would allow a second transfer
+	to be started even if one was in progress.
+
+	The "one user only" mechanism has been handed over to devfs's
+	internal uid/gid setting feature which means it works a little
+	differently:  ownership is done on a device-by-device basis which
+	means more than one user can have open devices at a time but all
+	except the first will see "Device Busy" if they try to access the
+	underlying hardware.
+
+	Removed leader and trailer from bkrformat since nothing's used them
+	for a long time.
+
+	High density EP modes will be disabled for version 2.0 and the dev
+	target in the makefile has been modified appropriately.  The
+	developmental series will retain the EP modes for experimentation,
+	however, so the dev target is no longer appropriate for
+	developmental versions.
+
 1.105 (2001/3/9)
 	*** INCOMPATIBLE FORMAT CHANGE ***
 

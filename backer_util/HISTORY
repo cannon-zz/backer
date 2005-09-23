@@ -1,6 +1,13 @@
+1.106 (2001/3/14)
+	Did some behind-the-scenes fiddling with stdio_dev.c for the sake
+	of another project I'm working on:  the read buffer is now kept at
+	50% full rather than 100%.
+
+	Adjusted some of the messages printed by bkrcheck.
+
 1.105 (2001/3/9)
-	Fixed bkrencode to work with recent glibc's (supposedly more
-	standards compliant) errno behaviour.
+	Fixed bkrencode to work with recent (2.2) glibc's (more standards
+	compliant?) errno behaviour.
 
 1.104 (2001/3/4)
 	Split bkrencode's standard I/O device layer into a separate file.

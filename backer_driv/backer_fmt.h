@@ -108,7 +108,8 @@
  * signal.  The formating code handles this by inserting a dummy line.  PAL
  * also has a 1/2 width line but in this case its presence makes both video
  * fields have the same number of lines so it's just absorbed into the
- * trailer.
+ * trailer.  (Note:  although they are 1/2 width lines, a full line of data
+ * is output by the Backer hardware).
  *
  * Zoomed in on the active area of a single sector, the meaning of a few more
  * variables is shown below.  offset always points to the next byte to be
@@ -184,15 +185,15 @@ typedef union
 	struct
 		{
 		unsigned char key[KEY_LENGTH];  /* key sequence */
-		unsigned int  number : 22;      /* sector number */
-		unsigned int  hi_used : 4;      /* high 4 bits of usage */
-		unsigned int  type : 5;         /* sector type */
-		unsigned int  truncate : 1 ;    /* sector is truncated */
+		unsigned int  number : 22 __attribute__ ((packed));      /* sector number */
+		unsigned int  hi_used : 4 __attribute__ ((packed));      /* high 4 bits of usage */
+		unsigned int  type : 5 __attribute__ ((packed));         /* sector type */
+		unsigned int  truncate : 1 __attribute__ ((packed));     /* sector is truncated */
 		} parts;
 	struct
 		{
 		unsigned char key[KEY_LENGTH];  /* key sequence */
-		unsigned int  state;            /* merged flags */
+		unsigned int  state __attribute__ ((packed));            /* merged flags */
 		} all;
 	} sector_header_t;
 
@@ -258,7 +259,7 @@ unsigned int  bytes_in_buffer(void);
 
 #ifdef BACKER_FMT_PRIVATE
 
-int   bkr_sector_read_raw(f_flags_t, jiffies_t);
+extern unsigned char  weight[];
 int   bkr_find_sector(f_flags_t, jiffies_t);
 
 #endif /* BACKER_FMT_PRIVATE */

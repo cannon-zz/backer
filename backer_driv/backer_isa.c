@@ -45,6 +45,13 @@
 
 
 /*
+ * FIXME defined == activate work-arounds for a release
+ */
+
+#undef  FIXME
+
+
+/*
  * Config
  *
  * If I decide to submit this thing to the kernel source tree, these are
@@ -62,11 +69,10 @@
  */
 
 #define  BKR_NAME               "backer"
-#define  BKR_VERSION            "1.105"
-#define  BKR_DEF_PERMS          (S_IRUGO | S_IWUGO)
+#define  BKR_VERSION            "1.106"
 
 #define  BKR_BUFFER_SIZE        65500   /* bytes */
-#define  BKR_MAX_TIMEOUT        120
+#define  BKR_MAX_TIMEOUT        120     /* seconds */
 
 #define  DMA_IO_TO_MEM          0x14    /* dmand transf, inc addr, auto-init */
 #define  DMA_MEM_TO_IO          0x18    /* dmand transf, inc addr, auto-init */
@@ -96,7 +102,7 @@ static ssize_t write(struct file *, const char *, size_t, loff_t *);
 static int     ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 static loff_t  llseek(struct file *, loff_t, int);
 static int     update_dma_offset(unsigned int *);
-static int     get_dreq_status(unsigned int);
+static __inline__ int  get_dreq_status(unsigned int);
 
 
 /*
@@ -143,8 +149,6 @@ typedef struct
  *   ioctl, mmap, open, flush, release }
  */
 
-static unsigned int  owner;                     /* owner's user id */
-static unsigned int  open_count = 0;            /* count of open's */
 static struct
 	{
 	jiffies_t  last_update;                 /* jiffies at time of last update */
@@ -173,6 +177,7 @@ static struct file_operations file_ops[] =      /* file I/O functions */
 	WRITING_OPS
 	};
 
+#define  NUM_MINORS  (sizeof(minor_to_mode)/sizeof(minor_to_mode[0]))
 static int minor_to_mode[] =
 	{
 	BKR_FMT | BKR_SP | BKR_LOW  | BKR_NTSC,
@@ -181,15 +186,17 @@ static int minor_to_mode[] =
 	BKR_FMT | BKR_SP | BKR_HIGH | BKR_PAL,
 	BKR_FMT | BKR_EP | BKR_LOW  | BKR_NTSC,
 	BKR_FMT | BKR_EP | BKR_LOW  | BKR_PAL,
+#ifndef FIXME /* only activate these modes for experimentation */
 	BKR_FMT | BKR_EP | BKR_HIGH | BKR_NTSC,
 	BKR_FMT | BKR_EP | BKR_HIGH | BKR_PAL,
+#endif
 	BKR_RAW | BKR_SP | BKR_LOW  | BKR_NTSC,
 	BKR_RAW | BKR_SP | BKR_LOW  | BKR_PAL,
 	BKR_RAW | BKR_SP | BKR_HIGH | BKR_NTSC,
 	BKR_RAW | BKR_SP | BKR_HIGH | BKR_PAL
 	};
 
-static devfs_handle_t  dev_entry[12] =          /* devfs handles */
+static devfs_handle_t  dev_entry[NUM_MINORS] =  /* devfs handles */
 	{
 	NULL
 	};
@@ -246,32 +253,35 @@ int __init init_module(void)
 
 	if((device.buffer = (unsigned char *) pci_alloc_consistent(NULL, device.alloc_size, &device_isa.phys_addr)) == NULL)
 		{
-		printk(KERN_ERR BKR_NAME ":   can't get %u byte DMA buffer", device.alloc_size);
+		printk(KERN_ERR BKR_NAME ":   can't get %u byte DMA buffer\n", device.alloc_size);
 		result = -ENOMEM;
 		goto no_dmamem;
 		}
 	if(request_region(device_isa.ioport, 1, BKR_NAME) < 0)
 		{
-		printk(KERN_ERR BKR_NAME ":   I/O port %#x in use", device_isa.ioport);
+		printk(KERN_ERR BKR_NAME ":   I/O port %#x in use\n", device_isa.ioport);
 		result = -EBUSY;
 		goto ioport_busy;
 		}
-	for(i = 0; i < 12; i++)
+	for(i = 0; i < NUM_MINORS; i++)
 		{
-		if(minor_to_mode[i] < 0)
-			continue;
-		if(i < 8)
-			sprintf(name, "backerf%c%c%c", (i & 0x4) ? 'e' : 's',
-			        (i & 0x2) ? 'h' : 'l', (i & 0x1) ? 'p' : 'n');
+		result = minor_to_mode[i];
+		if(BKR_FORMAT(result) == BKR_FMT)
+			sprintf(name, "backerf%c%c%c",
+			        (BKR_SPEED(result) == BKR_EP) ? 'e' : 's',
+			        (BKR_DENSITY(result) == BKR_HIGH) ? 'h' : 'l',
+			        (BKR_VIDEOMODE(result) == BKR_PAL) ? 'p' : 'n');
 		else
-			sprintf(name, "backerr%c%c", (i & 0x2) ? 'h' : 'l',
-			        (i & 0x1) ? 'p' : 'n');
-		dev_entry[i] = devfs_register(NULL, name, DEVFS_FL_DEFAULT, BKR_MAJOR, i,
-		               S_IFCHR | BKR_DEF_PERMS, &file_ops[STOPPED], NULL);
+			sprintf(name, "backerr%c%c",
+			        (BKR_DENSITY(result) == BKR_HIGH) ? 'h' : 'l',
+			        (BKR_VIDEOMODE(result) == BKR_PAL) ? 'p' : 'n');
+		dev_entry[i] = devfs_register(NULL, name, DEVFS_FL_AUTO_OWNER, BKR_MAJOR, i,
+		               S_IFCHR | S_IRUSR | S_IWUSR, &file_ops[STOPPED], NULL);
 		}
-	if((result = devfs_register_chrdev(BKR_MAJOR, BKR_NAME, &file_ops[STOPPED])) < 0)
+	result = devfs_register_chrdev(BKR_MAJOR, BKR_NAME, &file_ops[STOPPED]);
+	if(result < 0)
 		{
-		printk(KERN_ERR BKR_NAME ":   can't get device major %u", BKR_MAJOR);
+		printk(KERN_ERR BKR_NAME ":   can't register device\n");
 		goto cant_register_chrdev;
 		}
 
@@ -288,13 +298,12 @@ int __init init_module(void)
 	 */
 
 	cant_register_chrdev:
-		for(i = 0; i < 12; i++)
+		for(i = 0; i < NUM_MINORS; i++)
 			devfs_unregister(dev_entry[i]);
 		release_region(ioport, 1);
 	ioport_busy:
 		pci_free_consistent(NULL, device.alloc_size, device.buffer, device_isa.phys_addr);
 	no_dmamem:
-		printk(" --- driver not loaded\n");
 
 	return(result);
 }
@@ -307,7 +316,7 @@ void __exit cleanup_module(void)
 	release_region(ioport, 1);
 	pci_free_consistent(NULL, device.alloc_size, device.buffer, device_isa.phys_addr);
 	devfs_unregister_chrdev(BKR_MAJOR, BKR_NAME);
-	for(i = 0; i < 12; i++)
+	for(i = 0; i < NUM_MINORS; i++)
 		devfs_unregister(dev_entry[i]);
 }
 
@@ -327,21 +336,14 @@ static int open(struct inode *inode, struct file *filp)
 	kdev_t  minor;
 
 	minor = MINOR(inode->i_rdev);
-	if(minor >= 12)
+	if(minor >= NUM_MINORS)
 		return(-ENODEV);
-	if(minor_to_mode[minor] < 0)
-		return(-ENODEV);
-	if(open_count == 0)
-		owner = current->uid;
-	else if((owner != current->uid) && (owner != current->euid) && !suser())
-		return(-EBUSY);
 
 	filp->private_data = kmalloc(sizeof(bkr_private_t), GFP_KERNEL);
 	if(filp->private_data == NULL)
 		return(-ENOMEM);
 
 	MOD_INC_USE_COUNT;
-	open_count++;
 
 	*PRIVATE_PTR(filp) = PRIVATE_INITIALIZER;
 	PRIVATE_PTR(filp)->mode = minor_to_mode[minor];
@@ -380,7 +382,6 @@ static int release(struct inode *inode, struct file *filp)
 {
 	kfree(filp->private_data);
 
-	open_count--;
 	MOD_DEC_USE_COUNT;
 
 	return(0);
@@ -480,9 +481,7 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 			bkr_format_reset(PRIVATE_PTR(filp)->mode, STOPPED);
 			}
 		arg.bkrformat.buffer_size = device.size;
-		arg.bkrformat.sector_size = sector.video_size;
-		arg.bkrformat.leader = sector.leader;
-		arg.bkrformat.trailer = sector.trailer;
+		arg.bkrformat.video_size = sector.video_size;
 		arg.bkrformat.interleave = sector.interleave;
 		arg.bkrformat.block_size = sector.rs_format.n;
 		arg.bkrformat.block_parity = sector.rs_format.parity;
@@ -508,9 +507,10 @@ static ssize_t start_common(int mode, direction_t direction, jiffies_t bailout)
 	ssize_t  result;
 
 	if(device.direction != STOPPED)
-		result = -EBUSY;
+		return(-EBUSY);
 	bkr_device_reset(mode);
-	if((result = bkr_format_reset(mode, direction)) >= 0)
+	result = bkr_format_reset(mode, direction);
+	if(result >= 0)
 		result = bkr_device_start_transfer(direction, bailout);
 
 	return(result);
@@ -760,8 +760,8 @@ int bkr_device_start_transfer(direction_t direction, jiffies_t bailout)
 	set_dma_mode(device_isa.dma, (direction == WRITING) ? DMA_MEM_TO_IO : DMA_IO_TO_MEM);
 	set_dma_addr(device_isa.dma, device_isa.phys_addr);
 	set_dma_count(device_isa.dma, device.size);
-	release_dma_lock(flags);
 	enable_dma(device_isa.dma);
+	release_dma_lock(flags);
 
 	/*
 	 * Work the card's control bits.
@@ -934,12 +934,12 @@ int bkr_device_flush(jiffies_t bailout)
 	result = bkr_device_write(device.size - 2*sector.video_size, 0, bailout);
 
 	/*
-	 * FIXME: what the hell's with the off-by-one-line bug!!
+	 * What the hell's with the off-by-one-line bug!!
 	 */
-#if 1   /* the proper way */
+#ifdef FIXME
+	while((bytes_in_buffer() >= device.bytes_per_line) && !result)
+#else
 	while(bytes_in_buffer() && !result)
-#else   /* the hack */
-	while((bytes_in_buffer() > device.bytes_per_line) && !result)
 #endif
 		{
 		result = update_dma_offset(&device.tail);
@@ -989,18 +989,18 @@ static int update_dma_offset(unsigned int *offset)
 /*
  * get_dreq_status()
  *
- * Return the status of a DMA channel's DREQ line.  1 = active, 0 =
+ * Return the status of a DMA channel's DREQ line.  1 == active, 0 ==
  * inactive.
  */
 
-static int get_dreq_status(unsigned int dmanr)
+static __inline__ int get_dreq_status(unsigned int dmanr)
 {
 	int  result;
 
 	if(dmanr <= 3)
-		result = dma_inb(DMA1_STAT_REG) >> (4 + dmanr);
+		result = dma_inb(DMA1_STAT_REG) >> 4;
 	else
-		result = dma_inb(DMA2_STAT_REG) >> dmanr;
+		result = dma_inb(DMA2_STAT_REG);
 
-	return(result & 1);
+	return((result >> dmanr) & 1);
 }

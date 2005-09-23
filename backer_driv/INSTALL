@@ -1,0 +1,107 @@
+           Quick Install Guide for the Backer 16/32 Device Driver
+           ======================================================
+
+Preamble:
+---------
+
+This is the quick install guide.  Full details are in the real
+documentation that comes with the utilities.  The instructions here will
+only be helpful if (i) you know what you are doing or (ii) you don't know
+what you're doing but the instructions just happen to work anyway.
+
+
+Hardware:
+---------
+
+Presumably your Backer was/is working under Windows in which case you
+already have it installed and know there are no hardware conflicts.  If
+you are installing the hardware for the first time then you should first
+check to see which I/O ports and DMA channels are being used by taking a
+look at the two files /proc/ioports and /proc/dma.  Set your Backer to a
+free I/O port and DMA channel then just follow the installation
+instructions that came with the card.
+
+
+Software:
+---------
+
+Here are the steps for installing the driver.
+
+1.  Configure the header file, backer.h, for your system.  The constants
+that should be set are:
+
+	BKR_MAJOR
+	DEFAULT_IOPORT
+	DEFAULT_DMA_CHANNEL
+	DEFAULT_MODE
+
+The ioport and dma channel can also be set at run time although you might
+as well configure them now to simplify things later.
+
+2.  Compile and install the driver to the modules directory.  This is done
+by typing (while logged in as root)
+
+	make
+	make install
+
+or you can just run make and copy the resulting backer.o to your modules
+directory /lib/modules/<kernel version>/misc yourself.
+
+3.  Create a device file.  Do this (still as root) by typing
+
+	mknod -m 666 /dev/backer c 60 0
+
+or with the "60" replaced with whatever major number you had set in the
+header file.  The driver is designed to immitate a standard magnetic tape
+drive so if you want to use your Backer as your default tape device you
+should also create a symlink called /dev/tape
+
+	cp -s /dev/backer /dev/tape
+
+4.  You're Done!  Now load the driver and test it.  See the next section
+for how to do this.
+
+
+Loading/Unloading the driver:
+-----------------------------
+
+To load the driver, log in as root and type
+
+	insmod backer [options]
+
+where the following options can be set:
+
+	ioport=num
+		Set the ioport to num (default = DEFAULT_IOPORT)
+	dma=num
+		Set the dma channel to num (default = DEFAULT_DMA_CHANNEL)
+	buffer=num
+		Set the buffer size to num (default = 65000)
+	timeout=num
+		Set the timeout to num seconds (default = DEFAULT_TIMEOUT)
+
+Here's an example install command:
+
+	insmod backer ioport=0x304 dma=3
+
+You'll get an error message if the driver couldn't be installed.  If that
+happens, check /var/log/messages to see what the problem was.  The driver
+will have printed a little banner and will have complained if it couldn't
+reserve a particular resource.  Note that to allow the dma channel to be
+shared, the driver will only request access to it when the device is
+actually in use so even if the driver gets installed correctly, there
+might still be a dma conflict.  If the driver can't get access to the dma
+channel when it needs to then it will put an error message in
+/var/log/messages.
+
+To test the driver just type
+
+	cat /dev/zero > /dev/backer
+
+to verify that data is being written.  On your television set you should
+see vertical bars for several seconds followed by something that looks
+like white noise.  See the user's guide for troubleshooting.
+
+To unload the module type
+
+	rmmod backer

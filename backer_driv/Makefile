@@ -3,7 +3,7 @@
 #
 #    BKR_MAJOR             : the major number for the /dev files
 #    DEV_DIR               : the /dev directory on your system
-#    MAN_DIR               : the man page goes in $(MAN_DIR)/man4/
+#    MAN_DIR               : the man pages go in $(MAN_DIR)/man4/
 #    MODULES_DIR           : install directory for the driver
 #    CONFIG_BACKER_TIMEOUT : operation timeout in seconds.
 #
@@ -22,7 +22,7 @@ BKR_MAJOR             = 60
 DEV_DIR               = /dev
 MAN_DIR               = /usr/man
 MODULES_DIR           = /lib/modules/misc
-CONFIG_BACKER_TIMEOUT = 10
+CONFIG_BACKER_TIMEOUT = 15
 
 
 #
@@ -33,14 +33,15 @@ CONFIG_BACKER_TIMEOUT = 10
 #   all: (default)
 #	build the driver, backer.o.
 #   install: 
-#	copy the driver to MODULES_DIR, run depmod -a, generate device
-#	inodes if devfs is known to not be in use, put backer.4 in
+#	copy the driver modules to MODULES_DIR, run depmod -a, generate
+#	device inodes if devfs is known to not be in use, put man pages in
 #	$(PREFIX)/man/man4.
 #   devs:
 #	force creation of device inodes.
 #   uninstall:
-#	delete backer.o from MODULES_DIR, run depmod -a, delete the /dev
-#	entries if they exist, delete backer.4 from $(PREFIX)/man/man4.
+#	unload the driver from the kernel, delete the driver modules from
+#	MODULES_DIR, run depmod -a, delete the /dev entries if they exist,
+#	delete the man pages from $(PREFIX)/man/man4.
 #   clean:
 #	Delete all intermediate files from the build directory.
 #   realclean:
@@ -53,23 +54,41 @@ CONFIGFLAGS = -DBKR_MAJOR=$(BKR_MAJOR) \
               -DCONFIG_BACKER_TIMEOUT=$(CONFIG_BACKER_TIMEOUT)
 KERNELFLAGS  = -D__KERNEL__ -DMODULE
 KERNELFLAGS += -DMODVERSIONS -include $(INCLUDE_DIR)/linux/modversions.h
-CFLAGS = -O3 -Wall -Wstrict-prototypes -I$(INCLUDE_DIR) $(KERNELFLAGS) $(CONFIGFLAGS)
+CFLAGS = -c -O3 -Wall -Wstrict-prototypes -I$(INCLUDE_DIR) $(KERNELFLAGS) $(CONFIGFLAGS)
 LDFLAGS = -r
-INSMODFLAGS =
+MODULES =  backer.o backer_isa.o backer_parport.o
+MANPAGES = backer.4 backer_isa.4 backer_parport.4
+DEVNAMES = nhe nhr nhs nle nlr nls phe phr phs ple plr pls
 
-.PHONY : all install devs uninstall clean realclean load unload
+.PHONY : all clean devs install load realclean uninstall unload
 
-all : backer.o
+all : $(MODULES)
 
-backer.o : backer_isa.o backer_fmt.o rs.o
+backer.o : backer_main.o backer_fmt.o rs.o
 	$(LD) $(LDFLAGS) -o $@ $^
-backer_isa.o : backer_isa.c backer.h backer_device.h backer_fmt.h
-backer_fmt.o : backer_fmt.c backer.h backer_device.h backer_fmt.h rs.h
-rs.o : rs.c rs.h
+backer_main.c : backer.h backer_device.h backer_unit.h backer_fmt.h
+backer_fmt.c : backer.h backer_device.h backer_fmt.h rs.h
+rs.c : rs.h
 
-install: all
+backer_isa.o : backer.h backer_device.h backer_unit.h
+
+backer_parport.o : backer.h backer_device.h backer_unit.h
+
+uninstall :
+	@echo "Uninstalling..."
+	if grep backer_isa     -q /proc/modules; then rmmod backer_isa;     fi
+	if grep backer_parport -q /proc/modules; then rmmod backer_parport; fi
+	if grep backer         -q /proc/modules; then rmmod backer;         fi
+	-rm -f $(MODULES:%=$(MODULES_DIR)/%)
+	-rm -f $(MANPAGES:%=$(MAN_DIR)/man4/%.gz)
+	depmod -a
+	if [ -d $(DEV_DIR)/backer ]; then rm -Rf $(DEV_DIR)/backer; fi
+	@echo "Done."
+
+install : all
+	@echo "Installing..."
 	install -d -m 0700 $(MODULES_DIR)
-	install -m 0600 backer.o $(MODULES_DIR)
+	install -m 0600 $(MODULES) $(MODULES_DIR)
 	depmod -a
 	@if [ -f /proc/mounts ]; then \
 	   if grep devfs -q /proc/mounts; then \
@@ -83,45 +102,23 @@ install: all
 	   echo "You must manually run \"make devs\" if device inodes are required."; \
 	fi
 	install -d -m 0755 $(MAN_DIR)/man4
-	install -m 0644 backer.4 $(MAN_DIR)/man4
+	install -m 0644 $(MANPAGES:%=DOCUMENTATION/%) $(MAN_DIR)/man4
+	gzip $(MANPAGES:%=$(MAN_DIR)/man4/%)
 	@echo "Done."
 
-devs:
+devs :
 	@if [ -d $(DEV_DIR)/backer/0 ]; then \
-	   echo "ERROR:  Device files appear to have already been created." ;\
+	   echo "ERROR:  Device files appear to have already been created."; \
 	   exit 1; \
 	fi
 	mkdir -m 0755 -p $(DEV_DIR)/backer/0
-	mknod -m 0666 $(DEV_DIR)/backer/0/nhe c $(BKR_MAJOR) 0
-	mknod -m 0666 $(DEV_DIR)/backer/0/nhr c $(BKR_MAJOR) 1
-	mknod -m 0666 $(DEV_DIR)/backer/0/nhs c $(BKR_MAJOR) 2
-	mknod -m 0666 $(DEV_DIR)/backer/0/nle c $(BKR_MAJOR) 3
-	mknod -m 0666 $(DEV_DIR)/backer/0/nlr c $(BKR_MAJOR) 4
-	mknod -m 0666 $(DEV_DIR)/backer/0/nls c $(BKR_MAJOR) 5
-	mknod -m 0666 $(DEV_DIR)/backer/0/phe c $(BKR_MAJOR) 6
-	mknod -m 0666 $(DEV_DIR)/backer/0/phr c $(BKR_MAJOR) 7
-	mknod -m 0666 $(DEV_DIR)/backer/0/phs c $(BKR_MAJOR) 8
-	mknod -m 0666 $(DEV_DIR)/backer/0/ple c $(BKR_MAJOR) 9
-	mknod -m 0666 $(DEV_DIR)/backer/0/plr c $(BKR_MAJOR) 10
-	mknod -m 0666 $(DEV_DIR)/backer/0/pls c $(BKR_MAJOR) 11
+	DEVPATHS=($(DEVNAMES:%=$(DEV_DIR)/backer/0/%)); \
+	for minor in 0 1 2 3 4 5 6 7 8 9 10 11; do \
+	   mknod -m 0666 $${DEVPATHS[$${minor}]} c $(BKR_MAJOR) $${minor}; \
+	done
 
-uninstall:
-	-rmmod backer
-	rm -f $(MODULES_DIR)/backer.o
-	rm -f $(MAN_DIR)/man4/backer.4
-	depmod -a
-	if [ -d $(DEV_DIR)/backer ]; then rm -Rf $(DEV_DIR)/backer; fi
+clean :
+	rm -f backer_main.o backer_fmt.o rs.o
 
-clean:
-	rm -f backer_isa.o backer_fmt.o rs.o
-
-realclean: clean
-	rm -f backer.o
-
-load: all
-	/sbin/insmod backer.o $(INSMODFLAGS)
-	cat /proc/devices
-
-unload:
-	/sbin/rmmod backer
-	cat /proc/devices
+realclean : clean
+	rm -f $(MODULES)

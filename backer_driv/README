@@ -5,7 +5,7 @@
 See INSTALL for instructions on compiling, installing and loading the
 driver.
 
-See the man page (the file named backer.4) for information about the driver
+See the man pages in DOCUMENTATION/ for information about the driver
 itself.  You can run a file through man by specifying it on the command
 line eg.
 
@@ -15,6 +15,15 @@ line eg.
 a man page).
 
 
+NOTE:
+-----
+
+THE EXTERNAL, PARALLEL PORT, VERSION OF THE BACKER DEVICE IS NOT SUPPORTED
+AT THIS TIME.  The beginnings of a low-level module for external Backer
+support is included with this driver and the documentation explains its use
+but it does not work.  DO NOT SCREW WITH IT.  You've been warned.
+
+
 TROUBLESHOOTING
 ---------------
 
@@ -22,42 +31,38 @@ WON'T COMPILE.  Well... it compiles just fine on my own machine so it would
 help if you could find the problem and let me know what it was.  Otherwise
 you'd better just contact me and we'll have to sort it out.
 
-DRIVER WON'T LOAD.  Are you logged in as root?  Check /var/log/messages for
-complaints about unavailable resources.  If there's an I/O port conflict,
-well you know what to do (just be sure to recompile with updated parameters
-or set the correct options on the insmod command line).  If there's a
+DRIVER WON'T LOAD.  Be sure you are logged in as root.  Check
+/var/log/messages for complaints about unavailable resources.  If there's a
 problem reserving a DMA buffer, try freeing some memory or rebooting your
 system and loading the driver soon after start-up.
 
 DRIVER LOADS BUT YOU CAN'T OPEN THE DEVICE FILES.  If the error message is
 "Permission denied" then check the permissions of the /dev entries.  They
-must allow you access them.
+must allow you access them.  Be sure that at least one of the low-level
+modules is loaded.  Make sure that the minor numbers for the device files
+correspond to the correct unit number (see the man page for the mapping of
+minor numbers to unit numbers).
 
-YOU CAN OPEN THE DEVICE BUT YOU CAN'T TRANSFER DATA.  Do the following test
-to see what error message you see
+YOU CAN OPEN THE DEVICE BUT YOU CAN'T TRANSFER DATA.  As above, make sure
+the minor numbers for the device files actually correspond to a valid unit.
+Do the following test to see what error message you see
 
 	cat /dev/zero > /dev/tape
 
-If you see "Device or resource busy" then make sure that no other process
-is transfering data and that the DMA channel is available (check
-/proc/dma).  If you see "Input/output error" or "Connection timed out" then
-make sure your VCR is properly connected to the card (and turned on) and
-make sure that you have the driver set for the correct DMA channel.
+If you see "Device or resource busy" then check to see that no other
+process is transferring data and that the DMA channel is available (check
+/proc/dma).  If you see "Connection timed out" then make sure the driver is
+configured for the correct DMA channel.  If you see "Out of memory" then
+your system has run out of memory.
 
 YOU GET MANY ERRORS WHEN READING TAPES.  Is the tape you are using of good
 quality?  Are your video cables OK?  Generally if the picture you see on TV
-while recording looks nice and crisp then the cables are fine.  It might be
-that the data format is not appropriate for your video equipment.  You can
-experiment with the parameters in the backer_fmt.h and backer_fmt.c file
-yourself or contact me and I can help you adjust them.  If you figure them
-out yourself then send me the information so I can make the default
-settings as generic as possible.
-
-YOU GET FATAL ERRORS FROM tar DURING READS.  I find that tar's buffering of
-the data stream defeats itself in that, by default, tar processes so much
-data at a time that the device driver's buffer overflows between tar's
-(infrequent) reads/writes.  The problem is solved on my system by reducing
-tar's record size to its minimum value with the option -b 1.  Larger values
-would probably work too but I haven't found any problems with this small
-record size either so I just use this.  This option must be given during
-playback if it was used when recording.
+while recording looks nice and crisp then the cables are fine.  Is your
+computer fast enough to process the data in real time?  This can be checked
+by seeing if your problems go away when you use bkrencode to process the
+data stream offline.  It might be that the data format is not appropriate
+for your video equipment.  If you have Gnumeric, you can use the work sheet
+provided in the EXTRAS/ directory to experiment with different format
+parameters.  It's best to only re-compile bkrencode at first and test your
+changes with it then re-compile the driver when you know the new format
+works.

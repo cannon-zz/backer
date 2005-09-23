@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrmonitor 8 "July 5, 2001" "Linux" "Backer"
+.TH BKRMONITOR 8 "August 15, 2001" "Linux" "Backer"
 .SH NAME
 bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
@@ -35,13 +35,13 @@ driver.  It works by repeatedly parsing the contents of
 .PP
 See
 .IR backer (4)
-for information on the meaning of the information displayed.
+for the meaning of the information displayed.
 .SS OPTIONS
 .TP
 \fB\-d\fP \fIdevice\fP
 Monitor device number \fIdevice\fP.  The default is 0.  If \fIdevice\fP is
 "s" then program input is read from stdin rather than from
-\fB/proc/driver/backer\fP.  At the moment this has no use.
+\fB/proc/driver/backer\fP.
 .TP
 \fB\-h\fP
 Print a usage message.

@@ -23,7 +23,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <malloc.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,6 +34,7 @@
 #include "backer_device.h"
 #include "backer_fmt.h"
 #include "bkr_disp_mode.h"
+#include "stdio_dev.h"
 
 #define  PROGRAM_NAME    "bkrencode"
 
@@ -71,22 +71,15 @@ int main(int argc, char *argv[])
 	 */
 
 	device.state = BKR_STOPPED;
+	device.ops = &stdio_ops;
 	sector.buffer = NULL;
 	direction = BKR_WRITING;
-
-	device.buffer = (unsigned char *) malloc(BKR_BUFFER_SIZE);
-	if(device.buffer == NULL)
-		{
-		errno = ENOMEM;
-		perror(PROGRAM_NAME);
-		exit(1);
-		}
 
 	/*
 	 * Process command line options
 	 */
 
-	while((result = getopt(argc, argv, "D:F:f::hsuV:")) != EOF)
+	while((result = getopt(argc, argv, "D:F:df::hsuV:")) != EOF)
 		switch(result)
 			{
 			case 'd':
@@ -223,9 +216,8 @@ int main(int argc, char *argv[])
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
-	bkr_device_reset(&device, direction);
-	bkr_format_reset(&device, &sector);
-	bkr_device_start_transfer(&device, direction);
+	bkr_format_reset(&device, &sector, device.mode, direction);
+	device.ops->start(&device, direction);
 	switch(direction)
 		{
 		case BKR_READING:
@@ -238,39 +230,6 @@ int main(int argc, char *argv[])
 				/* EOF */
 				break;
 				}
-			if(dump_status)
-				{
-				fprintf(stderr, "Unit            : 0 (reading)\n"
-				                "Current Mode    : %u\n"
-				                "Sector Number   : %u\n"
-				                "Byte Errors     : %u\n"
-				                "In Worst Block  : %u / %u\n"
-				                "Recently        : %u\n"
-				                "Bad Blocks      : %u\n"
-				                "Framing Errors  : %u\n"
-				                "Overrun Errors  : %u\n"
-				                "Underflows      : %u\n"
-				                "Worst Key       : %u\n"
-				                "Closest Non-Key : %u\n"
-				                "Least Skipped   : %u\n"
-				                "Most Skipped    : %u\n"
-				                "DMA Buffer      : %u / %u\n",
-				                device.mode,
-				                sector.header.number,
-				                sector.health.total_errors,
-				                sector.errors.symbol, sector.rs_format.parity,
-				                sector.errors.recent_symbol,
-				                sector.errors.block,
-				                sector.errors.frame,
-				                sector.errors.overrun,
-				                sector.errors.underflow,
-				                sector.health.worst_key,
-				                sector.health.best_nonkey,
-				                sector.health.least_skipped,
-				                sector.health.most_skipped,
-				                bytes_in_buffer(&device), device.size);
-				sector.errors.recent_symbol = 0;
-				}
 			if(result < 0)
 				{
 				if(result == -EPIPE)
@@ -280,9 +239,43 @@ int main(int argc, char *argv[])
 					fprintf(stderr, PROGRAM_NAME": skipping bad sector (%d total)\n", skip_bad++);
 					continue;
 					}
+				fprintf(stderr, "Sector: %u\n", sector.header.number);
 				errno = -result;
 				perror(PROGRAM_NAME": stdin");
 				exit(1);
+				}
+			if(dump_status)
+				{
+				fprintf(stderr,
+				        "Unit            : 0 READING\n"
+				        "Current Mode    : %u\n"
+				        "Sector Number   : %u\n"
+				        "Byte Errors     : %u\n"
+				        "In Worst Block  : %u / %u\n"
+				        "Recently        : %u\n"
+				        "Bad Blocks      : %u\n"
+				        "Framing Errors  : %u\n"
+				        "Overrun Errors  : %u\n"
+				        "Underflows      : %u\n"
+				        "Worst Key       : %u\n"
+				        "Closest Non-Key : %u\n"
+				        "Least Skipped   : %u\n"
+				        "Most Skipped    : %u\n"
+				        "I/O Buffer      : %u / %u\n",
+				        device.mode,
+				        sector.header.number,
+				        sector.health.total_errors,
+				        sector.errors.symbol, sector.rs_format.parity,
+				        sector.errors.recent_symbol,
+				        sector.errors.block,
+				        sector.errors.frame,
+				        sector.errors.overrun,
+				        sector.errors.underflow,
+				        sector.health.worst_key,
+				        sector.health.best_nonkey,
+				        sector.health.least_skipped,
+				        sector.health.most_skipped,
+				        bytes_in_buffer(device.head, device.tail, device.size), device.size);
 				}
 			while(sector.offset < sector.end)
 				{
@@ -307,7 +300,7 @@ int main(int argc, char *argv[])
 				if(ferror(stdin))
 					{
 					perror(PROGRAM_NAME": stdin");
-					exit(1);
+					break;
 					}
 				}
 			result = sector.write(&device, &sector);
@@ -322,14 +315,14 @@ int main(int argc, char *argv[])
 			result = bkr_sector_write_eor(&device, &sector);
 		while(result == -EAGAIN);
 		do
-			result = bkr_device_flush(&device);
+			result = device.ops->flush(&device);
 		while(result == -EAGAIN);
 		break;
 
 		default:
 		break;
 		}
-	bkr_device_stop_transfer(&device);
+	device.ops->stop(&device);
 
 	exit(0);
 }

@@ -12,17 +12,15 @@
  * Do some pre-cleaning.
  *
  *	device.state = BKR_STOPPED;
- *	device.buffer = (allocate a buffer here)
  *	sector.buffer = NULL;
  *
  * Reset the two layers in order.
  *
- *	bkr_device_reset();
  *	bkr_format_reset();
  *
  * Start the transfer.
  *
- *      bkr_device_start_transfer();
+ *      device.ops->start();
  *
  * Read/write data.
  *
@@ -32,16 +30,15 @@
  * End the recording (only if writing)
  *
  *	bkr_write_eor();
- *	bkr_device_flush();
+ *	device.ops->flush();
  *
  * Stop the transfer.
  *
- *	bkr_device_stop_transfer();
+ *	device.ops->stop();
  *
  * Final clean up.
  *
  *	free(sector.buffer);
- *	free(device.buffer);
  *
  * Note:  In order to support multiple formats, reading and writing is done
  * via function pointers in the sector structure.  The pointers are set
@@ -260,63 +257,52 @@ typedef struct
 
 typedef enum
 	{
-	NRZ = 0,                        /* Non-return to zero */
+	NRZ,                            /* Non-return to zero */
 	GCR                             /* Group code record */
 	} modulation_t;
 
 typedef struct
 	{
-	unsigned int  video_size;
-        unsigned int  leader;
-        unsigned int  trailer;
-	unsigned int  active_size;
-	unsigned int  key_interval;
-	unsigned int  key_length;
-	modulation_t  modulation;
-	unsigned int  modulation_pad;
-	unsigned int  buffer_size;
-	unsigned int  interleave;
-	unsigned int  n;
-	unsigned int  k;
-	unsigned int  data_size;
-	unsigned int  parity_size;
+	unsigned int  video_size;       /* see diagram above */
+        unsigned int  leader;           /* see diagram above */
+        unsigned int  trailer;          /* see diagram above */
+	unsigned int  active_size;      /* see diagram above */
+	unsigned int  key_interval;     /* key byte spacing */
+	unsigned int  key_length;       /* number of key bytes */
+	modulation_t  modulation;       /* modulation type */
+	unsigned int  modulation_pad;   /* extra space for modulation overhead */
+	unsigned int  buffer_size;      /* see diagram above */
+	unsigned int  interleave;       /* block interleave */
+	unsigned int  data_size;        /* see diagram above */
+	unsigned int  parity_size;      /* see diagram above */
 	} bkr_format_info_t;
 
-#define BKR_FORMAT_INFO_INITIALIZER                                                        \
-	{ { 1012,  32, 28,  952,  45, 21, NRZ,  21,  931,  7, 133, 125,  875,  56 },    /* LOW  NTSC SP */ \
-	  { 1012,  40, 32,  940,  42, 22, GCR, 124,  816, 12,  68,  60,  720,  96 },    /* LOW  NTSC EP */ \
-	  { 1220,  40, 36, 1144,  47, 24, NRZ,  24, 1120,  8, 140, 132, 1056,  64 },    /* LOW  PAL  SP */ \
-	  { 1220,  48, 36, 1136,  39, 29, GCR, 152,  984, 12,  82,  74,  888,  96 },    /* LOW  PAL  EP */ \
-	  { 2530,  80, 70, 2380, 119, 20, NRZ,  20, 2360, 20, 118, 110, 2200, 160 },    /* HIGH NTSC SP */ \
-	  { 2530, 100, 70, 2360,  81, 29, GCR, 288, 2072, 28,  74,  66, 1848, 224 },    /* HIGH NTSC EP */ \
-	  { 3050, 100, 90, 2860, 130, 22, NRZ,  22, 2838, 22, 129, 121, 2662, 176 },    /* HIGH PAL  SP */ \
-	  { 3050, 120, 90, 2840,  88, 32, GCR, 344, 2496, 26,  96,  88, 2288, 208 } }   /* HIGH PAL  EP */
+#define BKR_FORMAT_INFO_INITIALIZER                                                       \
+	{ { 1012,  32, 28,  952,  45, 21, NRZ,  21,  931,  7,  861,  70 },      /* nls */ \
+	  { 1012,  40, 32,  940,  42, 22, GCR, 124,  816, 12,  720,  96 },      /* nle */ \
+	  { 1220,  40, 36, 1144,  47, 24, NRZ,  24, 1120,  8, 1040,  80 },      /* pls */ \
+	  { 1220,  48, 36, 1136,  39, 29, GCR, 152,  984, 12,  888,  96 },      /* ple */ \
+	  { 2530,  80, 70, 2380, 119, 20, NRZ,  20, 2360, 20, 2160, 200 },      /* nhs */ \
+	  { 2530, 100, 70, 2360,  81, 29, GCR, 288, 2072, 28, 1848, 224 },      /* nhe */ \
+	  { 3050, 100, 90, 2860, 130, 22, NRZ,  22, 2838, 22, 2618, 220 },      /* phs */ \
+	  { 3050, 120, 90, 2840,  88, 32, GCR, 344, 2496, 26, 2288, 208 } }     /* phe */
+
 
 struct bkr_sector_t
 	{
 	unsigned char  *buffer;         /* uninterleaved data buffer */
-	unsigned char  *offset;         /* location of next byte to be read/written */
+	unsigned char  *offset;         /* location of next byte */
 	unsigned char  *end;            /* see diagram above */
-	unsigned int  interleave;       /* block interleave */
-	unsigned int  key_interval;     /* key byte spacing */
-	unsigned int  key_length;       /* number of key bytes */
-	unsigned int  video_size;       /* see diagram above */
-	unsigned int  active_size;      /* see diagram above */
-	unsigned int  buffer_size;      /* see diagram above */
-	modulation_t  modulation;       /* modulation type */
-	unsigned int  modulation_pad;   /* extra space for modulation overhead */
-	unsigned int  data_size;        /* see diagram above */
-	unsigned int  parity_size;      /* see diagram above */
-	unsigned int  leader;           /* see diagram above */
-	unsigned int  trailer;          /* see diagram above */
+	bkr_format_info_t  fmt;         /* sector format information */
+	rs_format_t  rs_format;         /* Reed-Solomon format information */
 	int  oddfield;                  /* current video field is odd */
 	int  need_sequence_reset;       /* sector number needs to be reset */
-	int  found_data;                /* have found first valid data sector */
+	int  underflow_detect;          /* 0 == sector is in an underflow */
+	int  found_data;                /* 1 == have found valid data sector */
 	int  op_count;                  /* counter for misc operations */
 	bkr_sector_header_t  header;    /* sector header copy */
-	rs_format_t  rs_format;         /* Reed-Solomon format description */
-	int  (*read)(bkr_device_t *, struct bkr_sector_t *);   /* read function */
-	int  (*write)(bkr_device_t *, struct bkr_sector_t *);  /* write function */
+	int  (*read)(bkr_device_t *, struct bkr_sector_t *);   /* read sector */
+	int  (*write)(bkr_device_t *, struct bkr_sector_t *);  /* write sector */
 	bkr_errors_t  errors;           /* error counts */
 	bkr_health_t  health;           /* health indicators */
 	};
@@ -329,8 +315,8 @@ typedef struct bkr_sector_t bkr_sector_t;
  * accessed through pointers in the sector data structure.
  */
 
-int  bkr_format_reset(bkr_device_t *, bkr_sector_t *);
-int  bkr_sector_write_eor(bkr_device_t *, bkr_sector_t *);
+extern int bkr_format_reset(bkr_device_t *, bkr_sector_t *, int, bkr_state_t);
+extern int bkr_sector_write_eor(bkr_device_t *, bkr_sector_t *);
 
 
 /*

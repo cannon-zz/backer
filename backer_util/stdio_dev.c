@@ -21,6 +21,7 @@
  */
 
 #include <errno.h>
+#include <malloc.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -29,92 +30,57 @@
 
 
 /*
- * space_in_buffer(), bytes_in_buffer()
- *
- * Return the space and bytes available in the device I/O buffer.  Note
- * that space_in_buffer() + bytes_in_buffer() == device.size - 1.
- */
-
-unsigned int space_in_buffer(bkr_device_t *device)
-{
-	if(device->tail > device->head)
-		return(device->tail - device->head - 1);
-	return(device->tail+device->size - device->head - 1);
-}
-
-unsigned int bytes_in_buffer(bkr_device_t *device)
-{
-	if(device->tail > device->head)
-		return(device->head+device->size - device->tail);
-	return(device->head - device->tail);
-}
-
-
-/*
- * The read function ensures that the "DMA" buffer is about 1/2 full while
+ * The read function ensures that the I/O buffer is about 1/2 full while
  * write keeps it as empty as possible.  The flush function flushes first
  * the buffer and then stdout.
  *
  * These functions pass on any error codes returned by the file system.
  */
 
-int bkr_device_reset(bkr_device_t *device, bkr_state_t direction)
+static int bkr_stdio_start(bkr_device_t *device, bkr_state_t direction)
 {
-	if(BKR_DENSITY(device->mode) == BKR_HIGH)
-		device->bytes_per_line = BYTES_PER_LINE_HIGH;
-	else
-		device->bytes_per_line = BYTES_PER_LINE_LOW;
+	device->buffer = (unsigned char *) malloc(device->size);
+	if(device->buffer == NULL)
+		return(-ENOMEM);
 
-	if(BKR_VIDEOMODE(device->mode) == BKR_NTSC)
-		device->frame_size = device->bytes_per_line * (LINES_PER_FIELD_NTSC * 2 + 1);
-	else
-		device->frame_size = device->bytes_per_line * LINES_PER_FIELD_PAL * 2;
-
-	device->size = BKR_BUFFER_SIZE;
-	if(direction == BKR_WRITING)
-		device->size -= BKR_BUFFER_SIZE % device->frame_size;
-
-	return(0);
-}
-
-
-int bkr_device_start_transfer(bkr_device_t *device, bkr_state_t direction)
-{
 	device->state = direction;
+
 	device->head = 0;
 	device->tail = 0;
-	memset(device->buffer, 0, BKR_BUFFER_SIZE);
+	memset(device->buffer, 0, device->size);
+
 	return(0);
 }
 
 
-void bkr_device_stop_transfer(bkr_device_t *device)
+static void bkr_stdio_stop(bkr_device_t *device)
 {
 	device->state = BKR_STOPPED;
+	free(device->buffer);
 	return;
 }
 
 
-int bkr_device_read(bkr_device_t *device, unsigned int length)
+static int bkr_stdio_read(bkr_device_t *device, unsigned int length)
 {
 	int  tmp, desired;
 
-	desired = device->size / 2 - bytes_in_buffer(device);
-	if((int) desired <= 0)
+	desired = device->size / 2 - bytes_in_buffer(device->head, device->tail, device->size);
+	if(desired <= 0)
 		return(0);
 
-	if(device->head + desired > device->size)
+	if(desired > device->size - device->head)
 		{
 		tmp = fread(device->buffer + device->head, 1, device->size - device->head, stdin);
-		device->head += tmp;
+		device->head = (device->head + tmp) & BKR_OFFSET_MASK;
 		if(device->head != 0)
 			goto done;
 		desired -= tmp;
 		}
-	device->head += fread(device->buffer + device->head, 1, desired, stdin);
+	device->head = (device->head + fread(device->buffer + device->head, 1, desired, stdin)) & BKR_OFFSET_MASK;
 
 	done:
-	if(bytes_in_buffer(device) >= length)
+	if(bytes_in_buffer(device->head, device->tail, device->size) >= length)
 		return(0);
 	if(feof(stdin))
 		return(-EPIPE);
@@ -124,19 +90,19 @@ int bkr_device_read(bkr_device_t *device, unsigned int length)
 }
 
 
-int bkr_device_write(bkr_device_t *device, unsigned int length)
+static int bkr_stdio_write(bkr_device_t *device, unsigned int length)
 {
-	if(device->tail + bytes_in_buffer(device) >= device->size)
+	if(device->tail + bytes_in_buffer(device->head, device->tail, device->size) >= device->size)
 		{
 		device->tail += fwrite(device->buffer + device->tail, 1, device->size - device->tail, stdout);
 		if(device->tail < device->size)
 			goto done;
 		device->tail = 0;
 		}
-	device->tail += fwrite(device->buffer + device->tail, 1, bytes_in_buffer(device), stdout);
+	device->tail += fwrite(device->buffer + device->tail, 1, bytes_in_buffer(device->head, device->tail, device->size), stdout);
 
 	done:
-	if(space_in_buffer(device) >= length)
+	if(space_in_buffer(device->head, device->tail, device->size) >= length)
 		return(0);
 	if(ferror(stdout))
 		return(-errno);
@@ -144,9 +110,24 @@ int bkr_device_write(bkr_device_t *device, unsigned int length)
 }
 
 
-int bkr_device_flush(bkr_device_t *device)
+static int bkr_stdio_flush(bkr_device_t *device)
 {
-	bkr_device_write(device, 0);
+	bkr_stdio_write(device, 0);
 	fflush(stdout);
 	return(0);
 }
+
+
+/*
+ * Device operations.
+ */
+
+bkr_device_ops_t  stdio_ops =
+	{
+	NULL, NULL,
+	bkr_stdio_start,
+	bkr_stdio_stop,
+	bkr_stdio_read,
+	bkr_stdio_write,
+	bkr_stdio_flush
+	};

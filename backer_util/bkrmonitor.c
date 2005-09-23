@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 			puts(
 	"Usage:  " PROGRAM_NAME " [options]\n" \
 	"the following options are recognized:\n" \
-	"       -d num      Monitor device num (default 0, \"s\" = stdin)\n" \
+	"       -d num      Monitor device number num (default 0, \"s\" = stdin)\n" \
 	"       -t num      Set the update interval to num milliseconds\n" \
 	"       -h          Display usage");
 			exit(1);
@@ -232,7 +232,7 @@ int main(int argc, char *argv[])
 	widgets.total = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.total, 1, 2, 1, 2);
 
-	widgets.symbol = gtk_label_new("0");
+	widgets.symbol = gtk_label_new("0 of 0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 2, 3);
 
 	widgets.block = gtk_label_new("0");
@@ -273,7 +273,7 @@ int main(int argc, char *argv[])
 	widgets.most = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.most, 1, 2, 3, 4);
 
-	/* Errors and DMA bar graphs */
+	/* Errors and I/O buffer bar graphs */
 
 	table = gtk_table_new(2, 2, FALSE);
 	gtk_table_set_row_spacings(GTK_TABLE(table), 4);
@@ -282,7 +282,7 @@ int main(int argc, char *argv[])
 
 	widget = gtk_label_new("Recent Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
-	widget = gtk_label_new("DMA Buffer");
+	widget = gtk_label_new("I/O Buffer");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 
 	error_rate.widget = gtk_progress_bar_new();
@@ -388,7 +388,7 @@ gint update_status(gpointer data)
 	sprintf(text, "%u", proc_data.total_errors);
 	gtk_label_set_text(GTK_LABEL(widgets.total), text);
 
-	sprintf(text, "%u", proc_data.worst_block);
+	sprintf(text, "%u of %u", proc_data.worst_block, proc_data.parity/2);
 	gtk_label_set_text(GTK_LABEL(widgets.symbol), text);
 
 	sprintf(text, "%u", proc_data.bad_blocks);

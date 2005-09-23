@@ -12,7 +12,7 @@
 # will be automatically pasted into the man pages.
 #
 
-DRIVER_DIR   = ../backer-driv-3.3
+DRIVER_DIR   = ../backer-driv-3.100
 PREFIX       = /usr/local
 DEVICE_NAME  = /dev/tape
 DEFAULT_MODE = (BKR_NTSC | BKR_HIGH | BKR_SP)
@@ -41,9 +41,9 @@ bkrcheck : bkrcheck.c bkr_disp_mode.c $(DRIVER_DIR)/backer.h Makefile
 
 bkrencode : bkrencode.c bkr_disp_mode.c stdio_dev.c \
             $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c bkr_disp_mode.h \
-            linux_compat.h $(DRIVER_DIR)/rs.h $(DRIVER_DIR)/backer.h \
-            $(DRIVER_DIR)/backer_device.h $(DRIVER_DIR)/backer_fmt.h \
-            Makefile
+            stdio_dev.h linux_compat.h $(DRIVER_DIR)/rs.h \
+            $(DRIVER_DIR)/backer.h $(DRIVER_DIR)/backer_device.h \
+            $(DRIVER_DIR)/backer_fmt.h Makefile
 	$(CC) $(CFLAGS) $(BKRFLAGS) -o $@ bkrencode.c bkr_disp_mode.c \
 	   stdio_dev.c $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c
 
@@ -65,20 +65,18 @@ endif
 %.8 : %.man Makefile
 	sed -e "s?DEFAULT_MODE?${DEFAULT_MODE}?" -e "s?DEVICE_NAME?${DEVICE_NAME}?" < $< > $@
 
+uninstall:
+	@echo "Uninstalling..."
+	-rm -f $(TARGETS:%=$(BIN_DIR)/%)
+	-rm -f $(MAN_PAGES:%=$(MAN_DIR)/man8/%.gz)
+	@echo "Done."
+
 install: all
+	@echo "Installing..."
 	mkdir -p -m 0755 $(BIN_DIR)
 	mkdir -p -m 0755 $(MAN_DIR)/man8
 	for x in $(TARGETS); do \
-	   install -m 0755 $${x} $(BIN_DIR) && install -m 0644 $${x}.8 $(MAN_DIR)/man8; \
-	done
-	@echo "Done."
-
-uninstall:
-	for x in $(TARGETS); do \
-	   { \
-	   rm -f $(BIN_DIR)/$${x}; \
-	   rm -f $(MAN_DIR)/man8/$${x}.8; \
-	   } \
+	   install -m 0755 $${x} $(BIN_DIR) && install -m 0644 $${x}.8 $(MAN_DIR)/man8 && gzip $(MAN_DIR)/man8/$${x}.8; \
 	done
 	@echo "Done."
 

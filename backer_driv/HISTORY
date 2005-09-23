@@ -1,7 +1,55 @@
-3.100 (?)
+3.100 (2001/8/15)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
 
+	Documentation updates.
+
+	Makefile fixes.
+
 	The randomizer no longer skips the first 4 bytes of each sector.
+
+	Added a secondary buffer to the ISA device layer.  This required
+	some modifications to the formating code to support buffer offsets
+	that loop at arbitrary powers of two.  The device layer presents
+	the (large) secondary buffer to the formating layer while a kernel
+	timer shuffles data between the secondary buffer and the real DMA
+	buffer.  Currently the secondary buffer's size is set to 512
+	kilobytes which allows bzip2 to be used with the driver on a
+	PII-400 without buffer underflows!
+
+	Changed "DMA Buffer" to "I/O Buffer" in the /proc interface.
+
+	Increased the number of parity bytes in SP/LP modes from 8 per
+	block to 10 for good luck.
+
+	Split the driver's device interface layer off into a separate
+	module, backer_isa.o.  The main module, backer.o, provides the
+	kernel interface and all data processing functions.  This was done
+	in anticipation of adding support for the external version.  As I
+	had been planning to do this all along, it required very little in
+	the way of changes to the driver's core structure but a LOT of
+	typing was required to modify header files, add symbol exporting,
+	add module requesting, etc..  The biggest change this induced was
+	the replacement of the fixed-size unit array with a dynamic linked
+	list of installed units and the code for maintaining it.
+
+	Added a man page for the new backer_isa module.
+
+	Added the skeleton of a module for supporting parallel port devices
+	and a man page for it as well.
+
+	Removed module locking for the main module:  handled by kernel's
+	filesystem code.
+
+	Added a write-read test to speed up ISA autoprobing.
+
+	Changed the insmod options for ISA devices from ioport=... and
+	dma=... to isa=... .
+
+	Re-implemented the driver's ability to start reading before a valid
+	data stream is coming off the tape and increased the default
+	timeout.
+
+	Removed the reset() function from the device level API.
 
 3.3 (2001/7/5)
 	Reworked some code to get rid of a few goto's (yuck).
@@ -52,9 +100,9 @@
 	New sector key locator algorithm:  require any n symbols to match
 	rather than n in a row.
 
-	Fixed bug that caused autoprobe routine to release any ioports that
-	had been requested by module parameters.  Cleaned the autoprobe
-	code up a bit.
+	Fixed a bug that caused autoprobe routine to release any ioports
+	that had been requested by module parameters.  Cleaned the
+	autoprobe code up a bit.
 
 	Removed DMA pulse check from transfer start code since that
 	functionality is handled by device read/write functions and
@@ -106,7 +154,7 @@
 	Did some SMP related fixes including fixing a potential power
 	management deadlock.
 
-	Fixed bug in GCR modulation on machines that don't have rolw
+	Fixed a bug in GCR modulation on machines that don't have rolw
 	assembly op-code.
 
 	Added multiple device support.  This has changed the format of the

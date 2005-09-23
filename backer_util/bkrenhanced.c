@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
 	 * Process command line options
 	 */
 
-	while((i = getopt(argc, argv, "f:hu")) != EOF)
+	while((i = getopt(argc, argv, "f::hu")) != EOF)
 		switch(i)
 			{
 			case 'f':

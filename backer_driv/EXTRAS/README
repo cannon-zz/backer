@@ -20,20 +20,18 @@ second sheet corresponds to the data table in backer_fmt.h.
 The columns shaded in green are the columns that can be adjusted.  The
 other columns must not be edited directly because they are either computed
 parameters or are determined by the Backer device's hardware
-characteristics.  The "Use GCR" column contains either 1 or 0 to indicate
-whether or not GCR modulation should be used for that mode.
+characteristics.
 
 When adjusting numbers, the columns to pay particular attention to are the
-``Buffer Size'' and the ``Block n'' columns.  Both must be integers.
+"Buffer Size" and the "Data Size" columns.  Both must be integers.
 
 If you edit the numbers and want to modify backer_fmt.h, follow these
 steps.  Select "Save As" from the "File" menu and for "File format" select
 "Text File Export".  Enter a file name and click "OK".  Add Sheet2 to the
-"Sheets to export" list and click "Next".  For the "Seperator" select
+"Sheets to export" list and click "Next".  For the "Separator" select
 "Space" and for "Quoting" select "Never" then click "Finish".  You now have
 a text file but you'll have to open it in a text editor and delete the
-first line which contains the column headings.  You'll also have to go to
-the "Use GCR" column and replace each 1 "GCR" and each 0 with "NRZ"
-(without quotes).  After doing those two things, you should have a text
-file that can be pasted directly into backer_fmt.h but you might want to do
-some more editing to make it more readable.
+first line which contains the column headings.  Finally, you'll also have
+to delete the "Parity" column.  After doing those three things, you should
+have a text file that can be pasted directly into backer_fmt.h but you
+might want to do some more editing to make it look nice.

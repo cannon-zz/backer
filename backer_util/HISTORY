@@ -1,3 +1,19 @@
+3.100 (2001/8/15)
+	Documentation updates.
+
+	Brought stdio_dev.c and bkrenhanced.c in line with the changes made
+	to the driver sources needed to implement a secondary buffer in the
+	ISA device layer.
+
+	Changed the label "DMA Buffer" to "I/O Buffer" in bkrmonitor.
+
+	Brought stdio_dev.c and bkrenhanced.c in line with the
+	modifications made to the driver sources due to split it into
+	multiple modules.
+
+	bkrmonitor now shows how many errors per block the Reed-Solomon
+	code can handle and it shows the unit's current state.
+
 3.3 (2001/7/5)
 	Documentation updates and fixes.
 

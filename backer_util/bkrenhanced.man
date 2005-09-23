@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrenhanced 8 "July 5, 2001" "Linux" "Backer"
+.TH BKRENHANCED 8 "August 15, 2001" "Linux" "Backer"
 .SH NAME
 bkrenhanced \- Backer enhanced redundancy filter.
 .SH SYNOPSIS
@@ -95,7 +95,7 @@ utility might, one day, be migrated into the real formating code.  When
 natively within both the driver and \fBbkrencode\fP.
 .PP
 Finally, while the motivation for the development of \fBbkrenhanced\fP has
-been the improvment of the reliability of EP recordings, \fBbkrenhanced\fP
+been the improvement of the reliability of EP recordings, \fBbkrenhanced\fP
 will function with non-EP modes as well and the paranoid may wish to do so
 for extra piece of mind.
 .SH "SEE ALSO"

@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH bkrencode 8 "July 5, 2001" "Linux" "Backer"
+.TH BKRENCODE 8 "August 15, 2001" "Linux" "Backer"
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
@@ -100,9 +100,9 @@ To use \fBbkrencode\fP to allow
 to be used with high compression on a slow computer do something like
 .RS 3
 .sp
-tar -czO \fIfilenames...\fP | bkrencode \fIoptions\fP > /tmp/tape.dat
+tar -czO \fIfiles...\fP | bkrencode \fIoptions...\fP > /tmp/tape.dat
 .br
-cat /tmp/tape.dat > /dev/backer/0/\fIdevice\fP
+cp /tmp/tape.dat /dev/backer/0/\fIdevice\fP
 .sp
 .RE
 .SH NOTES

@@ -27,6 +27,15 @@
  * Hardware stuff
  */
 
+#define  BKR_BIT_HIGH_DENSITY  0x01
+#define  BKR_BIT_DMA_REQUEST   0x02
+#define  BKR_BIT_DATA          0x04
+#define  BKR_BIT_SYNC          0x08
+#define  BKR_BIT_FRAME_BUSY    0x10
+#define  BKR_BIT_TRANSMIT      0x20
+#define  BKR_BIT_RECEIVE       0x40
+#define  BKR_BIT_NTSC_VIDEO    0x80
+
 #define  BYTES_PER_LINE_LOW    4
 #define  BYTES_PER_LINE_HIGH   10
 #define  LINES_PER_FIELD_NTSC  253

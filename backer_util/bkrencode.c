@@ -33,6 +33,7 @@
 #include "backer_fmt.h"
 #include "bkr_disp_mode.h"
 
+#define  PROGRAM_NAME    "bkrencode"
 #define  DEFAULT_DEVICE  "/dev/backer"
 
 
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
 
 	if((device.buffer = (unsigned char *) malloc(DEFAULT_BUFFER_SIZE)) == NULL)
 		{
-		fputs("bkrencode: cannot allocate memory\n", stderr);
+		fputs(PROGRAM_NAME ": cannot allocate memory\n", stderr);
 		exit(-1);
 		}
 
@@ -136,7 +137,7 @@ int main(int argc, char *argv[])
 			default:
 			fputs(
 	"Backer tape data encoder/unencoder.\n" \
-	"Usage: bkrencode [options...]\n" \
+	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
 	"	-v <p/n>  Set the video mode to PAL or NTSC\n" \
 	"	-d <h/l>  Set the data rate to high or low\n" \
@@ -156,12 +157,12 @@ int main(int argc, char *argv[])
 		{
 		if((tmp = open(devname, O_RDWR)) < 0)
 			{
-			perror("bkrencode");
+			perror(PROGRAM_NAME);
 			exit(-1);
 			}
 		if(ioctl(tmp, BKRIOCGETMODE, &config) < 0)
 			{
-			perror("bkrencode");
+			perror(PROGRAM_NAME);
 			exit(-1);
 			}
 		close(tmp);
@@ -170,12 +171,17 @@ int main(int argc, char *argv[])
 	config.mode &= ~BKR_FORMAT(-1);
 	config.mode |= BKR_FMT;
 
-	fputs("bkrencode: tape format selected:\n", stderr);
+	fputs(PROGRAM_NAME ": ", stderr);
+	if(device.direction == O_RDONLY)
+		fputs("DECODING", stderr);
+	else
+		fputs("ENCODING", stderr);
+	fputs(" tape format selected:\n", stderr);
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
 
 	if(bkr_set_parms(config.mode, DEFAULT_BUFFER_SIZE) < 0)
 		{
-		perror("bkrencode");
+		perror(PROGRAM_NAME);
 		exit(-1);
 		}
 
@@ -197,7 +203,7 @@ int main(int argc, char *argv[])
 			if(tmp < 0)
 				{
 				errno = -tmp;
-				perror("bkrencode");
+				perror(PROGRAM_NAME);
 				exit(-1);
 				}
 			fwrite(block.offset, 1, block.end - block.offset, stdout);
@@ -213,7 +219,7 @@ int main(int argc, char *argv[])
 			if(tmp < 0)
 				{
 				errno = -tmp;
-				perror("bkrencode");
+				perror(PROGRAM_NAME);
 				exit(-1);
 				}
 			}

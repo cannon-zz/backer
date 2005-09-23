@@ -100,55 +100,58 @@ static unsigned char  weight[] = WEIGHT_INITIALIZER;    /* anti-correlation weig
 
 int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 {
-	if(((BKR_DENSITY(mode) != BKR_HIGH) && (BKR_DENSITY(mode) != BKR_LOW)) ||
-	   ((BKR_VIDEOMODE(mode) != BKR_NTSC) && (BKR_VIDEOMODE(mode) != BKR_PAL)) ||
-	   ((BKR_FORMAT(mode) != BKR_FMT) && (BKR_FORMAT(mode) != BKR_RAW)))
-		return(-EINVAL);
+	unsigned int  header_offset, start_offset, aux_offset;
 
-	device.mode = mode;
+	device.control = 0;
 
-	switch(BKR_DENSITY(device.mode))
+	switch(BKR_DENSITY(mode))
 		{
 		case BKR_HIGH:
-		device.command = BIT_HIGH_DENSITY;
+		device.control |= BIT_HIGH_DENSITY;
 		device.bytes_per_line = BYTES_PER_LINE_HIGH;
 		break;
 
 		case BKR_LOW:
-		device.command = 0;
 		device.bytes_per_line = BYTES_PER_LINE_LOW;
 		break;
+
+		default:
+		goto bad_mode;
 		}
 
-	switch(BKR_VIDEOMODE(device.mode))
+	switch(BKR_VIDEOMODE(mode))
 		{
 		case BKR_NTSC:
-		device.command |= BIT_NTSC_VIDEO;
+		device.control |= BIT_NTSC_VIDEO;
 		sector.size = device.bytes_per_line * LINES_PER_FIELD_NTSC;
 		break;
 
 		case BKR_PAL:
 		sector.size = device.bytes_per_line * LINES_PER_FIELD_PAL;
 		break;
+
+		default:
+		goto bad_mode;
 		}
 
 	device.size = max_buffer - max_buffer % (sector.size * 2 + device.bytes_per_line);
 
-	sector.header_length = format[BKR_MODE_TO_FORMAT(device.mode)].header_length;
-	sector.aux_length = format[BKR_MODE_TO_FORMAT(device.mode)].aux_length;
-	sector.footer_length = format[BKR_MODE_TO_FORMAT(device.mode)].footer_length;
+	sector.header_length = format[BKR_MODE_TO_FORMAT(mode)].header_length;
+	sector.aux_length = format[BKR_MODE_TO_FORMAT(mode)].aux_length;
+	sector.footer_length = format[BKR_MODE_TO_FORMAT(mode)].footer_length;
 	sector.footer_offset = sector.size - sector.footer_length;
 
-	switch(BKR_FORMAT(device.mode))
+	switch(BKR_FORMAT(mode))
 		{
 		case BKR_FMT:
 		block.read = bkr_block_read_fmt;
 		block.write = bkr_block_write_fmt;
 		block.size = (sector.size - sector.header_length - sector.footer_length -
 		              sector.aux_length) / device.bytes_per_line / 2;
-		block.parity = format[BKR_MODE_TO_FORMAT(device.mode)].parity;
-		block.header = (header_t *) block.parity;
-		block.start = (unsigned char *) block.parity + sizeof(header_t);
+		block.parity = format[BKR_MODE_TO_FORMAT(mode)].parity;
+		header_offset = block.parity;
+		start_offset = block.parity + sizeof(header_t);
+		aux_offset = sector.header_length + block.size * device.bytes_per_line;
 		break;
 
 		case BKR_RAW:
@@ -156,9 +159,13 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 		block.write = bkr_block_write_raw;
 		block.size = sector.size;
 		block.parity = 0;
-		block.header = 0;
-		block.start = 0;
+		header_offset = 0;
+		start_offset = 0;
+		aux_offset = 0;
 		break;
+
+		default:
+		goto bad_mode;
 		}
 
 	free(sector.buffer);
@@ -168,15 +175,23 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 	if((sector.buffer == NULL) || (block.buffer == NULL))
 		return(-ENOMEM);
 
-	sector.aux = sector.buffer + sector.header_length + block.size * device.bytes_per_line;
+	sector.aux = sector.buffer + aux_offset;
 	sector.footer = sector.buffer + sector.footer_offset;
-
-	block.header = (header_t *) (block.buffer + (unsigned int) block.header);
-	block.start = block.buffer + (unsigned int) block.start;
+	block.header = (header_t *) (block.buffer + header_offset);
+	block.start = block.buffer + start_offset;
 
 	reed_solomon_init(block.size, block.size - block.parity, &block.rs_format);
 
+	device.mode = mode;
 	return(0);
+
+	/*
+	 * The specified mode does not exist --- use default mode.
+	 */
+
+	bad_mode:
+	bkr_set_parms(DEFAULT_MODE, max_buffer);
+	return(-EINVAL);
 }
 
 
@@ -318,9 +333,7 @@ int bkr_write_eor(jiffies_t bailout)
 			return(result);
 		}
 
-	result = bkr_device_flush(bailout);
-
-	return(result);
+	return(0);
 }
 
 /*
@@ -477,14 +490,36 @@ static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 static void bkr_block_randomize(__u32 num)
 {
 	unsigned int  i, last;
+	/*
+	 * ADDME
+	unsigned int  index;
+	unsigned int  history[4];
+	 */
 
 	if(BLOCK_TYPE(*block.header) != DATA_BLOCK)
 		return;
 
+	last = block.parity + sizeof(header_t);
 	if(KEY_BLOCK(*block.header))
-		last = (block.parity + sizeof(header_t) + KEY_LENGTH) >> 1;
-	else
-		last = (block.parity + sizeof(header_t)) >> 1;
+		last += KEY_LENGTH;
+	last >>= 1;
+
+	/*
+	 * ADDME (replaces the other for loop below)
+	for(i = 0; i < 4; i++)
+		{
+		num = 1664525 * num + 1013904223;
+		history[i] = num >> 16;
+		}
+
+	for(i = (block.size+1) >> 1; i > last; )
+		{
+		num = 1664525 * num + 1013904223;
+		index = num >> 30;
+		*(((__u16 *) block.buffer) + --i) ^= history[index];
+		history[index] = num >> 16;
+		}
+	 */
 
 	for(i = (block.size+1) >> 1; i > last; )
 		{
@@ -531,12 +566,11 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 	int  result;
 	unsigned int  count;
 
+	block.offset = block.buffer;
+
 	result = bkr_device_write(block.size, f_flags, bailout);
 	if(result < 0)
-		{
-		block.offset = block.buffer;
 		return(result);
-		}
 
 	if(device.head + block.size >= device.size)
 		{
@@ -548,7 +582,6 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 	else
 		memcpy(device.buffer + device.head, block.buffer, block.size);
 	device.head += block.size;
-	block.offset = block.buffer;
 
 	return(0);
 }

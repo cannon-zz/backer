@@ -103,139 +103,107 @@ int main(int argc, char *argv[])
 	gtk_signal_connect(GTK_OBJECT(window), "destroy", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 	gtk_signal_connect(GTK_OBJECT(window), "delete_event", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 
-	gtk_timeout_add(update_interval, update_status, NULL);
-
 	vbox = gtk_vbox_new(FALSE, 10);
-	gtk_widget_show(vbox);
 	gtk_container_add(GTK_CONTAINER(window), vbox);
 
 	/* Mode indicators */
 
 	table = gtk_table_new(2, 3, TRUE);
-	gtk_widget_show(table);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
 	widgets.ntsc = gtk_radio_button_new_with_label(NULL, "NTSC");
-	gtk_widget_show(widgets.ntsc);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ntsc, 0, 1, 0, 1);
 	widgets.pal = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.ntsc)), "PAL");
-	gtk_widget_show(widgets.pal);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.pal, 0, 1, 1, 2);
 
 	widgets.high = gtk_radio_button_new_with_label(NULL, "High");
-	gtk_widget_show(widgets.high);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.high, 1, 2, 0, 1);
 	widgets.low = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.high)), "Low");
-	gtk_widget_show(widgets.low);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.low, 1, 2, 1, 2);
 
 	widgets.sp = gtk_radio_button_new_with_label(NULL, "SP/LP");
-	gtk_widget_show(widgets.sp);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sp, 2, 3, 0, 1);
 	widgets.ep = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widgets.sp)), "EP");
-	gtk_widget_show(widgets.ep);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.ep, 2, 3, 1, 2);
 
 	/* Error counts */
 
 	table = gtk_table_new(5, 2, FALSE);
-	gtk_widget_show(table);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
 	widget = gtk_label_new("Most Symbol Errors");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
 	widget = gtk_label_new("Uncorrectable Blocks");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 	widget = gtk_label_new("Framing Errors");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 2, 3);
 	widget = gtk_label_new("Over-run Errors");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
 	widget = gtk_label_new("Underflow Warnings");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 4, 5);
 
 	widgets.symbol = gtk_label_new("0");
-	gtk_widget_show(widgets.symbol);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 0, 1);
 
 	widgets.block = gtk_label_new("0");
-	gtk_widget_show(widgets.block);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.block, 1, 2, 1, 2);
 
 	widgets.sector = gtk_label_new("0");
-	gtk_widget_show(widgets.sector);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sector, 1, 2, 2, 3);
 
 	widgets.overrun = gtk_label_new("0");
-	gtk_widget_show(widgets.overrun);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 3, 4);
 
 	widgets.underflow = gtk_label_new("0");
-	gtk_widget_show(widgets.underflow);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 4, 5);
 
 	/* Debuging information */
 
 	table = gtk_table_new(4, 2, FALSE);
-	gtk_widget_show(table);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
 	widget = gtk_label_new("Worst Key");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
 	widget = gtk_label_new("Closest Non-Key");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 	widget = gtk_label_new("Least Skipped");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 2, 3);
 	widget = gtk_label_new("Most Skipped");
-	gtk_widget_show(widget);
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
 
 	widgets.worst = gtk_label_new("0");
-	gtk_widget_show(widgets.worst);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.worst, 1, 2, 0, 1);
 
 	widgets.best = gtk_label_new("0");
-	gtk_widget_show(widgets.best);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.best, 1, 2, 1, 2);
 
 	widgets.least = gtk_label_new("0");
-	gtk_widget_show(widgets.least);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.least, 1, 2, 2, 3);
 
 	widgets.most = gtk_label_new("0");
-	gtk_widget_show(widgets.most);
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.most, 1, 2, 3, 4);
 
 	/* DMA Buffer status */
 
 	hbox = gtk_hbox_new(FALSE, 0);
-	gtk_widget_show(hbox);
 	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
 	widget = gtk_label_new("DMA Buffer");
-	gtk_widget_show(widget);
 	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 10);
 
 	widgets.buffer_status = gtk_progress_bar_new();
-	gtk_widget_show(widgets.buffer_status);
 	gtk_progress_configure(GTK_PROGRESS(widgets.buffer_status), 0, 0, format.buffer_size);
 	gtk_box_pack_start(GTK_BOX(hbox), widgets.buffer_status, TRUE, TRUE, 0);
 
 	/* Close button */
 
 	widget = gtk_button_new_with_label("Close");
-	gtk_widget_show(widget);
 	gtk_box_pack_start(GTK_BOX(vbox), widget, TRUE, TRUE, 0);
 	gtk_signal_connect(GTK_OBJECT(widget), "clicked", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 
-	gtk_widget_show(window);
+	gtk_widget_show_all(window);
+
+	gtk_timeout_add(update_interval, update_status, NULL);
 
 	/*
 	 * Start

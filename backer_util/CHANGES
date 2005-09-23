@@ -1,3 +1,6 @@
+0.9 (2000/11/16)
+	Cleaned up some code in bkrmonitor and bkrencode.
+
 0.8 (2000/11/06)
 	Fixed error message strings in bkrencode and bkrtest.
 
@@ -7,8 +10,8 @@
 	Added underflow field to error structure.  This indicates the
 	number of underflows detected in the data stream.  These are most
 	likely present due to buffer underflows occuring when the data was
-	recorded but might also indicate an overflow condition if must time
-	as elapsed since the last read.
+	recorded but might also indicate an overflow condition if much time
+	has elapsed since the last read.
 
 0.7 (2000/11/03)
 	Minor modifications to the I/O code in bkrencode to work with new

@@ -56,12 +56,12 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.8"
+#define  BKR_VERSION           "0.9"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
 #define  DEFAULT_DMA_CHANNEL   3            /* adjust this for your system */
-#define  DEFAULT_BUFFER_SIZE   65000        /* bytes */
+#define  DEFAULT_BUFFER_SIZE   65500        /* bytes */
 #define  DEFAULT_TIMEOUT       10           /* seconds */
 #define  DEFAULT_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BKR_MAX_TIMEOUT       120          /* seconds */
@@ -72,7 +72,7 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
 
 #define  MIN_UPDATE_FREQ       3            /* minimum rate for DMA status updates in Hz */
 #define  MAX_UPDATE_FREQ       50           /* maximum rate for DMA status updates in Hz */
-#define  MIN_SYNC_FREQ         10           /* minimum sync frequency in Hz if video OK */
+#define  MIN_SYNC_FREQ         50           /* minimum sync frequency in Hz if video OK */
 
 struct bkrerrors                            /* Error counts */
 	{
@@ -156,7 +156,10 @@ struct bkrconfig                            /* Config structure (read/write) */
  *
  * UPCOMING TAPE FORMAT CHANGES
  * -reduce the number of parity symbols (12 & 16 rather than 16 & 20)
- * -move sector key to better location
+ * -new data randomizer
+ * -make sector layer responsible or the sector key
+ * -possible ellimination of auxiliary region
+ * -if aux region is elliminated then block interleave will change
  */
 
 #define  TAPE_FORMAT           0            /* tape format version (not yet used!) */

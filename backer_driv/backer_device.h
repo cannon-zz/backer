@@ -55,7 +55,7 @@ struct
 	unsigned int  mode;             /* as in bkrconfig */
 	unsigned int  owner;            /* owner's user id */
 	unsigned int  direction;        /* current transfer direction */
-	unsigned char command;          /* command byte for card */
+	unsigned char control;          /* control byte for card */
 	} device;
 
 #endif /* BACKER_DEVICE_H */

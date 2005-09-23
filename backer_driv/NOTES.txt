@@ -207,6 +207,15 @@ case, software using the card must take measures to ensure long runs of 0's
 don't occur otherwise they will be skipped over during playback and corrupt
 the data stream.
 
+(iii)  I have had trouble with the card sometimes skipping one line's worth
+of data at the start of a transfer.  This causes the video signal to shift
+by one line so that what would normally be transfered as, say, the 50th
+line of the video field gets transfered as the 49th line.  After much
+experimenting I still don't know where the problem is coming from.  It
+seems as though it is caused by the way I change data rates (and presumably
+video modes) since I seem to only have the problem in the first or second
+transfers after a data rate change.
+
 
 Windows Format Notes:
 ---------------------

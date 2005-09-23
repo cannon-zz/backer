@@ -1,10 +1,21 @@
-1.1 (in progress --- not released)
-	*** THIS VERSION INCLUDES A TAPE FORMAT CHANGE ***
-	New random number generator.
-	Fewer parity symbols in each data block.
+1.0 (2001/1/13)
+	More performance and foot print improvements to the Reed-Solomon
+	code.
 
-	If needed, BKRIOCGETSTATUS will now update the DMA offset before
-	computing the number of bytes in the buffer.
+	Disabled EP mode until I either get it working or drop it
+	altogether.
+
+	Finally got MONITOR.EXE (one of the utilities shipped with a
+	Backer) to run under dosemu (sort of).  This allowed me to trace
+	I/O port activity and see how Danmere controls the card.  I believe
+	I now have the correct sequence in which bits are to be set to
+	configure the card for a transfer.  Preliminary tests look good as
+	I have not been able to produce any of the inconvenient behaviour
+	the card had been showing in the past.
+
+	One or two last minute code clean-ups.
+
+	Gave the documentation a going-over.
 
 0.12(beta) (2000/12/11)
 	Fixed a bug in the low level write code:  in the event of an error,

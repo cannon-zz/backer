@@ -210,6 +210,7 @@ struct
 	unsigned char  *aux;            /* see diagram above */
 	unsigned char  *footer;         /* see diagram above */
 	unsigned char  *block;          /* pointer to current block */
+	unsigned int  interleave;       /* block interleave */
 	unsigned int  size;             /* sector size in bytes */
 	unsigned int  header_length;    /* see diagram above */
 	unsigned int  footer_offset;    /* sector.footer - sector.buffer */

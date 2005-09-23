@@ -125,13 +125,13 @@ int init_module(void)
 	 */
 
 	if(ioport == 0)
-		ioport = DEFAULT_IOPORT;
+		ioport = BKR_DEF_IOPORT;
 	if(dma == 0)
-		dma = DEFAULT_DMA_CHANNEL;
+		dma = BKR_DEF_DMA_CHANNEL;
 	if(buffer == 0)
-		buffer = DEFAULT_BUFFER_SIZE;
+		buffer = BKR_DEF_BUFFER_SIZE;
 	if(timeout > BKR_MAX_TIMEOUT)
-		timeout = DEFAULT_TIMEOUT;
+		timeout = BKR_DEF_TIMEOUT;
 	timeout *= HZ;
 
 	if((device.buffer = (unsigned char *) kmalloc(buffer, GFP_KERNEL | GFP_DMA)) == NULL)
@@ -147,7 +147,7 @@ int init_module(void)
 		goto ioport_busy;
 		}
 	request_region(ioport, 1, BKR_NAME);
-	if((result = bkr_set_parms(DEFAULT_MODE, buffer)) < 0)
+	if((result = bkr_set_parms(BKR_DEF_MODE, buffer)) < 0)
 		{
 		printk(KERN_ERR BKR_NAME ":   can't allocate memory");
 		goto no_bufmem;
@@ -260,7 +260,7 @@ int open(struct inode *inode, struct file *filp)
 			goto cant_write_bor;
 		}
 
-	filp->private_data = 0;	/* FIXME: find a better way */
+	filp->private_data = 0;
 	return(0);
 
 	cant_write_bor:
@@ -397,7 +397,7 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 				update_dma_offset(&device.head);
 				break;
 
-				case O_RDWR:
+				default:
 				}
 		 */
 		arg.bkrstatus.bytes = bytes_in_buffer();
@@ -421,6 +421,11 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		memcpy_fromfs(&arg.bkrconfig, (void *) argument, sizeof(struct bkrconfig));
 		if(arg.bkrconfig.timeout > BKR_MAX_TIMEOUT)
 			return(-EINVAL);
+		if(BKR_SPEED(arg.bkrconfig.mode) == BKR_EP)
+			{
+			/* FIXME: either get EP working or drop it as a "feature" */
+			return(-EINVAL);
+			}
 		timeout = arg.bkrconfig.timeout*HZ;
 		return(bkr_set_parms(arg.bkrconfig.mode, buffer));
 
@@ -463,7 +468,7 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 
 	if((filp->f_flags & O_ACCMODE) != O_RDONLY)
 		return(-EPERM);
-	if(filp->private_data != 0)	/* FIXME */
+	if(filp->private_data != 0)
 		{
 		result = (int) filp->private_data;
 		filp->private_data = 0;
@@ -486,9 +491,12 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 			result = block.read(filp->f_flags, bailout);
 			if(result <= 0)
 				{
-				if(moved)	/* FIXME */
+				if(moved)
+					{
 					filp->private_data = (void *) result;
-				return(moved ? moved : result);
+					return(moved);
+					}
+				return(result);
 				}
 			}
 		}
@@ -503,7 +511,7 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 
 	if((filp->f_flags & O_ACCMODE) != O_WRONLY)
 		return(-EPERM);
-	if(filp->private_data != 0)	/* FIXME */
+	if(filp->private_data != 0)
 		{
 		result = (int) filp->private_data;
 		filp->private_data = 0;
@@ -526,9 +534,12 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 			result = block.write(filp->f_flags, bailout);
 			if(result < 0)
 				{
-				if(moved)	/* FIXME */
+				if(moved)
+					{
 					filp->private_data = (void *) result;
-				return(moved ? moved : result);
+					return(moved);
+					}
+				return(result);
 				}
 			}
 		}
@@ -728,23 +739,25 @@ static void bkr_device_reset(void)
 
 static int start_transfer(void)
 {
+	jiffies_t  bailout;
+
 	memset(device.buffer, 0, buffer);
 
+	enable_dma(dma);
+
+	device.control |= BIT_DMA_REQUEST;
 	outb(device.control, ioport);
 
 	device.control |= (device.direction == O_WRONLY) ? BIT_TRANSMIT : BIT_RECEIVE;
 	outb(device.control, ioport);
 
-	outb(device.control | BIT_DMA_REQUEST, ioport);
-
-	if(device.direction == O_WRONLY)
-		if(get_dreq_status(dma) == 0)
+	bailout = jiffies + HZ/MIN_SYNC_FREQ;
+	while(get_dreq_status(dma) == 0)
+		if(jiffies >= bailout)
 			{
 			stop_transfer();
 			return(-ENXIO);
 			}
-
-	enable_dma(dma);
 
 	device.last_update = jiffies;
 
@@ -757,19 +770,16 @@ static int start_transfer(void)
  *
  * Stop the tape <---> memory transfer.  The DMA controller is left fully
  * configured so if someone else's code accidentally initiates a transfer
- * it will occur in a safe region of memory (i.e. our buffer) but the
- * buffer is cleared.
+ * it will occur in a safe region of memory (i.e. our buffer).
  */
 
 static void stop_transfer(void)
 {
-	outb(device.control, ioport);
+	outb(0, ioport);
 
 	disable_dma(dma);
 
 	device.control &= ~(BIT_TRANSMIT | BIT_RECEIVE);
-	outb(device.control, ioport);
-
 	device.direction = O_RDWR;
 
 	memset(device.buffer, 0, buffer);

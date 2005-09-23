@@ -29,7 +29,7 @@
  * Lin, Shu, and Daniel Costello Jr., Error Control Coding: Fundamentals
  * 	and Applications, 1983, Prentice-Hall Inc.
  *
- * Consultative Committe for Space Data Systems, Telemtry Channel Coding
+ * Consultative Committe for Space Data Systems, Telemetry Channel Coding
  *	(CCSDS 101.0-B-4), May 1999.
  */
 
@@ -48,7 +48,7 @@
 
 
 /*
- * Compute x % NN, where NN is 2^MM-1, without a slow divide.
+ * Compute x % NN, where NN is 2^MM-1, without a divide.
  */
 
 static inline gf modNN(int x)
@@ -61,7 +61,12 @@ static inline gf modNN(int x)
 	return(x);
 }
 
-#define	min(a,b)  ((a) < (b) ? (a) : (b))
+static inline int min(int a, int b)
+{
+	if(a <= b)
+		return(a);
+	return(b);
+}
 
 
 /*
@@ -86,7 +91,7 @@ static void gen_ldec(void)
  * generate_GF()
  *
  * Constructs look-up tables for performing arithmetic over the Galois
- * Field GF(2^MM) from the irreducible polynomial p(x) stored in p.
+ * field GF(2^MM) from the irreducible polynomial p(x) stored in p.
  *
  * This function constructs the look-up tables called Log_alpha[] and
  * Alpha_exp[] from p.  Since 0 cannot be represented as a power of alpha,
@@ -112,7 +117,7 @@ static void gen_ldec(void)
  * sizes from 2 to 16 bits can be found in reed_solomon_init() below.
  */
 
-static gf  Alpha_exp[NN + 1];   /* exponent->polynomial conversion table */
+static gf  Alpha_exp[2*NN];     /* exponent->polynomial conversion table */
 static gf  Log_alpha[NN + 1];   /* polynomial->exponent conversion table */
 #define    INFINITY  (NN)       /* representation of 0 in exponent form */
 
@@ -134,9 +139,13 @@ static void generate_GF(int p)
 
 	for(i = 0; i < NN; i++)
 		Log_alpha[Alpha_exp[i]] = i;
-
-	Alpha_exp[INFINITY] = 0;
 	Log_alpha[0] = INFINITY;
+
+	/*
+	 * Duplicate Alpha_exp[] to reduce the use of modNN()
+	 */
+
+	memcpy(&Alpha_exp[NN], Alpha_exp, NN * sizeof(gf));
 }
 
 
@@ -237,11 +246,11 @@ void reed_solomon_encode(data_t *block, struct rs_format_t *rs_format)
 			b--;
 			for(g = &rs_format->g[rs_format->parity - 1]; b >= block; g--, b--)
 				if(*g != INFINITY)
-					*b ^= Alpha_exp[modNN(feedback + *g)];
+					*b ^= Alpha_exp[feedback + *g];
 			for(b = &block[rs_format->parity - 1]; g > rs_format->g; b--, g--)
 				if(*g != INFINITY)
-					*b ^= Alpha_exp[modNN(feedback + *g)];
-			*b = Alpha_exp[modNN(feedback + *g)];
+					*b ^= Alpha_exp[feedback + *g];
+			*b = Alpha_exp[feedback + *g];
 			}
 		else
 			*b = 0;
@@ -330,9 +339,9 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		for(i = 1; i < no_eras; i++)
 			{
 			tmp = modNN(LOG_BETA*erasure[i]);
-			for(x = &lambda[i+1]; x > lambda; x--)
-				if(*(x-1) != 0)
-					*x ^= Alpha_exp[modNN(tmp + Log_alpha[*(x-1)])];
+			for(y = &lambda[i+1]; y > lambda; y--)
+				if(*(y-1) != 0)
+					*y ^= Alpha_exp[tmp + Log_alpha[*(y-1)]];
 			}
 		}
 	deg_lambda = no_eras;
@@ -354,7 +363,7 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		discr = 0;
 		for(i = deg_lambda; i >= 0; i--)
 			if((lambda[i] != 0) && (s[j - i] != INFINITY))
-				discr ^= Alpha_exp[modNN(Log_alpha[lambda[i]] + s[j - i])];
+				discr ^= Alpha_exp[Log_alpha[lambda[i]] + s[j - i]];
 
 		discr = Log_alpha[discr];
 
@@ -370,7 +379,7 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 		for(i = rs_format->parity; i >= 1; i--)
 			{
 			if(b[i-1] != INFINITY)
-				temp[i] = lambda[i] ^ Alpha_exp[modNN(discr + b[i-1])];
+				temp[i] = lambda[i] ^ Alpha_exp[discr + b[i-1]];
 			else
 				temp[i] = lambda[i];
 			}
@@ -455,24 +464,20 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 	 * (modulo x^(n-k)) in alpha rep.  Also find deg(omega).
 	 */
 
-	for(i = deg_omega = rs_format->parity - 1; i >= deg_lambda; i--)
+	memset(omega, 0, rs_format->parity * sizeof(gf));
+	for(i = deg_lambda; i >= 0; i--)
 		{
-		omega[i] = 0;
-		for(j = deg_lambda; j >= 0; j--)
-			if((lambda[j] != INFINITY) && (s[i-j] != INFINITY))
-				omega[i] ^= Alpha_exp[modNN(lambda[j] + s[i-j])];
-		omega[i] = Log_alpha[omega[i]];
+		if(lambda[i] == INFINITY)
+			continue;
+		for(k = rs_format->parity - 1, y = &s[k - i]; y >= s; k--, y--)
+			if(*y != INFINITY)
+				omega[k] ^= Alpha_exp[lambda[i] + *y];
 		}
-	for(; i >= 0; i--)
-		{
-		omega[i] = 0;
-		for(j = i; j >= 0; j--)
-			if((lambda[j] != INFINITY) && (s[i-j] != INFINITY))
-				omega[i] ^= Alpha_exp[modNN(lambda[j] + s[i-j])];
-		omega[i] = Log_alpha[omega[i]];
-		}
-	while(omega[deg_omega] == INFINITY)
-		deg_omega--;
+	for(x = &omega[rs_format->parity - 1]; (x >= omega) && (*x == 0); x--)
+		*x = INFINITY;
+	for(deg_omega = x - omega; x >= omega; x--)
+		*x = Log_alpha[*x];
+
   
 	/*
 	 * Forney algorithm for computing error magnitudes.  If X_l^-1 is
@@ -503,15 +508,19 @@ int reed_solomon_decode(data_t *block, gf *erasure, int no_eras, struct rs_forma
 			return(-1);
     
 		num = 0;
-		for(x = &omega[deg_omega], tmp = deg_omega * *y; x >= omega; tmp -= *y, x--)
-			if(*x != INFINITY)
-				num ^= Alpha_exp[modNN(*x + tmp)];
+		for(i = tmp = 0; i <= deg_omega; i++)
+			{
+			if(omega[i] != INFINITY)
+				num ^= Alpha_exp[omega[i] + tmp];
+			if((tmp += *y) >= NN)
+				tmp -= NN;
+			}
 		if(num == 0)
 			continue;
-		num = Log_alpha[num] + (J0-1) * *y;
+		num = modNN(Log_alpha[num] + (J0-1) * *y);
 
 		/* Apply error to block */
-		block[loc[y - root]] ^= Alpha_exp[modNN(num + NN - Log_alpha[den])];
+		block[loc[y - root]] ^= Alpha_exp[num + NN - Log_alpha[den]];
 		}
 
 	if(erasure != NULL)

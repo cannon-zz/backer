@@ -86,7 +86,7 @@ static inline int BLOCKS_PER_SECOND(void)
 
 static inline int SECTOR_KEY_OFFSET(void)
 {
-	return(sector.header_length + (block.parity + sizeof(header_t)) * device.bytes_per_line);
+	return(sector.header_length + (block.parity + sizeof(header_t)) * sector.interleave);
 }
 
 static inline int CORR_THRESHOLD(int key_length)
@@ -153,6 +153,7 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 
 	device.size = max_buffer - max_buffer % (sector.size * 2 + device.bytes_per_line);
 
+	sector.interleave = device.bytes_per_line;
 	sector.header_length = format[BKR_MODE_TO_FORMAT(mode)].header_length;
 	sector.aux_length = format[BKR_MODE_TO_FORMAT(mode)].aux_length;
 	sector.footer_length = format[BKR_MODE_TO_FORMAT(mode)].footer_length;
@@ -164,11 +165,11 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 		block.read = bkr_block_read_fmt;
 		block.write = bkr_block_write_fmt;
 		block.size = (sector.size - sector.header_length - sector.footer_length -
-		              sector.aux_length) / device.bytes_per_line / 2;
+		              sector.aux_length) / sector.interleave / 2;
 		block.parity = format[BKR_MODE_TO_FORMAT(mode)].parity;
 		header_offset = block.parity;
 		start_offset = block.parity + sizeof(header_t);
-		aux_offset = sector.header_length + block.size * device.bytes_per_line;
+		aux_offset = sector.header_length + block.size * sector.interleave;
 		break;
 
 		case BKR_RAW:
@@ -207,7 +208,7 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 	 */
 
 	bad_mode:
-	bkr_set_parms(DEFAULT_MODE, max_buffer);
+	bkr_set_parms(BKR_DEF_MODE, max_buffer);
 	return(-EINVAL);
 }
 
@@ -356,9 +357,8 @@ int bkr_write_eor(jiffies_t bailout)
  * Read and decode one block of formated data.  If a BOR block is found
  * then the block sequence counter is reset and the block skipped.  If a
  * non-BOR block is found but it is out of sequence then it too is skipped.
- * Otherwise the block capacity is set appropriately and the block type
- * returned to the calling function.  Returns < 0 on error 1 on success and
- * 0 on EOR.
+ * Otherwise the block capacity is set appropriately.  Returns < 0 on
+ * error, 1 on success and 0 on EOR.
  */
 
 static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
@@ -500,8 +500,7 @@ static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 static void bkr_block_randomize(__u32 num)
 {
 	unsigned int  i, last;
-	/*
-	 * ADDME
+	/* Add me
 	unsigned int  index;
 	unsigned int  history[4];
 	 */
@@ -526,7 +525,7 @@ static void bkr_block_randomize(__u32 num)
 		{
 		num = 1664525 * num + 1013904223;
 		index = num >> 30;
-		*(((__u16 *) block.buffer) + --i) ^= history[index];
+		((__u16 *) block.buffer)[--i] ^= history[index];
 		history[index] = num >> 16;
 		}
 	 */
@@ -534,7 +533,7 @@ static void bkr_block_randomize(__u32 num)
 	for(i = (block.size+1) >> 1; i > last; )
 		{
 		num = 1664525 * num + 1013904223;
-		*(((__u16 *) block.buffer) + --i) ^= num >> 16;
+		((__u16 *) block.buffer)[--i] ^= num >> 16;
 		}
 }
 
@@ -663,7 +662,7 @@ static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 
 	location = --sector.block;
 	for(count = block.size; count; )
-		block.buffer[--count] = *(location -= device.bytes_per_line);
+		block.buffer[--count] = *(location -= sector.interleave);
 
 	return(0);
 }
@@ -708,7 +707,7 @@ static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
 
 	location = --sector.block;
 	for(count = block.size; count; )
-		*(location -= device.bytes_per_line) = block.buffer[--count];
+		*(location -= sector.interleave) = block.buffer[--count];
 
 	if(sector.block == sector.aux + 1)
 		return(KEY_BLOCK(-1));
@@ -755,22 +754,22 @@ static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 			if(anti_corr < best_nonmatch)
 				best_nonmatch = anti_corr;
 
-		result = bkr_device_read(KEY_LENGTH*device.bytes_per_line, f_flags, bailout);
+		result = bkr_device_read(KEY_LENGTH*sector.interleave, f_flags, bailout);
 		if(result < 0)
 			break;
 
 		anti_corr = 0;
 		j = KEY_LENGTH;
-		i = device.tail + KEY_LENGTH*device.bytes_per_line;
+		i = device.tail + KEY_LENGTH*sector.interleave;
 		if(i >= device.size)
 			{
 			i -= device.size;
-			while(i >= device.bytes_per_line)
-				anti_corr += weight[device.buffer[i -= device.bytes_per_line] ^ key[--j]];
+			while(i >= sector.interleave)
+				anti_corr += weight[device.buffer[i -= sector.interleave] ^ key[--j]];
 			i += device.size;
 			}
 		while(j)
-			anti_corr += weight[device.buffer[i -= device.bytes_per_line] ^ key[--j]];
+			anti_corr += weight[device.buffer[i -= sector.interleave] ^ key[--j]];
 		}
 	while(anti_corr > CORR_THRESHOLD(KEY_LENGTH));
 

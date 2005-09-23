@@ -22,19 +22,37 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/timeb.h>
+#include <sys/time.h>
 
 #include "backer.h"
 #include "bkr_aux_puts.h"
 
 #define  PROGRAM_NAME     "bkrlog"
 #define  LABEL_SIZE       6     /* characters */
-#define  UPDATE_INTERVAL  250   /* milliseconds */
+#define  UPDATE_INTERVAL  100   /* milliseconds */
+
+/*
+ * Function prototypes
+ */
+
+void commit_aux_data(int);
+
+
+/*
+ * Global Data
+ */
+
+struct bkrformat  format;       /* tape format */
+int  tapefile;                  /* file handle for backer device */
+int  need_update;               /* flag for output "thread" */
+char  *aux = NULL;              /* data for aux buffer */
+char  *auxtext = NULL;          /* text for aux buffer */
 
 
 /*
@@ -43,23 +61,18 @@
 
 int main(int argc, char *argv[])
 {
-	struct bkrformat  format;       /* tape format */
-	int  tapefile;                  /* file handle for backer device */
+	struct itimerval update_interval = {{0, UPDATE_INTERVAL*1000}, {0, UPDATE_INTERVAL*1000}};
 	unsigned long  entry = 0;       /* entry number in log file */
 	int  insize = 128;              /* size of input buffer */
 	int  opt;                       /* for command line processing */
 	char  *device = "/dev/backer";  /* device name */
 	char  label[LABEL_SIZE+1];      /* archive label */
 	char  *intext = NULL;           /* log file input buffer */
-	char  *aux = NULL;              /* data for aux buffer */
-	char  auxtext[17];              /* text for aux buffer */
-	struct timeb last_time, this_time;
 
 	/*
 	 * Process command line options
 	 */
 
-	memset(auxtext, 0, 17);
 	while((opt = getopt(argc, argv, "f:t:h")) != EOF)
 		switch(opt)
 			{
@@ -68,7 +81,7 @@ int main(int argc, char *argv[])
 			break;
 
 			case 't':
-			strncpy(auxtext, optarg, 16);
+			auxtext = optarg;
 			break;
 
 			case 'h':
@@ -108,27 +121,35 @@ int main(int argc, char *argv[])
 		}
 
 	/*
-	 * If being used for one-shot message, print it and quit
+	 * If we are just writing a one-shot message, send it and quit.
 	 */
 
-	if(auxtext[0] != 0)
+	if(auxtext != NULL)
 		{
 		bkr_aux_puts(auxtext, aux, &format);
 		ioctl(tapefile, BKRIOCSETAUX, aux);
 		close(tapefile);
 		exit(0);
 		}
+	auxtext = (char *) calloc(17, sizeof(char));
+
+	/*
+	 * Set up the output "thread".
+	 */
+
+	need_update = 0;
+	signal(SIGALRM, commit_aux_data);
+	setitimer(ITIMER_REAL, &update_interval, NULL);
 
 	/*
 	 * Process output of tar line by line
 	 */
 
-	fgets(label, LABEL_SIZE, stdin);
+	fscanf(stdin, "%s\n", intext);
+	memcpy(label, intext, LABEL_SIZE+1);
 	label[LABEL_SIZE] = 0;
 
 	fprintf(stdout, "Log file for archive volume label: %s\n", label);
-
-	ftime(&last_time);
 
 	while(1)
 		{
@@ -176,16 +197,26 @@ int main(int argc, char *argv[])
 				entry = 0;
 			break;
 			}
-		ftime(&this_time);
-		if(1000*(this_time.time - last_time.time) +
-		        (short) (this_time.millitm - last_time.millitm) >= UPDATE_INTERVAL)
-			{
-			bkr_aux_puts(auxtext, aux, &format);
-			ioctl(tapefile, BKRIOCSETAUX, aux);
-			last_time = this_time;
-			}
+		need_update = 1;
 		}
 
 	close(tapefile);
 	exit(0);
+}
+
+
+/*
+ * commit_aux_data()
+ *
+ * Periodically commits auxtext to the auxiliary data region
+ */
+
+void commit_aux_data(int signal)
+{
+	if(need_update)
+		{
+		bkr_aux_puts(auxtext, aux, &format);
+		ioctl(tapefile, BKRIOCSETAUX, aux);
+		need_update = 0;
+		}
 }

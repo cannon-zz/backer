@@ -1,3 +1,12 @@
+1.0 (2001/1/13)
+	Changed the 'N' glyph in bkrfont.xpm.
+
+	Got bkr_aux_puts() to generate Backer-friendly data.  This gets
+	bkrlog working finally.
+
+	Re-worked bkrlog:  new output scheduler mechanism and cleaner
+	handling of tar archive label.
+
 0.12 (2000/12/11)
 	The mode indicators in bkrmonitor now indicate the mode and are
 	disabled in order to discourage people from trying to click them.

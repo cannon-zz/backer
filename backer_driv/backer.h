@@ -56,14 +56,14 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.12(beta)"
+#define  BKR_VERSION           "1.0"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
-#define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
-#define  DEFAULT_DMA_CHANNEL   3            /* adjust this for your system */
-#define  DEFAULT_BUFFER_SIZE   65500        /* bytes */
-#define  DEFAULT_TIMEOUT       10           /* seconds */
-#define  DEFAULT_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
+#define  BKR_DEF_IOPORT        0x300        /* adjust this for your system */
+#define  BKR_DEF_DMA_CHANNEL   3            /* adjust this for your system */
+#define  BKR_DEF_BUFFER_SIZE   65500        /* bytes */
+#define  BKR_DEF_TIMEOUT       10           /* seconds */
+#define  BKR_DEF_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
 #define  BKR_MAX_TIMEOUT       120          /* seconds */
 
 #define  DMA_IO_TO_MEM         0x14         /* demand transfer, inc addr, auto-init */
@@ -144,9 +144,13 @@ struct bkrconfig                            /* Config structure (read/write) */
 #define  BKR_EP                0x0080           /* VCR is in EP mode */
 
 /* convert mode to an index for the tape format array (see BKR_FORMATS) */
-#define  BKR_MODE_TO_FORMAT(x) ((BKR_DENSITY(x)==BKR_HIGH)<<2  | \
-                                (BKR_VIDEOMODE(x)==BKR_PAL)<<1 | \
-                                (BKR_SPEED(x)==BKR_EP))
+static inline unsigned int BKR_MODE_TO_FORMAT(unsigned int mode)
+{
+	return((BKR_DENSITY(mode)==BKR_HIGH)<<2  | \
+	       (BKR_VIDEOMODE(mode)==BKR_PAL)<<1 | \
+	       (BKR_SPEED(mode)==BKR_EP));
+}
+
 
 /*
  * General Formating
@@ -156,7 +160,8 @@ struct bkrconfig                            /* Config structure (read/write) */
  * UPCOMING TAPE FORMAT CHANGES
  * -reduce the number of parity symbols (12 & 16 rather than 16 & 20)
  * -new data randomizer
- * -make sector layer responsible or the sector key
+ * -make sector layer responsible for the sector key
+ * -reduction in size of auxiliary region
  * -possible ellimination of auxiliary region
  * -if aux region is elliminated then block interleave will change
  */
@@ -168,12 +173,12 @@ struct bkrconfig                            /* Config structure (read/write) */
 #define  EOR_LENGTH            1            /* seconds */
 
 struct bkr_format
-	{
-	unsigned int  header_length;
-	unsigned int  aux_length;
-	unsigned int  footer_length;
-	unsigned int  parity;
-	};
+        {
+        unsigned int  header_length;
+        unsigned int  aux_length;
+        unsigned int  footer_length;
+        unsigned int  parity;
+        };
                      /* head aux foot prty */
 #define  BKR_FORMATS  {{ 32,  56, 28, 16 },       /* LOW  NTSC SP */   \
                        { 32,  56, 28, 20 },       /* LOW  NTSC EP */   \
@@ -197,29 +202,30 @@ struct bkr_format
 #define  DATA_BLOCK            0x8000             /* is a data block */
 
 
+
 /*
  * Parameter checks.
  */
 
-#if DEFAULT_BUFFER_SIZE >= 65536
-#error "DEFAULT_BUFFER_SIZE too high"
+#if BKR_DEF_BUFFER_SIZE >= 65536
+#error "BKR_DEF_BUFFER_SIZE too high"
 #endif
 
-#if (BKR_VIDEOMODE(DEFAULT_MODE) != BKR_PAL) && (BKR_VIDEOMODE(DEFAULT_MODE) != BKR_NTSC)
-#error "Bad video mode specifier in DEFAULT_MODE"
+#if (BKR_VIDEOMODE(BKR_DEF_MODE) != BKR_PAL) && (BKR_VIDEOMODE(BKR_DEF_MODE) != BKR_NTSC)
+#error "Bad video mode specifier in BKR_DEF_MODE"
 #endif
-#if (BKR_DENSITY(DEFAULT_MODE) != BKR_HIGH) && (BKR_DENSITY(DEFAULT_MODE) != BKR_LOW)
-#error "Bad density specifier in DEFAULT_MODE"
+#if (BKR_DENSITY(BKR_DEF_MODE) != BKR_HIGH) && (BKR_DENSITY(BKR_DEF_MODE) != BKR_LOW)
+#error "Bad density specifier in BKR_DEF_MODE"
 #endif
-#if (BKR_FORMAT(DEFAULT_MODE) != BKR_FMT) && (BKR_FORMAT(DEFAULT_MODE) != BKR_RAW)
-#error "Bad format specifier in DEFAULT_MODE"
+#if (BKR_FORMAT(BKR_DEF_MODE) != BKR_FMT) && (BKR_FORMAT(BKR_DEF_MODE) != BKR_RAW)
+#error "Bad format specifier in BKR_DEF_MODE"
 #endif
-#if (BKR_SPEED(DEFAULT_MODE) != BKR_SP) && (BKR_SPEED(DEFAULT_MODE) != BKR_EP)
-#error "Bad tape speed specifier in DEFAULT_MODE"
+#if (BKR_SPEED(BKR_DEF_MODE) != BKR_SP) && (BKR_SPEED(BKR_DEF_MODE) != BKR_EP)
+#error "Bad tape speed specifier in BKR_DEF_MODE"
 #endif
 
-#if (DEFAULT_TIMEOUT < BOR_LENGTH) || (DEFAULT_TIMEOUT > BKR_MAX_TIMEOUT)
-#error "DEFAULT_TIMEOUT too long or too short"
+#if (BKR_DEF_TIMEOUT < BOR_LENGTH) || (BKR_DEF_TIMEOUT > BKR_MAX_TIMEOUT)
+#error "BKR_DEF_TIMEOUT too long or too short"
 #endif
 
 #if (KEY_LENGTH & 1) != 0

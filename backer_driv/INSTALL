@@ -21,9 +21,9 @@ Here are the steps for installing the driver.
 that should be set are:
 
 	BKR_MAJOR
-	DEFAULT_IOPORT
-	DEFAULT_DMA_CHANNEL
-	DEFAULT_MODE
+	BKR_DEF_IOPORT
+	BKR_DEF_DMA_CHANNEL
+	BKR_DEF_MODE
 
 The ioport and dma channel can also be set at run time although you might
 as well configure them now to simplify things later.
@@ -62,13 +62,13 @@ To load the driver, log in as root and type
 where the following options can be set:
 
 	ioport=num
-		Set the ioport to num (default = DEFAULT_IOPORT)
+		Set the ioport to num
 	dma=num
-		Set the dma channel to num (default = DEFAULT_DMA_CHANNEL)
+		Set the dma channel to num
 	buffer=num
-		Set the buffer size to num (default = 65500)
+		Set the buffer size to num
 	timeout=num
-		Set the timeout to num seconds (default = DEFAULT_TIMEOUT)
+		Set the timeout to num seconds
 
 Here's an example install command:
 

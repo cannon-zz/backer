@@ -69,10 +69,10 @@ int main(int argc, char *argv[])
 	sector.aux = NULL;
 	device.direction = O_WRONLY;
 
-	config.mode = DEFAULT_MODE;
-	config.timeout = DEFAULT_TIMEOUT;
+	config.mode = BKR_DEF_MODE;
+	config.timeout = BKR_DEF_TIMEOUT;
 
-	if((device.buffer = (unsigned char *) malloc(DEFAULT_BUFFER_SIZE)) == NULL)
+	if((device.buffer = (unsigned char *) malloc(BKR_DEF_BUFFER_SIZE)) == NULL)
 		{
 		fputs(PROGRAM_NAME ": cannot allocate memory\n", stderr);
 		exit(-1);
@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
 				config.mode |= BKR_LOW;
 				break;
 				default:
-				config.mode |= BKR_DENSITY(DEFAULT_MODE);
+				config.mode |= BKR_DENSITY(BKR_DEF_MODE);
 				break;
 				}
 			break;
@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
 				config.mode |= BKR_EP;
 				break;
 				default:
-				config.mode |= BKR_SPEED(DEFAULT_MODE);
+				config.mode |= BKR_SPEED(BKR_DEF_MODE);
 				break;
 				}
 			break;
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 				config.mode |= BKR_PAL;
 				break;
 				default:
-				config.mode |= BKR_VIDEOMODE(DEFAULT_MODE);
+				config.mode |= BKR_VIDEOMODE(BKR_DEF_MODE);
 				break;
 				}
 			break;
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
 	        (device.direction == O_RDONLY) ? "DECODING" : "ENCODING");
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
 
-	if(bkr_set_parms(config.mode, DEFAULT_BUFFER_SIZE) < 0)
+	if(bkr_set_parms(config.mode, BKR_DEF_BUFFER_SIZE) < 0)
 		{
 		perror(PROGRAM_NAME);
 		exit(-1);
@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 	 * Grab interrupt signal so we can write a nice EOR before exiting.
 	 */
 
-	/*signal(SIGINT, sigint_handler);*/
+	signal(SIGINT, sigint_handler);
 	got_sigint = 0;
 
 	/*

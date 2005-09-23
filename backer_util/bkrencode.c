@@ -29,6 +29,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/mtio.h>
 
 #include "backer.h"
 #include "backer_device.h"
@@ -59,17 +60,19 @@ unsigned int  got_sigint;
 
 int main(int argc, char *argv[])
 {
-	int  tmp;
+	int  tmp, result;
 	direction_t  direction;
 	char  *devname = DEFAULT_DEVICE;
-	struct bkrconfig  config = { DEFAULT_MODE, 0 };
+	struct mtget  mtget;
 
 	/*
 	 * Some setup stuff
 	 */
 
+	device.direction = STOPPED;
 	sector.data = NULL;
 	direction = WRITING;
+	mtget.mt_dsreg = DEFAULT_MODE;
 
 	if((device.buffer = (unsigned char *) malloc(BUFFER_SIZE)) == NULL)
 		{
@@ -82,15 +85,15 @@ int main(int argc, char *argv[])
 	 * Process command line options
 	 */
 
-	while((tmp = getopt(argc, argv, "ad:f:hs:uv:")) != EOF)
-		switch(tmp)
+	while((result = getopt(argc, argv, "ad:f:hs:uv:")) != EOF)
+		switch(result)
 			{
 			case 'u':
 			direction = READING;
 			break;
 
 			case 'a':
-			config.mode = -1;
+			mtget.mt_dsreg = -1;
 			break;
 
 			case 'f':
@@ -98,55 +101,55 @@ int main(int argc, char *argv[])
 			break;
 
 			case 'd':
-			if(config.mode == -1)
+			if(mtget.mt_dsreg == -1)
 				break;
-			config.mode &= ~BKR_DENSITY(-1);
+			mtget.mt_dsreg &= ~BKR_DENSITY(-1);
 			switch(tolower(optarg[0]))
 				{
 				case 'h':
-				config.mode |= BKR_HIGH;
+				mtget.mt_dsreg |= BKR_HIGH;
 				break;
 				case 'l':
-				config.mode |= BKR_LOW;
+				mtget.mt_dsreg |= BKR_LOW;
 				break;
 				default:
-				config.mode |= BKR_DENSITY(DEFAULT_MODE);
+				mtget.mt_dsreg |= BKR_DENSITY(DEFAULT_MODE);
 				break;
 				}
 			break;
 
 			case 's':
-			if(config.mode == -1)
+			if(mtget.mt_dsreg == -1)
 				break;
-			config.mode &= ~BKR_SPEED(-1);
+			mtget.mt_dsreg &= ~BKR_SPEED(-1);
 			switch(tolower(optarg[0]))
 				{
 				case 's':
-				config.mode |= BKR_SP;
+				mtget.mt_dsreg |= BKR_SP;
 				break;
 				case 'e':
-				config.mode |= BKR_EP;
+				mtget.mt_dsreg |= BKR_EP;
 				break;
 				default:
-				config.mode |= BKR_SPEED(DEFAULT_MODE);
+				mtget.mt_dsreg |= BKR_SPEED(DEFAULT_MODE);
 				break;
 				}
 			break;
 
 			case 'v':
-			if(config.mode == -1)
+			if(mtget.mt_dsreg == -1)
 				break;
-			config.mode &= ~BKR_VIDEOMODE(-1);
+			mtget.mt_dsreg &= ~BKR_VIDEOMODE(-1);
 			switch(tolower(optarg[0]))
 				{
 				case 'n':
-				config.mode |= BKR_NTSC;
+				mtget.mt_dsreg |= BKR_NTSC;
 				break;
 				case 'p':
-				config.mode |= BKR_PAL;
+				mtget.mt_dsreg |= BKR_PAL;
 				break;
 				default:
-				config.mode |= BKR_VIDEOMODE(DEFAULT_MODE);
+				mtget.mt_dsreg |= BKR_VIDEOMODE(DEFAULT_MODE);
 				break;
 				}
 			break;
@@ -171,14 +174,14 @@ int main(int argc, char *argv[])
 	 * Do more setup stuff.
 	 */
 
-	if(config.mode == -1)
+	if(mtget.mt_dsreg == -1)
 		{
 		if((tmp = open(devname, O_RDONLY)) < 0)
 			{
 			perror(PROGRAM_NAME);
 			exit(-1);
 			}
-		if(ioctl(tmp, BKRIOCGETMODE, &config) < 0)
+		if(ioctl(tmp, MTIOCGET, &mtget) < 0)
 			{
 			perror(PROGRAM_NAME);
 			exit(-1);
@@ -186,11 +189,11 @@ int main(int argc, char *argv[])
 		close(tmp);
 		}
 
-	config.mode = (config.mode & ~BKR_FORMAT(-1)) | BKR_FMT;
+	mtget.mt_dsreg = (mtget.mt_dsreg & ~BKR_FORMAT(-1)) | BKR_FMT;
 
 	fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n",
 	        (direction == READING) ? "DECODING" : "ENCODING");
-	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
+	bkr_display_mode(mtget.mt_dsreg & ~BKR_FORMAT(-1));
 
 	/*
 	 * Grab interrupt signal so we can write a nice EOR before exiting
@@ -205,20 +208,20 @@ int main(int argc, char *argv[])
 	 */
 
 	setbuf(stderr, NULL);
-	bkr_device_reset(config.mode, BUFFER_SIZE);
+	bkr_device_reset(mtget.mt_dsreg, BUFFER_SIZE);
 	switch(direction)
 		{
 		case READING:
-		bkr_format_reset(READING, config.mode);
+		bkr_format_reset(mtget.mt_dsreg, READING);
 		bkr_device_start_transfer(READING);
 		while(!feof(stdin))
 			{
 			errno = 0;
-			tmp = block.read(0, 1);
-			if(tmp == 0)
+			result = block.read(0, 1);
+			if(result == 0)
 				break;
-			if(tmp < 0)
-				errno = -tmp;
+			if(result < 0)
+				errno = -result;
 			while((block.offset < block.end) && !errno)
 				block.offset += fwrite(block.offset, 1, block.end - block.offset, stdout);
 			if(errno)
@@ -230,16 +233,16 @@ int main(int argc, char *argv[])
 		break;
 
 		case WRITING:
-		bkr_format_reset(WRITING, config.mode);
+		bkr_format_reset(mtget.mt_dsreg, WRITING);
 		bkr_device_start_transfer(WRITING);
 		bkr_write_bor(1);
 		while(!feof(stdin) & !got_sigint)
 			{
 			while((block.offset < block.end) && !feof(stdin))
 				block.offset += fread(block.offset, 1, block.end - block.offset, stdin);
-			tmp = block.write(0, 1);
-			if(tmp < 0)
-				errno = -tmp;
+			result = block.write(0, 1);
+			if(result < 0)
+				errno = -result;
 			if(errno)
 				{
 				perror(PROGRAM_NAME);
@@ -247,6 +250,7 @@ int main(int argc, char *argv[])
 				}
 			}
 		bkr_write_eor(1);
+		bkr_device_flush(1);
 		break;
 
 		default:
@@ -288,7 +292,7 @@ void sigint_handler(int num)
 
 int  bkr_device_reset(int mode, unsigned max_buffer)
 {
-	device.direction = STOPPED;
+	device.size = 0;
 
 	switch(BKR_DENSITY(mode))
 		{
@@ -301,7 +305,7 @@ int  bkr_device_reset(int mode, unsigned max_buffer)
 		break;
 
 		default:
-		return(-EINVAL);
+		return(-ENXIO);
 		}
 
 	switch(BKR_VIDEOMODE(mode))
@@ -315,7 +319,7 @@ int  bkr_device_reset(int mode, unsigned max_buffer)
 		break;
 
 		default:
-		return(-EINVAL);
+		return(-ENXIO);
 		}
 
 	device.size = max_buffer - max_buffer % device.frame_size;

@@ -124,14 +124,14 @@
  * Paramters
  */
 
-#define  BKR_LEADER            0x33     /* leader is filled with this */
+#define  BKR_LEADER            0xe2     /* leader is filled with this */
 #define  BKR_TRAILER           0x33     /* trailer is filled with this */
 #define  BKR_FILLER            0x33     /* unused space is filled with this */
 #define  KEY_LENGTH            28       /* bytes */
 #define  BOR_LENGTH            4        /* seconds */
 #define  EOR_LENGTH            1        /* seconds */
 
-#define KEY_INITIALIZER                                      \
+#define KEY_SEQUENCE                                         \
 	{ 0xb9, 0x57, 0xd1, 0x0b, 0xb5, 0xd3, 0x66, 0x07,    \
 	  0x5e, 0x76, 0x99, 0x7d, 0x73, 0x6a, 0x09, 0x1e,    \
 	  0x89, 0x55, 0x3f, 0x21, 0xca, 0xa6, 0x36, 0xb7,    \
@@ -143,8 +143,7 @@
 
 typedef struct
 	{
-	unsigned char type : 3;         /* type */
-	unsigned char pad : 3;
+	unsigned char type : 6;         /* type */
 	unsigned char header : 1;       /* block contains sector header */
 	unsigned char truncate : 1;     /* block is truncated */
 	} block_header_t;
@@ -153,7 +152,7 @@ typedef struct
 #define  EOR_BLOCK   1                  /* blcok is an EOR marker */
 #define  DATA_BLOCK  2                  /* block contains data */
 
-#define  BLOCK_HEADER_INITIALIZER  ((block_header_t) { DATA_BLOCK, 0, 0, 0 })
+#define  BLOCK_HEADER_INITIALIZER  ((block_header_t) { DATA_BLOCK, 0, 0 })
 
 typedef struct
 	{
@@ -161,7 +160,7 @@ typedef struct
 	unsigned int  number __attribute__ ((packed));  /* sector number */
 	} sector_header_t;
 
-#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) { KEY_INITIALIZER, 0 });
+#define  SECTOR_HEADER_INITIALIZER  ((sector_header_t) { KEY_SEQUENCE, 0 });
 
 
 /*
@@ -174,19 +173,19 @@ struct bkrhealth health;                /* health indicators */
 struct
 	{
 	unsigned char  *offset;         /* next byte to be read/written */
-	unsigned char  *start;          /* see diagram above */
 	unsigned char  *end;            /* see diagram above */
+	unsigned char  *start;          /* see diagram above */
 	block_header_t  header;         /* block header copy */
 	unsigned int  size;             /* see diagram above */
 	unsigned int  parity;           /* see diagram above */
-	int  (*read)(f_flags_t, jiffies_t);        /* pointer to appropriate read function */
-	int  (*write)(f_flags_t, jiffies_t);       /* pointer to appropriate write function */
+	int  (*read)(f_flags_t, jiffies_t);        /* block read function */
+	int  (*write)(f_flags_t, jiffies_t);       /* block write function */
 	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
 	} block;
 
 struct
 	{
-	unsigned char  *data;           /* uninterleaved data for current sector */
+	unsigned char  *data;           /* uninterleaved data buffer */
 	unsigned char  *offset;         /* location of current block */
 	unsigned int  interleave;       /* block interleave */
 	unsigned int  size;             /* see diagram above */
@@ -206,11 +205,24 @@ struct
  * functions are accessed through the pointers in the block data structure.
  */
 
-int           bkr_format_reset(direction_t, int);
+int           bkr_format_reset(int, direction_t);
 int           bkr_write_bor(jiffies_t);
 int           bkr_write_eor(jiffies_t);
 unsigned int  space_in_buffer(void);
 unsigned int  bytes_in_buffer(void);
+
+
+/*
+ * Some private functions meant only for export to the error analysis
+ * program.
+ */
+
+#ifdef BACKER_FMT_PRIVATE
+
+int   bkr_block_read_raw(f_flags_t, jiffies_t);
+int   bkr_find_sector(f_flags_t, jiffies_t);
+
+#endif /* BACKER_FMT_PRIVATE */
 
 
 #endif /* BACKER_FMT_H */

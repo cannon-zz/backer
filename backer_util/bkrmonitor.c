@@ -30,7 +30,6 @@
 #include "backer.h"
 
 #define  PROGRAM_NAME    "bkrmonitor"
-#define  DEFAULT_DEVICE  "/dev/backer"
 #define  DEFAULT_UPDATE  50                     /* milliseconds */
 #define  MIN_UPDATE      10                     /* milliseconds */
 #define  DECAY_INTERVAL  60                     /* sectors */
@@ -66,7 +65,7 @@ struct
 	} error_rate;
 struct  bkrstatus  status;
 struct  bkrformat  format;
-struct  bkrconfig  config;
+struct  mtget      mtget;
 struct  mtpos      pos;
 
 
@@ -122,7 +121,7 @@ int main(int argc, char *argv[])
 		perror(PROGRAM_NAME);
 		exit(-1);
 		}
-	ioctl(devfile, BKRIOCGETMODE, &config);
+	ioctl(devfile, MTIOCGET, &mtget);
 	ioctl(devfile, BKRIOCGETFORMAT, &format);
 
 	/*
@@ -161,7 +160,7 @@ int main(int argc, char *argv[])
 
 	gtk_widget_set_sensitive(GTK_WIDGET(table), FALSE);
 
-	switch(BKR_VIDEOMODE(config.mode))
+	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
 		{
 		case BKR_NTSC:
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.ntsc), TRUE);
@@ -172,7 +171,7 @@ int main(int argc, char *argv[])
 		break;
 		}
 
-	switch(BKR_DENSITY(config.mode))
+	switch(BKR_DENSITY(mtget.mt_dsreg))
 		{
 		case BKR_HIGH:
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.high), TRUE);
@@ -183,7 +182,7 @@ int main(int argc, char *argv[])
 		break;
 		}
 
-	switch(BKR_SPEED(config.mode))
+	switch(BKR_SPEED(mtget.mt_dsreg))
 		{
 		case BKR_SP:
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.sp), TRUE);
@@ -230,7 +229,7 @@ int main(int argc, char *argv[])
 	widgets.underflow = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 5, 6);
 
-	/* Debuging information */
+	/* Health information */
 
 	table = gtk_table_new(4, 2, FALSE);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
@@ -256,14 +255,14 @@ int main(int argc, char *argv[])
 	widgets.most = gtk_label_new("0");
 	gtk_table_attach_defaults(GTK_TABLE(table), widgets.most, 1, 2, 3, 4);
 
-	/* Error rate and DMA buffer indicators */
+	/* Errors and DMA bar graphs */
 
 	table = gtk_table_new(2, 2, FALSE);
 	gtk_table_set_row_spacings(GTK_TABLE(table), 4);
 	gtk_table_set_col_spacings(GTK_TABLE(table), 10);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
-	widget = gtk_label_new("Error Rate");
+	widget = gtk_label_new("Recent Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
 	widget = gtk_label_new("DMA Buffer");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);

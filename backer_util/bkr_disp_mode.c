@@ -28,10 +28,8 @@
 
 #include "backer.h"
 
-void  bkr_display_mode(unsigned int mode, unsigned int timeout)
+void  bkr_display_mode(unsigned int mode)
 {
-	if(timeout <= BKR_MAX_TIMEOUT)
-		fprintf(stderr, "\tTimeout:     %u second(s)\n", timeout);
 	switch(BKR_VIDEOMODE(mode))
 		{
 		case BKR_PAL:

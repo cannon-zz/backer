@@ -34,21 +34,6 @@ typedef  unsigned short  f_flags_t;             /* type for f_flags in struct fi
 
 
 /*
- * Parameters
- *
- * BKR_DEF_MODE must be a real mode or the driver will enter an infinite
- * recursion when loaded.  You've been warned.  (it's a real mode if it has
- * exactly one constant from each group ORed together).
- */
-
-#define  BKR_MAX_TIMEOUT       120              /* seconds */
-
-#ifndef __KERNEL__
-#define  HZ  100
-#endif
-
-
-/*
  * Hardware stuff
  */
 
@@ -110,22 +95,17 @@ struct bkrformat                                /* Format structure (read only) 
 	unsigned int  interleave;               /* interleave ratio */
 	unsigned int  block_size;               /* bytes */
 	unsigned int  block_parity;             /* bytes */
-	unsigned int  block_capacity;           /* bytes */
 	unsigned int  sector_capacity;          /* bytes */
 	};
 
-struct bkrconfig                                /* Config structure (read/write) */
-	{
-	unsigned int  mode;                     /* see below */
-	unsigned int  timeout;                  /* in seconds */
-	};
-
 #define  BKRIOCGETSTATUS       _IOR('m', 10, struct bkrstatus)    /* get status */
-#define  BKRIOCGETMODE         _IOR('m', 11, struct bkrconfig)    /* get configuration */
-#define  BKRIOCSETMODE         _IOW('m', 11, struct bkrconfig)    /* set configuration */
 #define  BKRIOCGETFORMAT       _IOR('m', 12, struct bkrformat)    /* get format */
 
-/* For bkrconfig.mode */
+
+/*
+ * Used widely throughout the code to describe the operating mode.  Also
+ * returned by MTIOCGET in mtget.mt_dsreg.
+ */
 
 #define  BKR_VIDEOMODE(x)      ((x) & 0x0003)
 #define  BKR_DENSITY(x)        ((x) & 0x000c)

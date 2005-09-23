@@ -1,3 +1,7 @@
+1.103 (2001/2/20)
+	Brought the utilities in line with the new /dev layout.  This
+	included deleting bkrmode.
+
 1.102 (2001/2/13)
 	Got bkrencode working with the new formating code.
 

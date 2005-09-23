@@ -68,22 +68,22 @@ static struct
 	unsigned int  interleave;
         unsigned int  parity;
         } format[] =                                    /* format information */
-	{ {  32, 28,  8, 10 },                          /* FMT LOW  NTSC SP */
-	  {  32, 28,  8, 14 },                          /* FMT LOW  NTSC EP */
-	  {  40, 32,  8, 10 },                          /* FMT LOW  PAL  SP */
-	  {  40, 32,  8, 14 },                          /* FMT LOW  PAL  EP */
-	  {  80, 70, 20, 10 },                          /* FMT HIGH NTSC SP */
-	  {  80, 70, 20, 14 },                          /* FMT HIGH NTSC EP */
-	  { 100, 80, 20, 10 },                          /* FMT HIGH PAL  SP */
-	  { 100, 80, 20, 14 },                          /* FMT HIGH PAL  EP */
-	  {   0,  0,  1,  0 },                          /* RAW LOW  NTSC SP */
-	  {   0,  0,  1,  0 },                          /* RAW LOW  NTSC EP */
-	  {   0,  0,  1,  0 },                          /* RAW LOW  PAL  SP */
-	  {   0,  0,  1,  0 },                          /* RAW LOW  PAL  EP */
-	  {   0,  0,  1,  0 },                          /* RAW HIGH NTSC SP */
-	  {   0,  0,  1,  0 },                          /* RAW HIGH NTSC EP */
-	  {   0,  0,  1,  0 },                          /* RAW HIGH PAL  SP */
-	  {   0,  0,  1,  0 } };                        /* RAW HIGH PAL  EP */
+	{ {  32,  28,  8, 10 },                         /* FMT LOW  NTSC SP */
+	  {  48,  44,  8, 10 },                         /* FMT LOW  NTSC EP */
+	  {  40,  32,  8, 10 },                         /* FMT LOW  PAL  SP */
+	  {  48,  44,  8, 10 },                         /* FMT LOW  PAL  EP */
+	  {  80,  70, 20, 10 },                         /* FMT HIGH NTSC SP */
+	  { 100,  70, 59,  6 },                         /* FMT HIGH NTSC EP */
+	  { 100,  80, 20, 10 },                         /* FMT HIGH PAL  SP */
+	  { 120, 110, 20, 10 },                         /* FMT HIGH PAL  EP */
+	  {   0,   0,  1,  0 },                         /* RAW LOW  NTSC SP */
+	  {   0,   0,  1,  0 },                         /* RAW LOW  NTSC EP */
+	  {   0,   0,  1,  0 },                         /* RAW LOW  PAL  SP */
+	  {   0,   0,  1,  0 },                         /* RAW LOW  PAL  EP */
+	  {   0,   0,  1,  0 },                         /* RAW HIGH NTSC SP */
+	  {   0,   0,  1,  0 },                         /* RAW HIGH NTSC EP */
+	  {   0,   0,  1,  0 },                         /* RAW HIGH PAL  SP */
+	  {   0,   0,  1,  0 } };                       /* RAW HIGH PAL  EP */
 
 static unsigned char  weight[] =                        /* correlation weights */
 	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,
@@ -146,25 +146,35 @@ static inline int BLOCKS_PER_SECOND(void)
 	return(sector.interleave * (BKR_VIDEOMODE(sector.mode) == BKR_PAL ? 50 : 60));
 }
 
+
+/* If all modes use comensurate interleaving */
+
+#if 1
+#define  SECTOR_PADDING  0
+#else
+/* otherwise ... */
+#define  SECTOR_PADDING  (sector.data_size % block.size)
+#endif
+
 static inline int SECTOR_KEY_OFFSET(void)
 {
-	return(sector.leader + (block.parity + sizeof(block_header_t))*sector.interleave);
+	return(sector.leader + (SECTOR_PADDING + block.parity + sizeof(block_header_t))*sector.interleave);
 }
 
 
 /*
- * Function prototypes
+ * Function prototypes.
  */
 
 static int   bkr_block_read_fmt(f_flags_t, jiffies_t);
 static int   bkr_block_write_fmt(f_flags_t, jiffies_t);
-static int   bkr_block_read_raw(f_flags_t, jiffies_t);
+int          bkr_block_read_raw(f_flags_t, jiffies_t);
 static int   bkr_block_write_raw(f_flags_t, jiffies_t);
 static int   bkr_sector_blocks_remaining(void);
 static void  bkr_sector_randomize(void *, int, __u32);
 static int   bkr_sector_read(f_flags_t, jiffies_t);
 static int   bkr_sector_write(f_flags_t, jiffies_t);
-static int   bkr_find_sector(f_flags_t, jiffies_t);
+int          bkr_find_sector(f_flags_t, jiffies_t);
 
 
 /*
@@ -184,14 +194,11 @@ static int   bkr_find_sector(f_flags_t, jiffies_t);
  * left = 0 which can be used to check for failures after the fact.
  */
 
-int bkr_format_reset(direction_t direction, int mode)
+int bkr_format_reset(int mode, direction_t direction)
 {
 	int  fmt;
 
 	sector.mode = 0;
-
-	if(device.size == 0)
-		return(-ENXIO);
 
 	fmt = BKR_MODE_TO_FORMAT(mode);
 
@@ -230,7 +237,7 @@ int bkr_format_reset(direction_t direction, int mode)
 	sector.need_sequence_reset = 1;
 	sector.offset = sector.data;
 	if(direction == WRITING)
-		sector.offset += sector.data_size - block.size;
+		sector.offset += sector.data_size - sector.data_size/sector.interleave;
 
 	/*
 	 * Block layer
@@ -421,7 +428,7 @@ static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 
 static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 {
-	int  result;
+	int  result = 0;
 
 	if(block.offset < block.end)
 		{
@@ -457,7 +464,7 @@ static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
  * the same as for formated reading/writing.
  */
 
-static int bkr_block_read_raw(f_flags_t f_flags, jiffies_t bailout)
+int bkr_block_read_raw(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
 	unsigned int  count;
@@ -635,7 +642,7 @@ static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 				}
 
 			/*
-			 * Ensure correct sector ordering.
+			 * Ensure correct sector order.
 			 */
 
 			result = sector.header_loc->number - sector.header.number;
@@ -759,7 +766,7 @@ static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
  * advanced to when the failure occured (is suitable for a retry).
  */
 
-static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
+int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
 	unsigned int  i, j;

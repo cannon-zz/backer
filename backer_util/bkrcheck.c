@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <malloc.h>
 #include <sys/ioctl.h>
+#include <sys/mtio.h>
 #include <sys/termios.h>
 
 #include "backer.h"
@@ -49,8 +50,8 @@ void  gen_raw(void);
 
 unsigned int  length;
 unsigned char  *data;
+struct mtget mtget;
 struct bkrformat format;
-struct bkrconfig config;
 
 
 int main(int argc, char *argv[])
@@ -112,11 +113,11 @@ int main(int argc, char *argv[])
 		perror(PROGRAM_NAME);
 		exit(0);
 		}
-	ioctl(outfile, BKRIOCGETMODE, &config);
+	ioctl(outfile, MTIOCGET, &mtget);
 	ioctl(outfile, BKRIOCGETFORMAT, &format);
 
 	puts("\nCurrent Device Mode:");
-	bkr_display_mode(config.mode, config.timeout);
+	bkr_display_mode(mtget.mt_dsreg);
 
 	/*
 	 * If we are checking a transfer time, do so and quit.
@@ -124,7 +125,7 @@ int main(int argc, char *argv[])
 
 	if(size >= 0)
 		{
-		time = rint((double) size / format.sector_capacity / ((BKR_VIDEOMODE(config.mode) == BKR_NTSC) ? 60 : 50));
+		time = rint((double) size / format.sector_capacity / ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
 		time += BOR_LENGTH + EOR_LENGTH;
 		printf("\n%s will occupy %dh:", argv[optind], (int) floor(time / 3600.0));
 		time = fmod(time, 3600.0);
@@ -153,7 +154,7 @@ int main(int argc, char *argv[])
 	 * Generate test pattern
 	 */
 
-	switch(BKR_FORMAT(config.mode))
+	switch(BKR_FORMAT(mtget.mt_dsreg))
 		{
 		case BKR_FMT:
 		gen_formated();
@@ -202,8 +203,7 @@ void gen_formated()
 	       "\tSector trailer:    %u bytes\n" \
 	       "\tInterleave ratio:  %u:1\n" \
 	       "\tBlock size:        %u bytes\n" \
-	       "\tParity size:       %u bytes (max %u errors per block)\n" \
-	       "\tBlock capacity:    %u bytes\n" \
+	       "\tParity bytes:      %u (max %u errors per block)\n" \
 	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
 	       "\tData rate:         %u bytes/second\n\n" \
 	       "Writing '\\0's.  ",
@@ -214,9 +214,8 @@ void gen_formated()
 	       format.interleave,
 	       format.block_size,
 	       format.block_parity, format.block_parity/2,
-	       format.block_capacity,
 	       format.sector_capacity, 100.0*format.sector_capacity/format.sector_size,
-	       format.sector_capacity * ((BKR_VIDEOMODE(config.mode) == BKR_NTSC) ? 60 : 50));
+	       format.sector_capacity * ((BKR_VIDEOMODE(mtget.mt_dsreg) == BKR_NTSC) ? 60 : 50));
 
 	length = format.sector_capacity;
 
@@ -236,7 +235,7 @@ void gen_raw(void)
 	int i, j;
 	int  bytes_per_line;
 
-	if(BKR_DENSITY(config.mode) == BKR_HIGH)
+	if(BKR_DENSITY(mtget.mt_dsreg) == BKR_HIGH)
 		bytes_per_line = BYTES_PER_LINE_HIGH;
 	else
 		bytes_per_line = BYTES_PER_LINE_LOW;
@@ -247,7 +246,7 @@ void gen_raw(void)
 	       format.buffer_size, format.buffer_size/format.sector_size,
 	       format.sector_size);
 
-	switch(BKR_VIDEOMODE(config.mode))
+	switch(BKR_VIDEOMODE(mtget.mt_dsreg))
 		{
 		case BKR_PAL:
 		length = LINES_PER_FIELD_PAL * bytes_per_line * 2;

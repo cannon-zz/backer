@@ -1,3 +1,42 @@
+1.103 (2001/2/20)
+	*** INCOMPATIBLE FORMAT CHANGE ***
+
+	Changed the leader bytes to 0xe2 like Danmere (maybe they know
+	something I don't).
+
+	Fixed a bug in non-comensurate interleaving support:  the driver
+	wasn't adjusting the sector header offset for the unused space at
+	the start of a sector (no modes use this so it's not an issue).
+
+	Removed block_capacity from bkrformat.  Nothing 's used it for
+	while.
+
+	Re-allocated bits in the block header structure so that all unused
+	bits belong to the block type.  This way future format extensions
+	will work with older drivers:  older drivers (from this version on)
+	will treat format extensions as unrecognized block types and skip
+	them.
+
+	The mt_resid element returned by MTIOCGET now indicates the bytes
+	required to fill/empty the current block (it was unused
+	previously).
+
+	The operating mode is now selected by the device minor number.
+	This means:  (i) there are now 12 requisite entries in the dev
+	directory corresponding to the 12 operating modes;  (ii) the
+	utility bkrmode no longer exists;  (iii) the config= option has
+	been removed with the timeout being set the way it used to be via
+	the timeout= option;  (iv) the device is never "not configured"
+	since the validity of the operating mode is ensured at the source
+	level;  (v) the BKRIOCGETCONFIG and BKRIOCSETCONFIG ioctls are gone
+	with the mode now being retrieved only via MTIOCGET (mt_dsreg);
+	(vi) adjusting the timeout after module load will have to wait
+	until 2.4.x (the required MTSETDRVBUFFER sub-sub-command is not
+	present in 2.0.x's mtio.h).
+
+	Fixed another show-stopper pointer initialization bug in
+	bkr_format_reset().
+
 1.102 (2001/2/13)
 	Formating code now flushes itself after writing an EOR mark.
 
@@ -7,7 +46,8 @@
 	it's not recommended).
 
 	Fixed a critical pointer initialization bug in bkr_format_reset()
-	and a few other bugs here and there too.
+	and a few other bugs here and there too but can't remember what,
+	though.
 
 	Moved the documentation for the utilities into a separate file.
 

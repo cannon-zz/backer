@@ -1,4 +1,7 @@
-0.10 ()
+0.11 (2000/11/26)
+	Re-release to keep the version number in step with the driver.
+
+0.10 (2000/11/21)
 	bkrencode now catches SIGINT and generates an EOR mark before
 	exiting.
 

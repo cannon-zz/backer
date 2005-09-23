@@ -6,7 +6,22 @@
 	If needed, BKRIOCGETSTATUS will now update the DMA offset before
 	computing the number of bytes in the buffer.
 
-0.10(beta) ()
+0.11(beta) (2000/11/26)
+	Fixed minor bug in the read and write codes:  in the event of an
+	error, the wrong count of actual bytes moved was being returned to
+	the system.
+
+	Made a few changes to the formating layer's logic to allow
+	non-blocking I/O to take place.  Yes, non-blocking I/O is now
+	officially a feature of this driver.  Go ahead and use it and
+	report any problems.  My own test has been to write a 50 MB file
+	and read it back again with O_NONBLOCK set in both directions.  I
+	saw 1.6 million EAGAINs while writing it and 2.8 million EAGAINs
+	while reading it but the file was recovered perfectly.
+
+	Code clean ups here and there.
+
+0.10(beta) (2000/11/21)
 	Performance improvements to the Reed-Solomon encoder and decoder
 	but increased footprint.
 

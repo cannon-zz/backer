@@ -9,6 +9,7 @@
 #define  PROGRAM_NAME    "bkrmonitor"
 #define  DEFAULT_DEVICE  "/dev/backer"
 #define  DEFAULT_UPDATE  50                     /* milliseconds */
+#define  MIN_UPDATE      10                     /* milliseconds */
 
 /*
  * Function prototypes
@@ -22,7 +23,7 @@ gint  update_status(gpointer);
  */
 
 int  devfile;
-int  update_interval = -1;
+int  update_interval = MIN_UPDATE - 1;
 struct
 	{
 	GtkWidget  *ntsc, *pal;
@@ -76,7 +77,7 @@ int main(int argc, char *argv[])
 	"       -h          Display usage");
 			exit(0);
 			}
-	if(update_interval < 0)
+	if(update_interval < MIN_UPDATE)
 		update_interval = DEFAULT_UPDATE;
 
 	/*
@@ -201,9 +202,17 @@ int main(int argc, char *argv[])
 	gtk_box_pack_start(GTK_BOX(vbox), widget, TRUE, TRUE, 0);
 	gtk_signal_connect(GTK_OBJECT(widget), "clicked", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 
+	/* Done */
+
 	gtk_widget_show_all(window);
 
+
+	/*
+	 * Add update_status() as a timer call-back
+	 */
+
 	gtk_timeout_add(update_interval, update_status, NULL);
+
 
 	/*
 	 * Start

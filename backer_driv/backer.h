@@ -56,7 +56,7 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.10(beta)"
+#define  BKR_VERSION           "0.11(beta)"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */

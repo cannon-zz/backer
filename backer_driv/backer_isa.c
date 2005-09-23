@@ -293,7 +293,7 @@ void close(struct inode *inode, struct file *filp)
 		return;
 
 	/*
-	 * Write an EOR mark if needed then stop the DMA transfer.
+	 * Write an EOR mark if needed then flush the DMA buffer.
 	 */
 
 	if(device.direction == O_WRONLY)
@@ -335,21 +335,20 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		struct bkrformat  bkrformat;
 		} arg;
 
-	if(_IOC_SIZE(op) == 0)
+	if(_IOC_SIZE(op) != 0)
 		{
-		if((op == BKRIOCGETAUX) || (op == BKRIOCSETAUX))
-			{
-			if((result = verify_area((_IOC_DIR(op) == _IOC_READ) ?
-			             VERIFY_WRITE : VERIFY_READ, (void *) argument,
-			             sector.aux_length)) < 0)
-				return(result);
-			if(sector.buffer == NULL)
-				return(-ENXIO);
-			}
+		if((result = verify_area((_IOC_DIR(op) == _IOC_READ) ? VERIFY_WRITE : VERIFY_READ,
+		                         (void *) argument, _IOC_SIZE(op))) < 0)
+			return(result);
 		}
-	else if((result = verify_area((_IOC_DIR(op) == _IOC_READ) ?
-	                  VERIFY_WRITE : VERIFY_READ, (void *) argument, _IOC_SIZE(op))) < 0)
-		return(result);
+	else if((op == BKRIOCGETAUX) || (op == BKRIOCSETAUX))
+		{
+		if((result = verify_area((_IOC_DIR(op) == _IOC_READ) ? VERIFY_WRITE : VERIFY_READ,
+		                         (void *) argument, sector.aux_length)) < 0)
+			return(result);
+		if(sector.buffer == NULL)
+			return(-ENXIO);
+		}
 
 	switch(op)
 		{
@@ -398,7 +397,6 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 				break;
 
 				case O_RDWR:
-				break;
 				}
 		 */
 		arg.bkrstatus.bytes = bytes_in_buffer();
@@ -474,6 +472,7 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 
 		memcpy_tofs(buff, block.offset, chunk_size);
 
+		moved += chunk_size;
 		if((block.offset += chunk_size) == block.end)
 			{
 			result = block.read(filp->f_flags, bailout);
@@ -482,7 +481,6 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 			if(result == EOR_BLOCK)
 				break;
 			}
-		moved += chunk_size;
 		}
 
 	return(moved);
@@ -505,13 +503,13 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 
 		memcpy_fromfs(block.offset, buff, chunk_size);
 
+		moved += chunk_size;
 		if((block.offset += chunk_size) == block.end)
 			{
 			result = block.write(filp->f_flags, bailout);
 			if(result < 0)
 				return(moved ? moved : result);
 			}
-		moved += chunk_size;
 		}
 
 	return(moved);
@@ -767,10 +765,16 @@ static void bkr_dma_reset(void)
 	cli();
 	disable_dma(dma);
 	clear_dma_ff(dma);
-	if(device.direction == O_WRONLY)
+	switch(device.direction)
+		{
+		case O_WRONLY:
 		set_dma_mode(dma, DMA_MEM_TO_IO);
-	else
+		break;
+
+		case O_RDONLY:
 		set_dma_mode(dma, DMA_IO_TO_MEM);
+		break;
+		}
 	set_dma_addr(dma, virt_to_bus(device.buffer));
 	set_dma_count(dma, device.size);
 	restore_flags(flags);
@@ -780,7 +784,8 @@ static void bkr_dma_reset(void)
 /*
  * get_dreq_status()
  *
- * Get the status of a DMA channel's DREQ line.  1 = active, 0 = inactive.
+ * Return the status of a DMA channel's DREQ line.  1 = active, 0 =
+ * inactive.
  */
 
 static int get_dreq_status(unsigned int dmanr)

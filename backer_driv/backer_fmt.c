@@ -295,7 +295,7 @@ int bkr_write_bor(jiffies_t bailout)
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= BOR_BLOCK;
 
-	for(i = BLOCKS_PER_SECOND * BOR_LENGTH; i && (jiffies < bailout) && !result; i--)
+	for(i = BLOCKS_PER_SECOND * BOR_LENGTH; i && !result; i--)
 		{
 		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
@@ -310,7 +310,7 @@ int bkr_write_bor(jiffies_t bailout)
 
 int bkr_write_eor(jiffies_t bailout)
 {
-	int  result;
+	int  result = 0;
 	unsigned int  i;
 
 	if(block.offset != block.start)
@@ -323,14 +323,11 @@ int bkr_write_eor(jiffies_t bailout)
 	*block.header &= ~BLOCK_TYPE(-1);
 	*block.header |= EOR_BLOCK;
 
-	for(i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND * EOR_LENGTH;
-	    i && (jiffies < bailout); i--)
+	for(i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND * EOR_LENGTH; i && !result; i--)
 		{
 		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
 		result = bkr_block_write_fmt(0, bailout);
-		if(result < 0)
-			return(result);
 		}
 
 	return(0);
@@ -445,21 +442,16 @@ static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 		{
 		*block.header |= TRUNCATE_BLOCK(-1);
 		block.buffer[block.size-1] = block.offset - block.buffer;
+		block.offset = block.end;
 		}
 
 	bkr_block_randomize(block.sequence);
 	reed_solomon_encode(block.buffer, &block.rs_format);
 
 	result = bkr_sector_write(f_flags, bailout);
-
 	if(result < 0)
 		{
-		*block.header &= ~TRUNCATE_BLOCK(-1);
-
-		block.offset = block.start;
-		if(KEY_BLOCK(*block.header))
-			block.offset += KEY_LENGTH;
-
+		bkr_block_randomize(block.sequence);
 		return(result);
 		}
 
@@ -566,11 +558,11 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 	int  result;
 	unsigned int  count;
 
-	block.offset = block.buffer;
-
 	result = bkr_device_write(block.size, f_flags, bailout);
 	if(result < 0)
 		return(result);
+
+	block.offset = block.buffer;
 
 	if(device.head + block.size >= device.size)
 		{
@@ -746,7 +738,7 @@ static int bkr_get_sector(f_flags_t f_flags, jiffies_t bailout)
 		while(j)
 			anti_corr += weight[device.buffer[i -= device.bytes_per_line] ^ key[--j]];
 		}
-	while((anti_corr > CORR_THRESHOLD(KEY_LENGTH)) && (jiffies < bailout));
+	while(anti_corr > CORR_THRESHOLD(KEY_LENGTH));
 
 	device.tail -= SECTOR_KEY_OFFSET;
 	if((int) device.tail < 0)

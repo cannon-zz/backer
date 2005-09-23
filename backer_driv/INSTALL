@@ -5,21 +5,22 @@ Preamble:
 ---------
 
 This is the quick install guide.  Full details are in the real
-documentation that comes with the utilities.  The instructions here will
-only be helpful if (i) you know what you are doing or (ii) you don't know
-what you're doing but the instructions just happen to work anyway.
+documentation (the user guide included with this package).  The
+instructions here will only be helpful if (i) you know what you are doing
+or (ii) you don't know what you're doing but the instructions just happen
+to work anyway.
 
 
 Hardware:
 ---------
 
 Presumably your Backer was/is working under Windows in which case you
-already have it installed and know there are no hardware conflicts.  If
-you are installing the hardware for the first time then you should first
-check to see which I/O ports and DMA channels are being used by taking a
-look at the two files /proc/ioports and /proc/dma.  Set your Backer to a
-free I/O port and DMA channel then just follow the installation
-instructions that came with the card.
+already have it installed and know there are no hardware conflicts.  If you
+are installing the hardware for the first time then you should first check
+to see which I/O ports and DMA channels are being used by taking a look at
+the two files /proc/ioports and /proc/dma.  Set your Backer to a free I/O
+port and DMA channel then just follow the installation instructions that
+came with the card.
 
 
 Software:
@@ -89,18 +90,17 @@ happens, check /var/log/messages to see what the problem was.  The driver
 will have printed a little banner and will have complained if it couldn't
 reserve a particular resource.  Note that to allow the dma channel to be
 shared, the driver will only request access to it when the device is
-actually in use so even if the driver gets installed correctly, there
-might still be a dma conflict.  If the driver can't get access to the dma
-channel when it needs to then it will put an error message in
-/var/log/messages.
+actually in use so even if the driver gets installed correctly, there might
+still be a dma conflict.  If the driver can't get access to the dma channel
+when it needs to then it will put an error message in /var/log/messages.
 
 To test the driver just type
 
 	cat /dev/zero > /dev/backer
 
 to verify that data is being written.  On your television set you should
-see vertical bars for several seconds followed by something that looks
-like white noise.  See the user's guide for troubleshooting.
+see vertical bars for several seconds followed by something that looks like
+white noise.  See the user's guide for troubleshooting.
 
 To unload the module type
 

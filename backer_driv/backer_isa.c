@@ -115,7 +115,7 @@ int init_module(void)
 	 */
 
 	block.buffer = NULL;
-	sector.aux = NULL;
+	sector.buffer = NULL;
 	device.direction = O_RDWR;
 
 	/*
@@ -170,7 +170,7 @@ int init_module(void)
 	 * There was a problem.  Release resources as needed.
 	 */
 
-	cant_register:	kfree(sector.aux);
+	cant_register:	kfree(sector.buffer);
 	                kfree(block.buffer);
 	no_bufmem:	release_region(ioport, 1);
 	ioport_busy:	kfree(device.buffer);
@@ -181,7 +181,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	bkr_device_reset();
-	kfree(sector.aux);
+	kfree(sector.buffer);
 	kfree(block.buffer);
 	kfree(device.buffer);
 	release_region(ioport, 1);
@@ -230,9 +230,6 @@ int open(struct inode *inode, struct file *filp)
 	 * transfer direction so some additional setup stuff has to be
 	 * done.
 	 */
-
-	best_nonmatch = 1000000;
-	worst_match = 0;
 
 	if(request_dma(dma, BKR_NAME) < 0)
 		{
@@ -361,13 +358,11 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		case BKRIOCGETSTATUS:
 		arg.bkrstatus.bytes = bytes_in_buffer();
 		arg.bkrstatus.space = space_in_buffer();
-		arg.bkrstatus.sector_errs = errors.sector;
-		arg.bkrstatus.block_errs = errors.block;
+		arg.bkrstatus.errors = errors;
 		arg.bkrstatus.worst_match = worst_match;
 		arg.bkrstatus.best_nonmatch = best_nonmatch;
 		arg.bkrstatus.least_skipped = least_skipped;
 		arg.bkrstatus.most_skipped = most_skipped;
-		arg.bkrstatus.worst_block = errors.symbol;
 		memcpy_tofs((void *) argument, &arg.bkrstatus, sizeof(struct bkrstatus));
 		return(0);
 
@@ -392,11 +387,11 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		arg.bkrformat.sector_size = sector.size;
 		arg.bkrformat.header_length = sector.header_length;
 		arg.bkrformat.footer_length = sector.footer_length;
-		arg.bkrformat.aux_offset = sector.aux_offset;
+		arg.bkrformat.aux_offset = sector.aux - sector.buffer;
 		arg.bkrformat.aux_length = sector.aux_length;
 		arg.bkrformat.block_size = block.size;
-		arg.bkrformat.block_capacity = block.size - block.ecc_length - sizeof(header_t);
-		arg.bkrformat.block_parity = block.ecc_length;
+		arg.bkrformat.block_capacity = block.size - block.parity - sizeof(header_t);
+		arg.bkrformat.block_parity = block.parity;
 		memcpy_tofs((void *) argument, &arg.bkrformat, sizeof(struct bkrformat));
 		return(0);
 
@@ -509,14 +504,15 @@ int lseek(struct inode *inode, struct file *filp, off_t offset, int whence)
 
 void bkr_device_read(unsigned int length, unsigned long  bailout)
 {
-	length += DMA_HOLD_OFF;		/* KLUDGE ALERT */
+	length += DMA_HOLD_OFF;
 
-	if(bytes_in_buffer() >= length)
+	if((jiffies - device.last_update < HZ/MIN_UPDATE_FREQ) && (bytes_in_buffer() >= length))
 		return;
 
 	update_device_offset(&device.head, bailout);
+	device.last_update = jiffies;
 
-	if(bytes_in_buffer() >= length)
+	if((bytes_in_buffer() >= length) && (space_in_buffer() > DMA_HOLD_OFF))
 		return;
 
 	current->timeout = jiffies + HZ/50;
@@ -527,6 +523,7 @@ void bkr_device_read(unsigned int length, unsigned long  bailout)
 	do
 		update_device_offset(&device.head, bailout);
 	while((bytes_in_buffer() < length) && (jiffies < bailout));
+	device.last_update = jiffies;
 
 	return;
 }
@@ -541,14 +538,15 @@ void bkr_device_read(unsigned int length, unsigned long  bailout)
 
 void bkr_device_write(unsigned int length, unsigned long bailout)
 {
-	length += DMA_HOLD_OFF;		/* KLUDGE ALERT */
+	length += DMA_HOLD_OFF;
 
-	if(space_in_buffer() >= length)
+	if((jiffies - device.last_update < HZ/MIN_UPDATE_FREQ) && (space_in_buffer() >= length))
 		return;
 
 	update_device_offset(&device.tail, bailout);
+	device.last_update = jiffies;
 
-	if(space_in_buffer() >= length)
+	if((space_in_buffer() >= length) && (bytes_in_buffer() > DMA_HOLD_OFF))
 		return;
 
 	current->timeout = jiffies + HZ/50;
@@ -559,6 +557,7 @@ void bkr_device_write(unsigned int length, unsigned long bailout)
 	do
 		update_device_offset(&device.tail, bailout);
 	while((space_in_buffer() < length) && (jiffies < bailout));
+	device.last_update = jiffies;
 
 	return;
 }
@@ -621,6 +620,7 @@ static void start_transfer(void)
 {
 	device.command |= (device.direction == O_WRONLY) ? BIT_TRANSMIT : BIT_RECEIVE;
 	outb(device.command | BIT_DMA_REQUEST, ioport);
+	device.last_update = jiffies;
 }
 
 

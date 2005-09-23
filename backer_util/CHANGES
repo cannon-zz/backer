@@ -1,4 +1,15 @@
-0.4 ()
+0.5 (2000/10/25)
+	bkrlog will now only send an update of the auxiliary region to the
+	device if more than 250 milliseconds have elapsed.
+
+	Minor changes to bkrencode to reflect code clean ups in the
+	formating layer.
+
+	The font .xpm file's name didn't match the string defined within it
+	(I had renamed it without editing the string name).  They match
+	now.  I also made changes to the 'm' and 'S' glyphs.
+
+0.4 (2000/10/20)
 	Fixed sector efficiency and data rate computation errors in bkrtest
 	--- you can now actually use the data rate along with your tape
 	length to compute a tape capacity.

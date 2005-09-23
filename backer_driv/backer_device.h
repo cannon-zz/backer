@@ -49,6 +49,7 @@ struct
 	unsigned int  tail;             /* offset of next read transfer */
 	unsigned int  bytes_per_line;   /* width of one line of video */
 	unsigned int  oddfield;         /* current video field is odd */
+	unsigned long  last_update;     /* jiffies at time of last update */
 	unsigned int  mode;             /* as in bkrconfig */
 	unsigned int  owner;            /* owner's user id */
 	unsigned int  direction;        /* current transfer direction */

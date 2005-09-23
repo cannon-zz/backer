@@ -49,7 +49,7 @@
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.4"
+#define  BKR_VERSION           "0.5"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
@@ -63,6 +63,16 @@
 #define  DMA_MEM_TO_IO         0x18         /* demand transf, inc addr, auto-init */
 #define  DMA_HOLD_OFF          512          /* stay this far back from transfer point */
 
+#define  MIN_UPDATE_FREQ       3            /* minimum rate for DMA status updates in Hz */
+
+struct bkrerrors                            /* Error counts */
+	{
+	unsigned int  symbol;               /* most symbol errors in any one block */
+	unsigned int  block;                /* uncorrectable blocks since BOR */
+	unsigned int  sector;               /* framing errors since BOR */
+	unsigned int  overrun;              /* buffer overruns since BOR */
+	};
+
 /*
  * IOCTL stuff
  */
@@ -71,13 +81,11 @@ struct bkrstatus                            /* Status structure (read only) */
 	{
 	unsigned int  bytes;                /* available in buffer */
 	unsigned int  space;                /* available in buffer */
-	unsigned int  sector_errs;          /* since BOR */
-	unsigned int  block_errs;           /* since BOR */
+	struct bkrerrors errors;
 	unsigned int  worst_match;
 	unsigned int  best_nonmatch;
 	unsigned int  least_skipped;
 	unsigned int  most_skipped;
-	unsigned int  worst_block;
 	};
 
 struct bkrformat                            /* Format structure (read only) */
@@ -132,14 +140,17 @@ struct bkrconfig                            /* Config structure (read/write) */
 /*
  * General Formating
  *
- * Note KEY_LENGTH and the ecc lengths must be multiples of 2.
+ * Note KEY_LENGTH and the parity lengths must be multiples of 2.
+ *
+ * UPCOMING TAPE FORMAT CHANGES
+ * -reduced number of parity symbols (12/16 rather than 16/20)
  */
 
 #define  TAPE_FORMAT           1            /* tape format version 1 (not yet used!) */
 #define  CORR_THRESHOLD(x)     ((x)*8/5)    /* maximum number of bits allowed to be bad (20%) */
 #define  BKR_FILLER            0x33         /* filler for unused space */
 #define  KEY_LENGTH            28           /* bytes (must be a multiple of 2) */
-#define  BOR_LENGTH            3            /* seconds */
+#define  BOR_LENGTH            4            /* seconds */
 #define  EOR_LENGTH            1            /* seconds */
 
 struct bkr_format
@@ -147,9 +158,9 @@ struct bkr_format
 	unsigned int  header_length;
 	unsigned int  aux_length;
 	unsigned int  footer_length;
-	unsigned int  ecc_length;
+	unsigned int  parity;
 	};
-                     /* head aux foot ecc */
+                     /* head aux foot prty */
 #define  BKR_FORMATS  {{ 32,  56, 28, 16 },       /* LOW  NTSC SP */   \
                        { 32,  56, 28, 20 },       /* LOW  NTSC EP */   \
                        { 32,  56, 28, 16 },       /* LOW  PAL  SP */   \

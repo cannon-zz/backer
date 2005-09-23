@@ -26,11 +26,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/timeb.h>
 
 #include "backer.h"
 #include "bkr_aux_puts.h"
 
-#define  LABEL_SIZE  6
+#define  LABEL_SIZE       6     /* characters */
+#define  UPDATE_INTERVAL  250   /* milliseconds */
 
 int main(int argc, char *argv[])
 {
@@ -44,6 +46,7 @@ int main(int argc, char *argv[])
 	char  *intext;                  /* log file input buffer */
 	char  *aux;                     /* data for aux buffer */
 	char  auxtext[17];              /* text for aux buffer */
+	struct timeb last_time, this_time;
 
 	/*
 	 * Process command line options
@@ -121,6 +124,8 @@ int main(int argc, char *argv[])
 
 	fprintf(stdout, "Log file for archive volume label: %s\n", label);
 
+	ftime(&last_time);
+
 	while(1)
 		{
 		/*
@@ -163,8 +168,14 @@ int main(int argc, char *argv[])
 				entry = 0;
 			break;
 			}
-		bkr_aux_puts(auxtext, aux, &format);
-		ioctl(tapefile, BKRIOCSETAUX, aux);
+		ftime(&this_time);
+		if(1000*(this_time.time - last_time.time) +
+		        (short) (this_time.millitm - last_time.millitm) >= UPDATE_INTERVAL)
+			{
+			bkr_aux_puts(auxtext, aux, &format);
+			ioctl(tapefile, BKRIOCSETAUX, aux);
+			last_time = this_time;
+			}
 		}
 
 	close(tapefile);

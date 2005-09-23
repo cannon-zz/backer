@@ -44,25 +44,25 @@
  * next block to be read/written.  The byte order on the diagram is
  * top-to-bottom.
  *
- *             --  +-------------+  --
- *             ^   |    header   |   ^
- *    aux_offset   +-------------+   |
- *             |   |             |   |
- *             |   |      D      |   |
- *             |   |             |   |
- *             v   |      A      |   |
- *             --  +-------------+   |
- *    aux_length   |     aux     |   |
- *             --  +-------------+   footer_offset
- *                 |      T      |   |
- *                 |             |   |
- *                 |      A      |   |
- *                 |             |   v
- *                 +-------------+  --
- *                 |    footer   |   footer_length (+1 line in NTSC mode)
- *                 +-------------+  --
- *                 |    header   |   header_length
- *                 +-------------+  --
+ *             --  +-------------+
+ * header_length   |    header   |
+ *             --  +-------------+
+ *                 |             |
+ *                 |      D      |
+ *                 |             |
+ *                 |      A      |
+ *             --  +-------------+  <-- aux (pointer)
+ *    aux_length   |     aux     |
+ *             --  +-------------+
+ *                 |      T      |
+ *                 |             |
+ *                 |      A      |
+ *                 |             |
+ *             --  +-------------+  <-- footer (pointer)
+ * footer_length   |    footer   |
+ *             --  +-------------+  <-- one extra line in NTSC mode
+ *                 |    header   |
+ *                 +-------------+
  *                 |             |
  *                 |      D      |
  *                 |             |
@@ -74,9 +74,9 @@
  *                 |             |
  *                 |      A      |
  *                 |             |
- *                 +-------------+  --
- *                 |    footer   |   footer_length
- *                 +-------------+  --
+ *                 +-------------+
+ *                 |    footer   |
+ *                 +-------------+
  */
 
 
@@ -90,7 +90,7 @@
  *
  *             --  +-------------+  --
  *             ^   |             |   ^
- *             |   |    Parity   |   ecc_length
+ *             |   |    Parity   |   parity
  *             |   |             |   v
  *             |   +-------------+  --  <--- header (pointer)
  *             |   |    Header   |
@@ -181,44 +181,39 @@ unsigned int  bytes_in_buffer(void);
 
 typedef  __u16  header_t;
 
-unsigned int  worst_match;                      /* these are for debugging only */
+unsigned int  worst_match;              /* these are for debugging only */
 unsigned int  best_nonmatch;
 unsigned int  least_skipped;
 unsigned int  most_skipped;
 
-struct
-	{
-	unsigned int  symbol;                   /* most symbols errors in any one block */
-	unsigned int  block;                    /* uncorrectable blocks since start of i/o */
-	unsigned int  sector;                   /* framing errors since start of i/o */
-	unsigned int  overrun;                  /* buffer overruns since start of read */
-	} errors;
+struct bkrerrors errors;                /* error counts */
 
 struct
 	{
-	unsigned char  *buffer;                 /* holds the current block */
-	header_t  *header;                      /* see diagram above */
-	unsigned char  *offset;                 /* pointer to next byte to be read/written */
-	unsigned char  *start;                  /* see diagram above */
-	unsigned char  *end;                    /* see diagram above */
-	unsigned int  size;                     /* block size in bytes */
-	unsigned int  ecc_length;               /* see diagram above */
-	unsigned int  sequence;                 /* sequence number */
-	int   (*read)(unsigned long);           /* pointer to appropriate read function */
-	void  (*write)(unsigned long);          /* pointer to appropriate write function */
-	struct rs_format_t  rs_format;          /* Reed-Solomon format parameters */
+	unsigned char  *buffer;         /* holds the current block */
+	header_t  *header;              /* see diagram above */
+	unsigned char  *offset;         /* pointer to next byte to be read/written */
+	unsigned char  *start;          /* see diagram above */
+	unsigned char  *end;            /* see diagram above */
+	unsigned int  size;             /* block size in bytes */
+	unsigned int  parity;           /* see diagram above */
+	unsigned int  sequence;         /* sequence number */
+	int   (*read)(unsigned long);   /* pointer to appropriate read function */
+	void  (*write)(unsigned long);  /* pointer to appropriate write function */
+	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
 	} block;
 
 struct
 	{
-	unsigned int  size;                     /* sector size in bytes */
-	unsigned int  header_length;            /* see diagram above */
-	unsigned int  footer_offset;            /* see diagram above */
-	unsigned int  footer_length;            /* see diagram above */
-	unsigned int  aux_offset;               /* see diagram above */
-	unsigned int  aux_length;               /* see diagram above */
-	unsigned int  block_offset;             /* location of current block */
-	unsigned char *aux;                     /* data for the auxiliary region */
+	unsigned char  *buffer;         /* holds the current sector */
+	unsigned char  *aux;            /* see diagram above */
+	unsigned char  *footer;         /* see diagram above */
+	unsigned char  *block;          /* pointer to current block */
+	unsigned int  size;             /* sector size in bytes */
+	unsigned int  header_length;    /* see diagram above */
+	unsigned int  footer_offset;    /* sector.footer - sector.buffer */
+	unsigned int  footer_length;    /* see diagram above */
+	unsigned int  aux_length;       /* see diagram above */
 	} sector;
 
 #endif /* BACKER_FMT_H */

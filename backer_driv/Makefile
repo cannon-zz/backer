@@ -1,6 +1,6 @@
 INCLUDEDIR = /usr/include
 
-INSMODFLAGS = 
+INSMODFLAGS =
 
 CC = gcc
 CFLAGS = -D__KERNEL__ -DMODULE -O2 -Wall -Wstrict-prototypes -I$(INCLUDEDIR)

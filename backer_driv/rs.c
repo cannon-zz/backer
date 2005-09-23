@@ -34,7 +34,8 @@
  */
 
 /*
- * To use this in the Linux kernel different header choices need to be made.
+ * To use this in the Linux kernel different header choices need to be
+ * made.
  */
 
 #ifdef __KERNEL__
@@ -84,52 +85,53 @@ static void gen_ldec(void)
 /*
  * generate_GF()
  *
- * Constructs look-up tables for performing arithmetic over the Galois Field
- * GF(2^MM) from the irreducible polynomial p(x) stored in p.
+ * Constructs look-up tables for performing arithmetic over the Galois
+ * Field GF(2^MM) from the irreducible polynomial p(x) stored in p.
  *
  * We can intuitively define the addition and multiplication operations for
  * the field using the "polynomial" representation for the elements of
  * GF(2^MM).  In this representation, each element is taken to be an MM-
- * component vector whose components are elements from GF(2) (i.e. 0 and 1).
- * We interpret the components of our vectors as coefficients of an MM-1 order
- * polynomial.  Addition and multiplication are then performed using the
- * standard rules for adding and multiplying polynomials but with the
- * operations being those from GF(2) and with the result of multiplication
- * being taken modulo an irreducible polynomial of order MM over GF(2) to
- * ensure the order of the result does not exceed MM-1.
+ * component vector whose components are elements from GF(2) (i.e. 0 and
+ * 1).  We interpret the components of our vectors as coefficients of an
+ * MM-1 order polynomial.  Addition and multiplication are then performed
+ * using the standard rules for adding and multiplying polynomials but with
+ * the operations being those from GF(2) and with the result of
+ * multiplication being taken modulo an irreducible polynomial of order MM
+ * over GF(2) to ensure the order of the result does not exceed MM-1.
  *
- * Using this definition for the arithmetic operations and using MM-bit words
- * to store the components of our vectors, addition is simply an XOR operation
- * (making it identical to its inverse operation, subtraction).
+ * Using this definition for the arithmetic operations and using MM-bit
+ * words to store the components of our vectors, addition is simply an XOR
+ * operation (making it identical to its inverse operation, subtraction).
  *
- * Multiplication, however, has no such trivial representation using machine
- * operations and must be performed using look-up tables.  We do this by
- * translating to "alpha" representation.  Alpha is the name commonly given to
- * the element of the field that is the root of the polynomial used to
- * construct the field --- it's the only root since p(x) is irreducible.  It
- * can be shown that all elements (except, of course, 0) can be represented as
- * powers of alpha.  We can perform multiplication, then, by taking the log
- * (base alpha) of two elements, adding the result modulo 2^MM-1, then
- * looking up the polynomial representation of that power of alpha to get the
- * answer.
+ * Multiplication, however, has no such trivial representation using
+ * machine operations and must be performed using look-up tables.  We do
+ * this by translating to "alpha" representation.  Alpha is the name
+ * commonly given to the element of the field that is the root of the
+ * polynomial used to construct the field --- it's the only root since p(x)
+ * is irreducible.  It can be shown that all elements (except, of course,
+ * 0) can be represented as powers of alpha.  We can perform
+ * multiplication, then, by taking the log (base alpha) of two elements,
+ * adding the result modulo 2^MM-1, then looking up the polynomial
+ * representation of that power of alpha to get the answer.
  *
  * This function constructs the necessary look-up tables called Log_alpha[]
- * and Alpha_exp[] from p.  Since 0 cannot be represented as a power of alpha,
- * special elements are added to the look-up tables to represent this case
- * and all multiplications must first check for this.  We call this special
- * element INFINITY since it is the result of taking the log (base alpha) of
- * zero.
+ * and Alpha_exp[] from p.  Since 0 cannot be represented as a power of
+ * alpha, special elements are added to the look-up tables to represent
+ * this case and all multiplications must first check for this.  We call
+ * this special element INFINITY since it is the result of taking the log
+ * (base alpha) of zero.
  *
- * The bits of the parameter p specify the generator polynomial with the LSB
- * being the co-efficient of x^0 and the MSB being the coefficient of x^MM.
+ * The bits of the parameter p specify the generator polynomial with the
+ * LSB being the co-efficient of x^0 and the MSB being the coefficient of
+ * x^MM.
  *
  *          p(x) = p_MM * x^MM + ... + p_1 * x^1 + p_0 * x^0
  *
  * where p_i means the i-th bit in p and p_MM must = 1.
  *
  * For field generator polynomials, see Lin & Costello, Appendix A, and Lee
- * and Messerschmitt, pg. 453.  Field generator polynomials for symbol sizes
- * from 2 to 16 bits can be found in reed_solomon_init() below.
+ * and Messerschmitt, pg. 453.  Field generator polynomials for symbol
+ * sizes from 2 to 16 bits can be found in reed_solomon_init() below.
  */
 
 static gf  Alpha_exp[NN + 1];   /* exponent->polynomial conversion table */
@@ -163,30 +165,32 @@ static void generate_GF(int p)
 /*
  * generate_poly()
  *
- * Constructs the generator polynomial for the Reed-Solomon code of length NN
- * (=2^MM-1) with the number of parity symbols being given by rs_format->parity.
+ * Constructs the generator polynomial for the Reed-Solomon code of length
+ * NN (=2^MM-1) with the number of parity symbols being given by
+ * rs_format->parity.
  *
- * The generator polynomial, g(x), has coefficients taken from GF(2^MM) and is
- * given by the product
+ * The generator polynomial, g(x), has coefficients taken from GF(2^MM) and
+ * is given by the product
  *
  *  g(x) = (x - beta^J0) * (x - beta^(J0+1)) * ... * (x - beta^(J0+2t-1))
  *
- * where beta = alpha^LOG_BETA and 2t = rs_format->parity.  Normally
- * beta = alpha and J0 = 1 so the product is more simply written as
+ * where beta = alpha^LOG_BETA and 2t = rs_format->parity.  Normally beta =
+ * alpha and J0 = 1 so the product is more simply written as
  *
  *     g(x) = (x - alpha) * (x - alpha^2) * ... * (x - alpha^(2t))
  *
- * but some codes use different choices.  For instance the Reed-Solomon code
- * suggested for use on spacecraft telemetry channels by the Consultative
- * Committe for Space Data Systems (CCSDS) uses beta=alpha^11 and uses beta^112
- * through beta^143 as the roots of the generator polynomial so LOG_BETA=11,
- * J0=112.  (with n-k=32, these choices produce a g(x) which is symmetric under
- * a lowest order to highest order mirror of its coefficients and presumably one
- * can use this fact to reduce the computations needed to encode data).
+ * but some codes use different choices.  For instance the Reed-Solomon
+ * code suggested for use on spacecraft telemetry channels by the
+ * Consultative Committe for Space Data Systems (CCSDS) uses beta=alpha^11
+ * and uses beta^112 through beta^143 as the roots of the generator
+ * polynomial so LOG_BETA=11, J0=112.  (with n-k=32, these choices produce
+ * a g(x) which is symmetric under a lowest order to highest order mirror
+ * of its coefficients and presumably one can use this fact to reduce the
+ * computations needed to encode data).
  *
- * The co-efficients of the generator polynomial are left in exponent form for
- * better encoder performance but note that it is still faster to compute them
- * in polynomial form and convert them afterwards.
+ * The co-efficients of the generator polynomial are left in exponent form
+ * for better encoder performance but note that it is still faster to
+ * compute them in polynomial form and convert them afterwards.
  */
 
 static void generate_poly(struct rs_format_t *rs_format)
@@ -219,19 +223,19 @@ static void generate_poly(struct rs_format_t *rs_format)
  * A reed solomon code consists of the set of polynomials which are all
  * multiples of a given polynomial called the generator polynomial, g(x).
  * The generator polynomial is chosen so as to maximize the distance
- * between code polynomials.  There are many ways to map data polynomials to
- * the set of code polynomials and the "systematic" method is used here.  In
- * this method, the code polynomial is given by
+ * between code polynomials.  There are many ways to map data polynomials
+ * to the set of code polynomials and the "systematic" method is used here.
+ * In this method, the code polynomial is given by
  *
  *                   c(x) = d(x)*x^(n-k) + b(x)
  *
  * where d(x) are the data symbols (as the co-efficients of a k-th degree
- * polynomial) and b(x) are the parity symbols.  The data appears as the high
- * order terms of the code polynomial so no processing is needed to extract
- * the data in the decoder (beyond checking and correcting).  The parity
- * polynomial is simply the remainder d(x)*x^(n-k) mod g(x) so that when
- * added to d(x)*x^(n-k) the result is an exact multiple of g(x) and thus
- * a code polynomial.
+ * polynomial) and b(x) are the parity symbols.  The data appears as the
+ * high order terms of the code polynomial so no processing is needed to
+ * extract the data in the decoder (beyond checking and correcting).  The
+ * parity polynomial is simply the remainder d(x)*x^(n-k) mod g(x) so that
+ * when added to d(x)*x^(n-k) the result is an exact multiple of g(x) and
+ * thus a code polynomial.
  *
  * The code symbols that are returned from this encoder are given with the
  * lowest order term at offset 0 in the array so we have
@@ -243,17 +247,17 @@ static void generate_poly(struct rs_format_t *rs_format)
  *             block[] = { c_0, ..., c_NN }
  *
  * so the parity symbols appear at the bottom of the array.  One must leave
- * enough room for them by having the data start at offset (n-k) in the array.
- * A side benefit of this is that it reminds the programmer that the array must
- * be allocated large enough to hold not only their data but also the parity
- * symbols.
+ * enough room for them by having the data start at offset (n-k) in the
+ * array.  A side benefit of this is that it reminds the programmer that
+ * the array must be allocated large enough to hold not only their data but
+ * also the parity symbols.
  *
- * A reduced Reed-Solomon code word is generated by setting the correct number
- * of high order symbols to zero.  This reduces the operations needed to
- * compute the remainder thus increasing the speed at which reduced
- * block sizes are handled.  These zeroes are implicit in the encoder and
- * decoder so the data array need only be large enough to contain the desired
- * data and parity symbols.
+ * A reduced Reed-Solomon code word is generated by setting the correct
+ * number of high order symbols to zero.  This reduces the operations
+ * needed to compute the remainder thus increasing the speed at which
+ * reduced block sizes are handled.  These zeroes are implicit in the
+ * encoder and decoder so the data array need only be large enough to
+ * contain the desired data and parity symbols.
  *
  * The encoding algorithm is the long division algorithm but where we only
  * care about the remainder.  A shift register is used to keep track of the
@@ -282,8 +286,8 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
 	memset(block, 0, rs_format->parity * sizeof(dtype));
 
 	/*
-	 * At the start of each iteration of the loop, b is the index of the
-	 * shift register used to form the feed-back.
+	 * At the start of each iteration of the loop, b is the index of
+	 * the shift register used to form the feed-back.
 	 */
 
 	b = (rs_format->n - 1) % rs_format->parity;
@@ -306,9 +310,10 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
 			}
 
 		/*
-		 * Argh:  by all rights the following should be faster than the preceding but
-		 * time trials show it to be 5% slower on my PII-400.  I must be missing
-		 * some sort of hardware exploit...
+		 * Argh:  by all rights the following should be faster than
+		 * the preceding but time trials show it to be 5% slower on
+		 * my PII-400.  I must be missing some sort of hardware
+		 * exploit...
 		 *
 		feedback = Log_alpha[block[i] ^ block[b]];
 		if(feedback != INFINITY)
@@ -333,38 +338,38 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
 /*
  * reed_solomon_decode()
  *
- * Decodes the received vector.  If decoding is successful then the corrected
- * code word is written to block[] otherwise the received vector is left
- * unmodified.  The number of symbols corrected is returned or -1 if the code
- * word cannot be corrected.
+ * Decodes the received vector.  If decoding is successful then the
+ * corrected code word is written to block[] otherwise the received vector
+ * is left unmodified.  The number of symbols corrected is returned or -1
+ * if the code word cannot be corrected.
  *
- * There are two types of corrupted symbol.  An incorrect symbol in the vector
- * is called an "error".  If, for some reason, the location of the incorrect
- * symbol is known then it is instead called an "erasure".  A Reed-Solomon code
- * with n-k parity symbols can correct up to and including n-k erasures or
- * (n-k)/2 errors or any combination thereof with each error counting as two
- * erasures.  The number of corrupt bits within a corrupt symbol is
- * irrelevant:  the symbol is either bad or good.
+ * There are two types of corrupted symbol.  An incorrect symbol in the
+ * vector is called an "error".  If, for some reason, the location of the
+ * incorrect symbol is known then it is instead called an "erasure".  A
+ * Reed-Solomon code with n-k parity symbols can correct up to and
+ * including n-k erasures or (n-k)/2 errors or any combination thereof with
+ * each error counting as two erasures.  The number of corrupt bits within
+ * a corrupt symbol is irrelevant:  the symbol is either bad or good.
  *
  * If erasures are known, then their locations are passed to the decoder in
  * the erasure[] array and the number of them is passed in the no_eras
- * parameter.  NOTE:  there must not be duplicates in this array.  If none are
- * known then simply pass NULL for erasure[] and 0 for no_eras.
+ * parameter.  NOTE:  there must not be duplicates in this array.  If none
+ * are known then simply pass NULL for erasure[] and 0 for no_eras.
  *
- * Whether erasures are known or not, if erasure[] is not equal to NULL then
- * the locations of all bad symbols will be written to this array so it must
- * be large enough to store them.
+ * Whether erasures are known or not, if erasure[] is not equal to NULL
+ * then the locations of all bad symbols will be written to this array so
+ * it must be large enough to store them.
  *
- * The bulk of this code has been taken from Phil Karn's decoder implementation
- * but with many minor modifications to things like the directions of for
- * loops, their bounds, etc. all with an eye to performance.  The fundamental
- * algorithm itself, however, has not been changed.  For performance reasons
- * the algorithm is fairly complicated.  In principle it is nothing more than
- * the inversion of an (n-k) x (n-k) matrix but that is an order n^3 operation
- * and one can avoid much of the computations by exploiting symmetries in the
- * matrix.  The algorithms used here are the Berlekamp-Massey algorithm for
- * finding the error locations and the Forney algorithm for finding the error
- * magnitudes.
+ * The bulk of this code has been taken from Phil Karn's decoder
+ * implementation but with many minor modifications to things like the
+ * directions of for loops, their bounds, etc. all with an eye to
+ * performance.  The fundamental algorithm itself, however, has not been
+ * changed.  For performance reasons the algorithm is fairly complicated.
+ * In principle it is nothing more than the inversion of an (n-k) x (n-k)
+ * matrix but that is an order n^3 operation and one can avoid much of the
+ * computations by exploiting symmetries in the matrix.  The algorithms
+ * used here are the Berlekamp-Massey algorithm for finding the error
+ * locations and the Forney algorithm for finding the error magnitudes.
  */
 
 int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
@@ -384,10 +389,11 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 	int  count = 0;                 /* number of roots of lambda */
 
 	/*
-	 * Compute the syndromes by evaluating block(x) at the roots of g(x),
-	 * namely beta^(J0+i), i = 0, ... ,(n-k-1).  When finished, convert
-	 * them to alpha-rep and test for all zero.  If the syndromes are
-	 * all zero, block[] is a codeword and there are no errors to correct.
+	 * Compute the syndromes by evaluating block(x) at the roots of
+	 * g(x), namely beta^(J0+i), i = 0, ... ,(n-k-1).  When finished,
+	 * convert them to alpha-rep and test for all zero.  If the
+	 * syndromes are all zero, block[] is a codeword and there are no
+	 * errors to correct.
 	 */
 
 	for(i = rs_format->parity; i; s[--i] = block[0]);
@@ -411,7 +417,7 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 		{
 		s[i] = INFINITY;
 		if(--i < 0)
-			goto finish;
+			return(0);
 		}
 	for(; i >= 0; i--)
 		s[i] = Log_alpha[s[i]];
@@ -438,8 +444,8 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 
 	/*
 	 * Berlekamp-Massey algorithm to determine error+erasure locator
-	 * polynomial.  See Blahut, R., Theory and Practice of Error Control
-	 * Codes, section 7.5.
+	 * polynomial.  See Blahut, R., Theory and Practice of Error
+	 * Control Codes, section 7.5.
 	 */
 
 	for(i = rs_format->parity; i > deg_lambda; i--)
@@ -504,12 +510,13 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 		lambda[i] = Log_alpha[lambda[i]];
 
 	/*
-	 * Find roots of the error & erasure locator polynomial by Chien search
-	 * (i.e. trial and error).  At each iteration, i, the j-th component of
-	 * temp[] contains the j-th coefficient of lambda multiplied by
-	 * alpha^(i*j).  We get components of temp[] for the next iteration by
-	 * multiplying each by alpha^j.  Note that the 0-th coefficient of
-	 * lambda is always 1 so we can handle it explicitly.
+	 * Find roots of the error & erasure locator polynomial by Chien
+	 * search (i.e. trial and error).  At each iteration, i, the j-th
+	 * component of temp[] contains the j-th coefficient of lambda
+	 * multiplied by alpha^(i*j).  We get components of temp[] for the
+	 * next iteration by multiplying each by alpha^j.  Note that the
+	 * 0-th coefficient of lambda is always 1 so we can handle it
+	 * explicitly.
 	 */
 
 	memcpy(&temp[1], &lambda[1], deg_lambda * sizeof(gf));
@@ -528,17 +535,14 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 			continue;
 
 		/*
-		 * Store root and error location number.  If we've found as many
-		 * roots as lambda(x) has then abort to save time.
+		 * Store root and error location number.  If we've found as
+		 * many roots as lambda(x) has then abort to save time.
 		 */
 
 		root[count] = i;
 		loc[count] = k;
 		if(loc[count] >= rs_format->n)
-			{
-			count = -1;
-			goto finish;
-			}
+			return(-1);
 		if(++count == deg_lambda)
 			break;
 		}
@@ -548,10 +552,7 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 	 */
 
 	if(deg_lambda != count)
-		{
-		count = -1;
-		goto finish;
-		}
+		return(-1);
 
 	/*
 	 * Compute error & erasure evaluator poly omega(x) = s(x)*lambda(x)
@@ -570,9 +571,9 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 		}
   
 	/*
-	 * Forney algorithm for computing error magnitudes.  If X_l^-1 is the
-	 * l-th root of lambda (X_l is the l-th error location) then Y_l, the
-	 * magnitude of the l-th error, is given  by
+	 * Forney algorithm for computing error magnitudes.  If X_l^-1 is
+	 * the l-th root of lambda (X_l is the l-th error location) then
+	 * Y_l, the magnitude of the l-th error, is given  by
 	 *
 	 *                            omega(X_l^-1)
 	 *              Y_l = - ------------------------
@@ -592,18 +593,15 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 			if(lambda[i+1] != INFINITY)
 				den ^= Alpha_exp[modNN(lambda[i+1] + i * root[j])];
 		if(den == 0)
-			{
-			count = -1;
-			goto finish;
-			}
+			return(-1);
     
 		num = 0;
-		for(i = deg_omega; i >= 0; i--)
+		for(i = deg_omega, tmp = deg_omega * root[j]; i >= 0; i--, tmp -= root[j])
 			if(omega[i] != INFINITY)
-				num ^= Alpha_exp[modNN(omega[i] + i * root[j])];
+				num ^= Alpha_exp[modNN(omega[i] + tmp)];
 		if(num == 0)
 			continue;
-		num = Log_alpha[num] + root[j] * (J0-1);
+		num = Log_alpha[num] + (J0-1) * root[j];
 
 		/* Apply error to block */
 		block[loc[j]] ^= Alpha_exp[modNN(num + NN - Log_alpha[den])];
@@ -611,8 +609,6 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 
 	if(erasure != NULL)
 		memcpy(erasure, loc, count * sizeof(gf));
-
-	finish:
 	return(count);
 }
 
@@ -620,12 +616,12 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 /*
  * Encoder/decoder initialization --- call this first!
  *
- * If you want to select your own field generator polynomial, edit that here.
- * I've chosen to put the numbers in octal format because I find it easier to
- * see the bit patterns than with either hexadecimal or decimal formats.
- * Symbol sizes larger than 16 bits begin to require prohibitively large
- * multiplication look-up tables.  If additional field generators are added
- * be sure to edit the range check for MM in rs.h
+ * If you want to select your own field generator polynomial, edit that
+ * here.  I've chosen to put the numbers in octal format because I find it
+ * easier to see the bit patterns than with either hexadecimal or decimal
+ * formats.  Symbol sizes larger than 16 bits begin to require
+ * prohibitively large multiplication look-up tables.  If additional field
+ * generators are added be sure to edit the range check for MM in rs.h
  */
 
 int reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_format)

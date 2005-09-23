@@ -1,4 +1,34 @@
-0.4 ()
+0.5 (2000/10/25)
+	Implemented an internal sector buffer.  Previously sectors were
+	processed in place in the DMA buffer.  I had believed this was
+	workable but it now seems that this makes the reliable handling of
+	overruns too complicated.  Sectors are now processed in a seperate
+	buffer which is transfered to/from the DMA buffer as a whole.  This
+	extra copying of data introduces a small increase in the processing
+	overhead.
+
+	Added mandatory DMA buffer offset updates if a maximum update delay
+	has been exceeded.  I hope that between this and the new sector
+	buffer we will handle underflows during writing perfectly
+	gracefully.  Preliminary tests look great!  I can force horrible
+	buffer underflows during writing by using tar to write directly to
+	the device while using bzip2 for compression.  By selecting a small
+	block size I can generate many frequent underflows and so far I've
+	been able to recover the data without any problems (knock on wood).
+
+	Changed the bkrstatus structure.  Any applications retrieving this
+	structure via an ioctl must be updated.
+
+	Fixed a bug in the fame error checker:  the maximum search length
+	allowed when finding the next key neglected to allow for the
+	additional line in odd video fields.
+
+	Minor performance enhancement to the Reed-Solomon decoding
+	algorithm.
+
+	Assorted code clean ups.
+
+0.4 (2000/10/20)
 	Fixed a bug in the sector locator algorithm which could cause the
 	decoder to skip ahead of the incoming tape data.
 

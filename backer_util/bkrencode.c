@@ -148,8 +148,7 @@ int main(int argc, char *argv[])
 			}
 
 	/*
-	 * Do more setup stuff and since we're actually using the tail of the
-	 * buffer ourselves we need to do something a little different with it.
+	 * Do more setup stuff.
 	 */
 
 	if(config.mode == -1)

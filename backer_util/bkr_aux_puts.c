@@ -40,6 +40,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <ctype.h>	/* for toupper() */
 #include <string.h>
 #include "backer.h"
 #include "bkrfont.xpm"
@@ -90,7 +91,7 @@ int bkr_aux_puts(const char *s, char *aux, struct bkrformat *format)
 			{
 			if((s[bit/FWIDTH] < ' ') || (s[bit/FWIDTH] > '~'))
 				continue;
-			if(font_xpm[line+4][(s[bit/FWIDTH] - ' ')*FWIDTH + bit%FWIDTH] == '+')
+			if(bkrfont_xpm[line+4][(toupper(s[bit/FWIDTH]) - ' ')*FWIDTH + bit%FWIDTH] == '+')
 				aux[line*format->bytes_per_line + bit/8 - skipped] |= 0x80 >> bit%8;
 			}
 

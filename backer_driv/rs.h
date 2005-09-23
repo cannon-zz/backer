@@ -16,9 +16,9 @@
 
 /*
  * Set MAX_PARITY to be the maximum allowed number of parity symbols in
- * each block.  The actual number is determined by the parameters passed
- * to the init function but some arrays need to be pre-allocated by the
- * code and this is used to set them to some reasonable size.  Dynamically
+ * each block.  The actual number is determined by the parameters passed to
+ * the init function but some arrays need to be pre-allocated by the code
+ * and this is used to set them to some reasonable size.  Dynamically
  * allocating the arrays would slow down the encoder/decoder and most
  * applications can specify a limit so this shouldn't be a problem.
  */
@@ -27,14 +27,14 @@
 
 /*
  * Set LOG_BETA to the power of alpha used to generate the roots of the
- * generator polynomial and set J0 to the power of beta to be used as the first
- * root.  The generator polynomial will then have roots
+ * generator polynomial and set J0 to the power of beta to be used as the
+ * first root.  The generator polynomial will then have roots
  *
  *    beta^J0, beta^(J0+1), beta^(J0+2), ..., beta^(J0+2t-1)
  *
- * where beta = alpha^LOG_BETA and 2t is the number of parity symbols in the
- * code.  A conventional Reed-Solomon encoder is selected by setting J0 = 1,
- * LOG_BETA = 1.
+ * where beta = alpha^LOG_BETA and 2t is the number of parity symbols in
+ * the code.  A conventional Reed-Solomon encoder is selected by setting J0
+ * = 1, LOG_BETA = 1.
  */
 
 #define J0        1
@@ -43,10 +43,10 @@
 /*
  * NN is the number of non-zero symbols in the Galois Field.  This is also
  * the maximum number of symbols which can be used to form a code word.
- * Actually all code words have exactly this many symbols but shortened codes
- * can be formed with fewer than this by padding them with zeros for
- * encoding and decoding.  This parameter is determined by the symbol size so
- * don't edit it.
+ * Actually all code words have exactly this many symbols but shortened
+ * codes can be formed with fewer than this by padding them with zeros for
+ * encoding and decoding.  This parameter is determined by the symbol size
+ * so don't edit it.
  */
 
 #define	NN  ((1 << MM) - 1)
@@ -85,9 +85,9 @@ struct  rs_format_t
  * Reed-Solomon encoder/decoder initialization routine.
  *
  * Must be called before the encoder or decoder are called.  The code
- * parameters are used to initialize a format structure.  Checking is done on
- * the parameters and the return value is < 0 if they are invalid and the
- * format structure is unchanged otherwise 0 is returned.
+ * parameters are used to initialize a format structure.  Checking is done
+ * on the parameters and the return value is < 0 if they are invalid and
+ * the format structure is unchanged otherwise 0 is returned.
  *
  * Parameters for rs_init():
  *   n
@@ -107,9 +107,9 @@ int   reed_solomon_init(unsigned int n, unsigned int k, struct rs_format_t *rs_f
 /*
  * Reed-Solomon encoder
  *
- * The data symbols to be encoded are passed to the encoder in block[].  The
- * computed parity symbols are placed at the start of the block so enough room
- * must have been set aside for them.
+ * The data symbols to be encoded are passed to the encoder in block[].
+ * The computed parity symbols are placed at the start of the block so
+ * enough room must have been set aside for them.
  */
 
 void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format);
@@ -117,13 +117,13 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format);
 /*
  * Reed-Solomon erasures-and-errors decoding
  *
- * The received vector goes into block[], and a list of zero-origin
- * erasure positions, if any, goes in erasure[] with a count in no_eras.
- * Pass NULL for eras_pos and 0 for no_eras if no erasures are known.  The
- * block format is passed as a pointer to an rs_format_t structure.
+ * The received vector goes into block[], and a list of zero-origin erasure
+ * positions, if any, goes in erasure[] with a count in no_eras.  Pass NULL
+ * for eras_pos and 0 for no_eras if no erasures are known.  The block
+ * format is passed as a pointer to an rs_format_t structure.
  *
- * The decoder corrects the symbols in place (if possible) and returns
- * the number of corrected symbols. If the codeword is illegal or
+ * The decoder corrects the symbols in place (if possible) and returns the
+ * number of corrected symbols. If the codeword is illegal or
  * uncorrectible, the block[] array is unchanged and -1 is returned
  *
  * If erasure[] is non-NULL, it will be filled with the computed error and

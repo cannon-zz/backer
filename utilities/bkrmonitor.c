@@ -3,7 +3,7 @@
  *
  * Graphical display of Backer device driver status.
  *
- * Copyright (C) 2000,2001  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,200 +20,214 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <gtk/gtk.h>
 
-#include "backer.h"
+#include <backer.h>
+#include <bkr_proc_io.h>
 
 
 #define  PROGRAM_NAME    "bkrmonitor"
 #define  DEFAULT_UPDATE  100                    /* milliseconds */
 #define  MIN_UPDATE      20                     /* milliseconds */
 #define  DECAY_INTERVAL  60                     /* sectors */
+#define	 WIDGET_SPACING  7                      /* pixels */
+#define  PROC_DIR        "/proc/sys/dev/backer"
 
 #define  __STRINGIFY(x)  #x
 #define  STRINGIFY(x)    __STRINGIFY(x)
 
-
-/*
- * Function prototypes
- */
-
-gint  update_status(gpointer);
-void  read_proc(FILE *);
-
+struct unit_t {
+	FILE  *file;
+	struct {
+		GtkWidget  *state;
+		GtkWidget  *vmode, *density, *format;
+		GtkWidget  *sector;
+		GtkWidget  *total;
+		GtkWidget  *symbol, *sectors, *sector_runs, *frame, *underrun;
+		GtkWidget  *worst, *best, *smallest, *largest;
+		GtkWidget  *buffer_status;
+	} widget;
+	struct {
+		GtkWidget  *widget;
+		int  rate;
+		int  last_sector;
+	} error_rate;
+};
 
 /*
  * Global data
  */
 
-FILE  *procfile = NULL;
-int  update_interval = DEFAULT_UPDATE;
-int  monitor_device = 0;
-struct
-	{
-	GtkWidget  *state;
-	GtkWidget  *vmode, *density, *format;
-	GtkWidget  *sector;
-	GtkWidget  *total;
-	GtkWidget  *symbol, *block, *frame, *overrun, *underrun;
-	GtkWidget  *worst, *best, *smallest, *largest;
-	GtkWidget  *buffer_status;
-	} widgets;
-struct
-	{
-	GtkWidget  *widget;
-	int  rate;
-	int  last_block;
-	} error_rate;
-struct
-	{
-	char  state[sizeof("suspended")];
-	unsigned int  mode;
-	int  sector_number;
-	unsigned int  total_errors;
-	unsigned int  worst_block;
-	unsigned int  parity;
-	unsigned int  recent_block;
-	unsigned int  bad_blocks;
-	unsigned int  frame_errors;
-	unsigned int  overrun_errors;
-	unsigned int  underrun_errors;
-	unsigned int  worst_key;
-	unsigned int  max_key_weight;
-	unsigned int  best_nonkey;
-	unsigned int  smallest_field;
-	unsigned int  largest_field;
-	unsigned int  bytes_in_buffer;
-	unsigned int  buffer_size;
-	} proc_data;
+static int  update_interval = DEFAULT_UPDATE;
 
 
 /*
- * Entry point
+ * Update the contents of a unit's notebook page.
  */
 
-int main(int argc, char *argv[])
+gint update_status(gpointer data)
 {
-	int  i;
-	char  message[50];
-	GtkWidget  *window;
+	struct unit_t  *unit = (struct unit_t *) data;
+	struct bkr_proc_status_t  proc_status;
+	char  text[20];
+
+	if(bkr_proc_read_status(unit->file, &proc_status) < 0)
+		return(TRUE);
+
+	gtk_label_set_text(GTK_LABEL(unit->widget.state), proc_status.state);
+
+	switch(BKR_VIDEOMODE(proc_status.mode)) {
+		case BKR_NTSC:
+		gtk_label_set_text(GTK_LABEL(unit->widget.vmode), "NTSC");
+		break;
+
+		case BKR_PAL:
+		gtk_label_set_text(GTK_LABEL(unit->widget.vmode), "PAL");
+		break;
+
+		default:
+		gtk_label_set_text(GTK_LABEL(unit->widget.vmode), "???");
+		break;
+	}
+
+	switch(BKR_DENSITY(proc_status.mode)) {
+		case BKR_HIGH:
+		gtk_label_set_text(GTK_LABEL(unit->widget.density), "HIGH");
+		break;
+
+		case BKR_LOW:
+		gtk_label_set_text(GTK_LABEL(unit->widget.density), "LOW");
+		break;
+
+		default:
+		gtk_label_set_text(GTK_LABEL(unit->widget.vmode), "???");
+		break;
+	}
+
+	switch(BKR_CODEC(proc_status.mode)) {
+		case BKR_RAW:
+		gtk_label_set_text(GTK_LABEL(unit->widget.format), "RAW");
+		break;
+
+		case BKR_SP:
+		gtk_label_set_text(GTK_LABEL(unit->widget.format), "SP/LP");
+		break;
+
+		case BKR_EP:
+		gtk_label_set_text(GTK_LABEL(unit->widget.format), "EP");
+		break;
+
+		default:
+		gtk_label_set_text(GTK_LABEL(unit->widget.vmode), "???");
+		break;
+	}
+
+	gtk_progress_configure(GTK_PROGRESS(unit->error_rate.widget), 0, 0, proc_status.parity/2*DECAY_INTERVAL);
+	gtk_progress_configure(GTK_PROGRESS(unit->widget.buffer_status), 0, 0, proc_status.buffer_size);
+
+	proc_status.recent_block *= DECAY_INTERVAL;
+	if(proc_status.recent_block > unit->error_rate.rate)
+		unit->error_rate.rate = proc_status.recent_block;
+	else if(unit->error_rate.rate > 0) {
+		unit->error_rate.rate -= proc_status.sector_number - unit->error_rate.last_sector;
+		if(unit->error_rate.rate < 0)
+			unit->error_rate.rate = 0;
+	}
+	unit->error_rate.last_sector = proc_status.sector_number;
+
+	gtk_progress_set_value(GTK_PROGRESS(unit->error_rate.widget), unit->error_rate.rate);
+	gtk_progress_set_value(GTK_PROGRESS(unit->widget.buffer_status), proc_status.bytes_in_buffer);
+
+	sprintf(text, "%+010d", proc_status.sector_number);
+	gtk_label_set_text(GTK_LABEL(unit->widget.sector), text);
+
+	sprintf(text, "%u", proc_status.total_errors);
+	gtk_label_set_text(GTK_LABEL(unit->widget.total), text);
+
+	sprintf(text, "%u of %u", proc_status.worst_block, proc_status.parity/2);
+	gtk_label_set_text(GTK_LABEL(unit->widget.symbol), text);
+
+	sprintf(text, "%u", proc_status.bad_sectors);
+	gtk_label_set_text(GTK_LABEL(unit->widget.sectors), text);
+
+	sprintf(text, "%u", proc_status.bad_sector_runs);
+	gtk_label_set_text(GTK_LABEL(unit->widget.sector_runs), text);
+
+	sprintf(text, "%u", proc_status.frame_errors);
+	gtk_label_set_text(GTK_LABEL(unit->widget.frame), text);
+
+	sprintf(text, "%u", proc_status.underrun_errors);
+	gtk_label_set_text(GTK_LABEL(unit->widget.underrun), text);
+
+	sprintf(text, "%3u/%-3u", proc_status.worst_key, proc_status.max_key_weight);
+	gtk_label_set_text(GTK_LABEL(unit->widget.worst), text);
+
+	sprintf(text, "%3u/%-3u", proc_status.best_nonkey, proc_status.max_key_weight);
+	gtk_label_set_text(GTK_LABEL(unit->widget.best), text);
+
+	sprintf(text, "%u", proc_status.smallest_field);
+	gtk_label_set_text(GTK_LABEL(unit->widget.smallest), text);
+
+	sprintf(text, "%u", proc_status.largest_field);
+	gtk_label_set_text(GTK_LABEL(unit->widget.largest), text);
+
+	return(TRUE);
+}
+
+
+/*
+ * Generate the contents of a unit's notebook page.
+ */
+
+GtkWidget *create_unit_page(struct unit_t *unit)
+{
 	GtkWidget  *vbox, *hbox;
 	GtkWidget  *table;
 	GtkWidget  *widget;
 
-	/*
-	 * Parse command line.
-	 */
+	unit->error_rate.rate = 0;
+	unit->error_rate.last_sector = 0;
 
-	gtk_init(&argc, &argv);
-	while((i = getopt(argc, argv, "d:ht:")) != EOF)
-		switch(i)
-			{
-			case 'd':
-			if(!strcmp(optarg, "stdin"))
-				{
-				procfile = stdin;
-				monitor_device = -1;
-				}
-			else
-				{
-				procfile = NULL;
-				monitor_device = atoi(optarg);
-				}
-			break;
-
-			case 't':
-			update_interval = atoi(optarg);
-			break;
-
-			case 'h':
-			default:
-			puts(
-	"Usage:  " PROGRAM_NAME " [options]\n" \
-	"the following options are recognized:\n" \
-	"	-d num      Monitor device number num (default 0, \"stdin\" = stdin)\n" \
-	"	-t num      Set the update interval to num milliseconds\n" \
-	"	-h          Display usage");
-			exit(1);
-			}
-	if(update_interval < MIN_UPDATE)
-		update_interval = MIN_UPDATE;
-
-	/*
-	 * Open proc file and get initial data.
-	 */
-
-	if(monitor_device >= 0)
-		{
-		sprintf(message, PROGRAM_NAME ": /proc/sys/dev/backer/%u/status", monitor_device);
-		procfile = fopen(message + sizeof(PROGRAM_NAME ":"), "r");
-		if(procfile == NULL)
-			{
-			perror(message);
-			exit(1);
-			}
-		read_proc(procfile);
-		}
-
-	/*
-	 * Create the program's window
-	 */
-
-	/* window */
-
-	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_policy(GTK_WINDOW(window), FALSE, FALSE, TRUE);
-	if(monitor_device >= 0)
-		sprintf(message, "Backer Monitor (Unit %u)", monitor_device);
-	else
-		sprintf(message, "Backer Monitor (stdin)");
-	gtk_window_set_title(GTK_WINDOW(window), message);
-	gtk_container_set_border_width(GTK_CONTAINER(window), 7);
-	gtk_signal_connect(GTK_OBJECT(window), "destroy", GTK_SIGNAL_FUNC(gtk_exit), NULL);
-	gtk_signal_connect(GTK_OBJECT(window), "delete_event", GTK_SIGNAL_FUNC(gtk_exit), NULL);
-
-	vbox = gtk_vbox_new(FALSE, 10);
-	gtk_container_add(GTK_CONTAINER(window), vbox);
+	vbox = gtk_vbox_new(FALSE, WIDGET_SPACING);
+	gtk_container_set_border_width(GTK_CONTAINER(vbox), WIDGET_SPACING);
 
 	/* Mode indicators */
 
-	hbox = gtk_hbox_new(TRUE, 0);
+	widget = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
+	gtk_box_pack_start(GTK_BOX(vbox), widget, TRUE, TRUE, 0);
+
+	unit->widget.state = gtk_label_new("???");
+	gtk_container_add(GTK_CONTAINER(widget), unit->widget.state);
+
+	hbox = gtk_hbox_new(TRUE, WIDGET_SPACING);
 	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
 	widget = gtk_frame_new(NULL);
 	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
 	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
 
-	widgets.state = gtk_label_new(NULL);
-	gtk_container_add(GTK_CONTAINER(widget), widgets.state);
-
-	hbox = gtk_hbox_new(TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
+	unit->widget.vmode = gtk_label_new("???");
+	gtk_container_add(GTK_CONTAINER(widget), unit->widget.vmode);
 
 	widget = gtk_frame_new(NULL);
 	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
 	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
 
-	widgets.vmode = gtk_label_new(NULL);
-	gtk_container_add(GTK_CONTAINER(widget), widgets.vmode);
+	unit->widget.density = gtk_label_new("???");
+	gtk_container_add(GTK_CONTAINER(widget), unit->widget.density);
 
 	widget = gtk_frame_new(NULL);
 	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
 	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
 
-	widgets.density = gtk_label_new(NULL);
-	gtk_container_add(GTK_CONTAINER(widget), widgets.density);
-
-	widget = gtk_frame_new(NULL);
-	gtk_frame_set_shadow_type(GTK_FRAME(widget), GTK_SHADOW_IN);
-	gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
-
-	widgets.format = gtk_label_new(NULL);
-	gtk_container_add(GTK_CONTAINER(widget), widgets.format);
+	unit->widget.format = gtk_label_new("???");
+	gtk_container_add(GTK_CONTAINER(widget), unit->widget.format);
 
 	/* Error counts */
 
@@ -226,35 +240,35 @@ int main(int argc, char *argv[])
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 	widget = gtk_label_new("Errors in Worst Block");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 2, 3);
-	widget = gtk_label_new("Uncorrectable Blocks");
+	widget = gtk_label_new("Bad Sectors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
-	widget = gtk_label_new("Framing Errors");
+	widget = gtk_label_new("Bad Sector Runs");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 4, 5);
-	widget = gtk_label_new("Over-run Errors");
+	widget = gtk_label_new("Framing Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 5, 6);
 	widget = gtk_label_new("Under-runs");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 6, 7);
 
-	widgets.sector = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sector, 1, 2, 0, 1);
+	unit->widget.sector = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.sector, 1, 2, 0, 1);
 
-	widgets.total = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.total, 1, 2, 1, 2);
+	unit->widget.total = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.total, 1, 2, 1, 2);
 
-	widgets.symbol = gtk_label_new("0 of 0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 2, 3);
+	unit->widget.symbol = gtk_label_new("0 of 0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.symbol, 1, 2, 2, 3);
 
-	widgets.block = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.block, 1, 2, 3, 4);
+	unit->widget.sectors = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.sectors, 1, 2, 3, 4);
 
-	widgets.frame = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.frame, 1, 2, 4, 5);
+	unit->widget.sector_runs = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.sector_runs, 1, 2, 4, 5);
 
-	widgets.overrun = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 5, 6);
+	unit->widget.frame = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.frame, 1, 2, 5, 6);
 
-	widgets.underrun = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underrun, 1, 2, 6, 7);
+	unit->widget.underrun = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.underrun, 1, 2, 6, 7);
 
 	/* Health information */
 
@@ -270,17 +284,17 @@ int main(int argc, char *argv[])
 	widget = gtk_label_new("Largest Video Field");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
 
-	widgets.worst = gtk_label_new("  0/???");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.worst, 1, 2, 0, 1);
+	unit->widget.worst = gtk_label_new("  0/???");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.worst, 1, 2, 0, 1);
 
-	widgets.best = gtk_label_new("  0/???");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.best, 1, 2, 1, 2);
+	unit->widget.best = gtk_label_new("  0/???");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.best, 1, 2, 1, 2);
 
-	widgets.smallest = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.smallest, 1, 2, 2, 3);
+	unit->widget.smallest = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.smallest, 1, 2, 2, 3);
 
-	widgets.largest = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.largest, 1, 2, 3, 4);
+	unit->widget.largest = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.largest, 1, 2, 3, 4);
 
 	/* Errors and I/O buffer bar graphs */
 
@@ -294,10 +308,102 @@ int main(int argc, char *argv[])
 	widget = gtk_label_new("I/O Buffer");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
 
-	error_rate.widget = gtk_progress_bar_new();
-	gtk_table_attach_defaults(GTK_TABLE(table), error_rate.widget, 1, 2, 0, 1);
-	widgets.buffer_status = gtk_progress_bar_new();
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.buffer_status, 1, 2, 1, 2);
+	unit->error_rate.widget = gtk_progress_bar_new();
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->error_rate.widget, 1, 2, 0, 1);
+	unit->widget.buffer_status = gtk_progress_bar_new();
+	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.buffer_status, 1, 2, 1, 2);
+
+	return(vbox);
+}
+
+
+/*
+ * Handle unit page changes.
+ */
+
+gint switch_page(GtkNotebook *notebook, GtkNotebookPage *page, gint page_num, gpointer data)
+{
+	struct unit_t  *unit = (struct unit_t *) data;
+	static int  handle = 0;
+
+	if(handle)
+		gtk_timeout_remove(handle);
+
+	handle = gtk_timeout_add(update_interval, update_status, &unit[page_num]);
+
+	return(TRUE);
+}
+
+
+/*
+ * Entry point
+ */
+
+int main(int argc, char *argv[])
+{
+	int  i;
+	char  *include_file = NULL;
+	char  message[50];
+	struct unit_t  *unit = NULL;
+	GtkWidget  *window;
+	GtkWidget  *notebook;
+	GtkWidget  *vbox;
+	GtkWidget  *widget;
+	DIR  *dir;
+	struct dirent  *dirent;
+
+	/*
+	 * Parse command line.
+	 */
+
+	gtk_init(&argc, &argv);
+	while((i = getopt(argc, argv, "f::ht:")) != EOF)
+		switch(i) {
+			case 'f':
+			if(optarg)
+				include_file = optarg;
+			else
+				include_file = "";
+			break;
+
+			case 't':
+			update_interval = atoi(optarg);
+			break;
+
+			case 'h':
+			default:
+			fputs(
+	"Usage:  " PROGRAM_NAME " [options]\n" \
+	"the following options are recognized:\n" \
+	"	-f[file] Also read status input from file (default = stdin)\n" \
+	"	-t num   Set the update interval to num milliseconds\n" \
+	"	-h       Display this usage message\n", stderr);
+			exit(1);
+		}
+	if(update_interval < MIN_UPDATE)
+		update_interval = MIN_UPDATE;
+
+	/*
+	 * Create the program's window
+	 */
+
+	/* window */
+
+	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_policy(GTK_WINDOW(window), FALSE, FALSE, TRUE);
+	gtk_window_set_title(GTK_WINDOW(window), "Backer Monitor");
+	gtk_container_set_border_width(GTK_CONTAINER(window), WIDGET_SPACING);
+	gtk_signal_connect(GTK_OBJECT(window), "destroy", GTK_SIGNAL_FUNC(gtk_exit), NULL);
+	gtk_signal_connect(GTK_OBJECT(window), "delete_event", GTK_SIGNAL_FUNC(gtk_exit), NULL);
+
+	vbox = gtk_vbox_new(FALSE, WIDGET_SPACING);
+	gtk_container_add(GTK_CONTAINER(window), vbox);
+
+	/* Notebook */
+
+	notebook = gtk_notebook_new();
+	gtk_notebook_set_tab_pos(GTK_NOTEBOOK(notebook), GTK_POS_TOP);
+	gtk_box_pack_start(GTK_BOX(vbox), notebook, TRUE, TRUE, 0);
 
 	/* Close button */
 
@@ -305,180 +411,62 @@ int main(int argc, char *argv[])
 	gtk_box_pack_start(GTK_BOX(vbox), widget, TRUE, TRUE, 0);
 	gtk_signal_connect(GTK_OBJECT(widget), "clicked", GTK_SIGNAL_FUNC(gtk_exit), NULL);
 
-	/* Done */
+	/*
+	 * Scan for units and create a page for each.
+	 */
 
-	gtk_widget_show_all(window);
+	i = 0;
+	dir = opendir(PROC_DIR);
+	if(dir) {
+		readdir(dir); readdir(dir);	/* skip "." and ".." */
+		for(i = 0; (dirent = readdir(dir)); ) {
+			sprintf(message, PROC_DIR"/%s/status", dirent->d_name);
+			unit = realloc(unit, (i + 1) * sizeof(*unit));
+			unit[i].file = fopen(message, "r");
+			if(!unit[i].file) {
+				unit = realloc(unit, i * sizeof(*unit));
+				continue;
+			}
+			sprintf(message, "Unit %s", dirent->d_name);
+			widget = create_unit_page(&unit[i]);
+			gtk_notebook_append_page(GTK_NOTEBOOK(notebook), widget, gtk_label_new(message));
+			i++;
+		}
+		closedir(dir);
+	}
 
+	if(include_file) {
+		unit = realloc(unit, (i + 1) * sizeof(*unit));
+		if(include_file[0]) {
+			unit[i].file = fopen(include_file, "r");
+			sprintf(message, "%s", include_file);
+		} else {
+			unit[i].file = stdin;
+			sprintf(message, "stdin");
+		}
+		if(unit[i].file) {
+			widget = create_unit_page(&unit[i]);
+			gtk_notebook_append_page(GTK_NOTEBOOK(notebook), widget, gtk_label_new(message));
+			i++;
+		} else {
+			fprintf(stderr, PROGRAM_NAME ": unable to open %s\n", message);
+			unit = realloc(unit, i * sizeof(*unit));
+		}
+	}
+
+	if(!i) {
+		sprintf(message, "No units found in " PROC_DIR);
+		widget = gtk_label_new(message);
+		gtk_notebook_append_page(GTK_NOTEBOOK(notebook), widget, gtk_label_new("Error"));
+	} else
+		gtk_signal_connect(GTK_OBJECT(notebook), "switch-page", GTK_SIGNAL_FUNC(switch_page), unit);
 
 	/*
 	 * And away we go...
 	 */
 
-	error_rate.rate = 0;
-	error_rate.last_block = 0;
-
-	gtk_timeout_add(update_interval, update_status, NULL);
-
+	gtk_widget_show_all(window);
 	gtk_main();
-
 	exit(0);
 }
 
-
-/*
- * Status update call-back function
- */
-
-gint update_status(gpointer data)
-{
-	char  text[20];
-
-	read_proc(procfile);
-
-	gtk_label_set_text(GTK_LABEL(widgets.state), proc_data.state);
-
-	switch(BKR_VIDEOMODE(proc_data.mode))
-		{
-		case BKR_NTSC:
-		gtk_label_set_text(GTK_LABEL(widgets.vmode), "NTSC");
-		break;
-
-		case BKR_PAL:
-		gtk_label_set_text(GTK_LABEL(widgets.vmode), "PAL");
-		break;
-
-		default:
-		gtk_label_set_text(GTK_LABEL(widgets.vmode), "???");
-		break;
-		}
-
-	switch(BKR_DENSITY(proc_data.mode))
-		{
-		case BKR_HIGH:
-		gtk_label_set_text(GTK_LABEL(widgets.density), "HIGH");
-		break;
-
-		case BKR_LOW:
-		gtk_label_set_text(GTK_LABEL(widgets.density), "LOW");
-		break;
-
-		default:
-		gtk_label_set_text(GTK_LABEL(widgets.vmode), "???");
-		break;
-		}
-
-	switch(BKR_FORMAT(proc_data.mode))
-		{
-		case BKR_RAW:
-		gtk_label_set_text(GTK_LABEL(widgets.format), "RAW");
-		break;
-
-		case BKR_SP:
-		gtk_label_set_text(GTK_LABEL(widgets.format), "SP/LP");
-		break;
-
-		case BKR_EP:
-		gtk_label_set_text(GTK_LABEL(widgets.format), "EP");
-		break;
-
-		default:
-		gtk_label_set_text(GTK_LABEL(widgets.vmode), "???");
-		break;
-		}
-
-	gtk_progress_configure(GTK_PROGRESS(error_rate.widget), 0, 0, proc_data.parity/2*DECAY_INTERVAL);
-	gtk_progress_configure(GTK_PROGRESS(widgets.buffer_status), 0, 0, proc_data.buffer_size);
-
-	proc_data.recent_block *= DECAY_INTERVAL;
-	if(proc_data.recent_block > error_rate.rate)
-		error_rate.rate = proc_data.recent_block;
-	else if(error_rate.rate > 0)
-		{
-		error_rate.rate -= proc_data.sector_number - error_rate.last_block;
-		if(error_rate.rate < 0)
-			error_rate.rate = 0;
-		}
-	error_rate.last_block = proc_data.sector_number;
-
-	gtk_progress_set_value(GTK_PROGRESS(error_rate.widget), error_rate.rate);
-	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), proc_data.bytes_in_buffer);
-
-	sprintf(text, "%+09d", proc_data.sector_number);
-	gtk_label_set_text(GTK_LABEL(widgets.sector), text);
-
-	sprintf(text, "%u", proc_data.total_errors);
-	gtk_label_set_text(GTK_LABEL(widgets.total), text);
-
-	sprintf(text, "%u of %u", proc_data.worst_block, proc_data.parity/2);
-	gtk_label_set_text(GTK_LABEL(widgets.symbol), text);
-
-	sprintf(text, "%u", proc_data.bad_blocks);
-	gtk_label_set_text(GTK_LABEL(widgets.block), text);
-
-	sprintf(text, "%u", proc_data.frame_errors);
-	gtk_label_set_text(GTK_LABEL(widgets.frame), text);
-
-	sprintf(text, "%u", proc_data.overrun_errors);
-	gtk_label_set_text(GTK_LABEL(widgets.overrun), text);
-
-	sprintf(text, "%u", proc_data.underrun_errors);
-	gtk_label_set_text(GTK_LABEL(widgets.underrun), text);
-
-	sprintf(text, "%3u/%-3u", proc_data.worst_key, proc_data.max_key_weight);
-	gtk_label_set_text(GTK_LABEL(widgets.worst), text);
-
-	sprintf(text, "%3u/%-3u", proc_data.best_nonkey, proc_data.max_key_weight);
-	gtk_label_set_text(GTK_LABEL(widgets.best), text);
-
-	sprintf(text, "%u", proc_data.smallest_field);
-	gtk_label_set_text(GTK_LABEL(widgets.smallest), text);
-
-	sprintf(text, "%u", proc_data.largest_field);
-	gtk_label_set_text(GTK_LABEL(widgets.largest), text);
-
-	return(TRUE);
-}
-
-
-/*
- * read_proc()
- *
- * Parse the contents of the /proc file.
- */
-
-void read_proc(FILE *file)
-{
-	fscanf(file, "%*17c%s\n"
-	             "%*17c%u\n"
-	             "%*17c%d\n"
-	             "%*17c%u\n"
-	             "%*17c%u / %u\n"
-	             "%*17c%u\n"
-	             "%*17c%u\n"
-	             "%*17c%u\n"
-	             "%*17c%u\n"
-	             "%*17c%u\n"
-	             "%*17c%u / %u\n"
-	             "%*17c%u\n"
-	             "%*17c%u\n"
-	             "%*17c%u\n"
-	             "%*17c%u / %u\n",
-	       proc_data.state,
-	       &proc_data.mode,
-	       &proc_data.sector_number,
-	       &proc_data.total_errors,
-	       &proc_data.worst_block, &proc_data.parity,
-	       &proc_data.recent_block,
-	       &proc_data.bad_blocks,
-	       &proc_data.frame_errors,
-	       &proc_data.overrun_errors,
-	       &proc_data.underrun_errors,
-	       &proc_data.worst_key, &proc_data.max_key_weight,
-	       &proc_data.best_nonkey,
-	       &proc_data.smallest_field,
-	       &proc_data.largest_field,
-	       &proc_data.bytes_in_buffer, &proc_data.buffer_size);
-	fseek(file, 0L, SEEK_SET);
-
-	return;
-}

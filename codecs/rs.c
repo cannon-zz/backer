@@ -4,8 +4,8 @@
  * This code is an overhaul of a Reed-Solomon encoder/decoder implementation
  * written by Phil Karn which was distributed under the name rs-2.0.
  *
- * Copyright (C) 2000,2001 Kipp C. Cannon
- * Portions Copyright (C) 1999 Phil Karn, KA9Q
+ * Copyright (C) 2000,2001,2002 Kipp C. Cannon, kcannon@sourceforge.net
+ * Portions Copyright (C) 1999 Phil Karn, karn@ka9q.ampr.org
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -40,96 +40,80 @@
  */
 
 #ifdef __KERNEL__
+
+#include <linux/kernel.h>
+#include <linux/slab.h>
 #include <linux/string.h>
+static void *malloc(size_t size)  { return(kmalloc(size, GFP_KERNEL)); }
+static void free(void *ptr) { kfree(ptr); }
+
 #else
+
+#include <stdlib.h>
 #include <string.h>
+
 #endif /* __KERNEL__ */
 
-#include "rs.h"
+#include <rs.h>
+
+
+/*
+ * NN is the number of non-zero symbols in the Galois Field.  This is also
+ * the maximum number of symbols which can be used to form a code word
+ * (Reed-Solomon block).
+ */
+
+#define	NN  ((1 << MM) - 1)
+
+
+/*
+ * Return the smaller/larger of two values.
+ */
+
+#ifndef min
+#define min(x,y) ({ \
+	const typeof(x) _x = (x); \
+	const typeof(y) _y = (y); \
+	(void) (&_x == &_y); \
+	_x < _y ? _x : _y; \
+})
+#endif
+
+#ifndef max
+#define max(x,y) ({ \
+	const typeof(x) _x = (x); \
+	const typeof(y) _y = (y); \
+	(void) (&_x == &_y); \
+	_x > _y ? _x : _y; \
+})
+#endif
 
 
 /*
  * Compute x % NN, where NN is 2^MM-1, without a divide.
  */
 
-static inline gf modNN(int x)
+static gf modNN(int x)
 {
-	while(x >= NN)
-		{
+	while(x >= NN) {
 		x -= NN;
 		x = (x >> MM) + (x & NN);
-		}
+	}
 	return(x);
 }
 
-static inline int min(int a, int b)
-{
-	return(a <= b ? a : b);
-}
-
 
 /*
- * Decrement for location variable in Chien search
- */
-
-#if   (LOG_BETA==1)              /* conventional Reed-Solomon */
-
-#define Ldec  1
-static void gen_ldec(void) { }
-
-#elif (LOG_BETA==11) && (MM==8)  /* CCSDS Reed-Solomon */
-
-#define Ldec  116
-static void gen_ldec(void) { }
-
-#else                            /* anything else */
-
-static int Ldec;
-static void gen_ldec(void)
-{
-	for(Ldec = 1; (Ldec % LOG_BETA) != 0; Ldec += NN);
-	Ldec /= LOG_BETA;
-}
-
-#endif /* LOG_BETA */
-
-
-/*
- * generate_GF()
+ * galois_field_init()
  *
- * Constructs look-up tables for performing arithmetic over the Galois
- * field GF(2^MM) from the irreducible polynomial p(x) stored in p.
- *
- * This function constructs the look-up tables called Log_alpha[] and
- * Alpha_exp[] from p.  Since 0 cannot be represented as a power of alpha,
- * special elements are added to the look-up tables to represent this case
- * and all multiplications must first check for this.  We call this special
- * element INFINITY since it is the result of taking the log (base alpha)
- * of zero.  Also, we duplicate Alpha_exp[] to reduce our reliance on
- * modNN().
- *
- * The bits of the parameter p specify the generator polynomial with the
- * LSB being the co-efficient of x^0 and the MSB being the coefficient of
- * x^MM.  For example, if
- *
- *          p = 013
- *
- * (i.e. 13 octal) then
- *
- *          p(x) = x^3 + x + 1
- *
- * Note that the coefficient of x^MM must = 1.
- *
- * For field generator polynomials, see Lin & Costello, Appendix A, and Lee
- * and Messerschmitt, pg. 453.  Field generator polynomials for symbol
- * sizes from 2 to 16 bits can be found in reed_solomon_init() below.
+ * Call this first.
  */
 
 static gf  Alpha_exp[2*NN];     /* exponent->polynomial conversion table */
 static gf  Log_alpha[NN + 1];   /* polynomial->exponent conversion table */
 #define    INFINITY  (NN)       /* representation of 0 in exponent form */
 
-static void generate_GF(int p)
+void galois_field_init(int p)
 {
 	int i;
 
@@ -138,66 +122,256 @@ static void generate_GF(int p)
 
 	Alpha_exp[MM] = p & NN;
 
-	for(i++; i < NN; i++)
-		{
+	for(i++; i < NN; i++) {
 		Alpha_exp[i] = Alpha_exp[i-1] << 1;
 		if(Alpha_exp[i-1] & (1 << (MM-1)))
 			Alpha_exp[i] = (Alpha_exp[i] & NN) ^ Alpha_exp[MM];
-		}
+	}
 
-	memcpy(&Alpha_exp[NN], Alpha_exp, NN * sizeof(gf));
+	memcpy(&Alpha_exp[NN], Alpha_exp, NN * sizeof(*Alpha_exp));
 
 	for(i = 0; i < NN; i++)
 		Log_alpha[Alpha_exp[i]] = i;
 	Log_alpha[0] = INFINITY;
+
 }
 
 
 /*
- * generate_poly()
+ * polynomial_assign()
+ *
+ * Copy the coefficients of src(x), having degree deg, to dst(x).
+ */
+
+static void polynomial_assign(gf *dst, const gf *src, int deg)
+{
+	memcpy(dst, src, (deg + 1) * sizeof(*dst));
+}
+
+
+/*
+ * polynomial_to_alpha()
+ *
+ * Convert a polynomial to alpha-rep and determine its degree.
+ */
+
+static int polynomial_to_alpha(gf *poly, int deg)
+{
+	gf  *x;
+
+	for(x = &poly[deg]; !*x && (x >= poly); x--)
+		*x = INFINITY;
+	for(deg = x - poly; x >= poly; x--)
+		*x = Log_alpha[*x];
+
+	return(deg);
+}
+
+
+/*
+ * polynomial_evaluate()
+ *
+ * Evaluate poly(x).
+ */
+
+static gf polynomial_evaluate(const gf *poly, int deg, gf log_x)
+{
+	gf  result;
+
+	for(result = 0; deg >= 0; deg--) {
+		if(result)
+			result = Alpha_exp[Log_alpha[result] + log_x];
+		result ^= poly[deg];
+	}
+
+	return(result);
+}
+
+static gf log_polynomial_evaluate(const gf *log_poly, int deg, gf log_x)
+{
+	gf  result, n_log_x;
+
+	for(result = n_log_x = 0; deg >= 0; log_poly++, deg--) {
+		if(*log_poly != INFINITY)
+			result ^= Alpha_exp[*log_poly + n_log_x];
+		n_log_x = modNN(n_log_x + log_x);
+	}
+
+	return(result);
+}
+
+
+/*
+ * polynomial_differentiate()
+ *
+ * Replace a polynomial with its derivative.
+ */
+
+static int polynomial_differentiate(gf *poly, int deg)
+{
+	int  i;
+
+	memmove(poly, poly+1, deg * sizeof(*poly));
+	for(poly++, i = 0; i < deg; poly += 2, i += 2)
+		*poly = INFINITY;
+
+	return(--deg & ~1);
+}
+
+
+/*
+ * polynomial_multiply()
+ *
+ * Multiply two polynomials (in alpha-rep modulo x^deg_dst).  Return
+ * the degree of the result.
+ */
+
+static int polynomial_multiply(gf *dst, int deg_dst, const gf *src1, int deg_src1, const gf *src2, int deg_src2)
+{
+	int  i, j;
+
+	memset(dst, 0, (deg_dst + 1) * sizeof(*dst));
+	src2 += deg_src2;
+	for(i = deg_src2; i >= 0; src2--, i--)
+		if(*src2 != INFINITY)
+			for(j = min(deg_src1 + i, deg_dst); j >= i; j--)
+				if(src1[j - i] != INFINITY)
+					dst[j] ^= Alpha_exp[*src2 + src1[j - i]];
+
+	while(!dst[deg_dst])
+		deg_dst--;
+	return(deg_dst);
+}
+
+
+/*
+ * Set LOG_BETA to the power of alpha used to generate the roots of the
+ * generator polynomial and set J0 to the power of beta to be used as the
+ * first root.  The generator polynomial will then have roots
+ *
+ *    beta^J0, beta^(J0+1), beta^(J0+2), ..., beta^(J0+2t-1)
+ *
+ * where beta = alpha^LOG_BETA and 2t is the number of parity symbols in
+ * the code.  A conventional Reed-Solomon encoder is selected by setting J0
+ * = 1, LOG_BETA = 1.  NOTE:  LOG_BETA and NN must be relatively prime i.e.
+ * for 8-bit symbols (NN = 255), LOG_BETA cannot be a multiple of 3, 5 or
+ * 17.
+ */
+
+#define J0        1
+#define LOG_BETA  1
+
+
+/*
+ * generator_polynomial_init()
  *
  * Constructs the generator polynomial for the Reed-Solomon code of length
  * NN (=2^MM-1) with the number of parity symbols being given by
  * rs_format->parity.
- *
- * The co-efficients of the generator polynomial are left in exponent form
- * for better encoder performance but note that it is still faster to
- * compute them in polynomial form and convert them afterwards.
  */
 
-static void generate_poly(rs_format_t *rs_format)
+static void generator_polynomial_init(gf *g, gf *log_beta, int num_parity)
 {
 	int  i, j;
+	gf  log_factor;
 
-	rs_format->g[0] = 1;
+	g[0] = 1;
 
-	for(i = 0; i < rs_format->parity; i++)
-		{
-		rs_format->g[i+1] = 1;
-		for(j = i; j > 0; j--)
-			{
-			if(rs_format->g[j] != 0)
-				rs_format->g[j] = rs_format->g[j-1] ^ Alpha_exp[modNN(Log_alpha[rs_format->g[j]] + LOG_BETA*(J0 + i))];
+	for(i = 0; i < num_parity; i++) {
+		log_factor = modNN(LOG_BETA*(J0+i));
+		g[i+1] = 1;
+		for(j = i; j > 0; j--) {
+			if(g[j])
+				g[j] = g[j-1] ^ Alpha_exp[Log_alpha[g[j]] + log_factor];
 			else
-				rs_format->g[j] = rs_format->g[j-1];
-			}
-		rs_format->g[0] = Alpha_exp[modNN(Log_alpha[rs_format->g[0]] + LOG_BETA*(J0 + i))];
+				g[j] = g[j-1];
 		}
+		g[0] = Alpha_exp[Log_alpha[g[0]] + log_factor];
+	}
 
-	for(i = 0; i <= rs_format->parity; i++)
-		rs_format->g[i] = Log_alpha[rs_format->g[i]];
+	polynomial_to_alpha(g, num_parity);
+
+	/*
+	 * Construct the beta log look-up table.  The i-th element of this
+	 * table gives the power to which beta must be raised to equal
+	 * alpha^i.  i.e. beta^(log_beta[i]) == alpha^i.
+	 *
+	 * Note:  an infinite loop will result if LOG_BETA and NN are not
+	 * relatively prime.
+	 */
+
+	for(i = 0; i < NN; i++)
+		for(log_beta[i] = 0; modNN(LOG_BETA * log_beta[i]) != i; log_beta[i]++);
+	log_beta[INFINITY] = INFINITY;
+}
+
+
+/*
+ * Encoder/decoder instance creation
+ *
+ * Call this second.
+ *
+ * If you want to select your own field generator polynomial, edit that
+ * here.  I've chosen to put the numbers in octal format because I find it
+ * easier to see the bit patterns than with either hexadecimal or decimal
+ * formats.  Symbol sizes larger than 16 bits begin to require
+ * prohibitively large multiplication look-up tables.  If additional field
+ * generators are added be sure to edit the range check for MM.
+ */
+
+int reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave, rs_format_t *format)
+{
+	if((n > NN) || (k > n) || (interleave < 1))
+		return(-1);
+
+	format->n = n;
+	format->k = k;
+	format->parity = n - k;
+	if(format->parity)
+		format->remainder_start = (format->n - 1) % format->parity;
+	else
+		format->remainder_start = 0;
+	format->interleave = interleave;
+
+	format->g = malloc((format->parity+1) * sizeof(*format->g));
+	format->erasure = malloc(format->parity * sizeof(*format->erasure));
+	format->log_beta = malloc((NN + 1) * sizeof(*format->log_beta));
+
+	if(!format->g || !format->erasure || !format->log_beta) {
+		reed_solomon_codec_free(format);
+		return(-1);
+	}
+
+	generator_polynomial_init(format->g, format->log_beta, format->parity);
+
+	return(0);
+}
+
+
+/*
+ * Encoder/decoder clean-up --- call this when done!
+ */
+
+void reed_solomon_codec_free(rs_format_t *format)
+{
+	free(format->g);
+	free(format->erasure);
+	free(format->log_beta);
+	*format = (rs_format_t) { 0, 0, 0, 1, 0, NULL, NULL, NULL };
 }
 
 
 /*
  * reed_solomon_encode()
  *
- * The encoder is able to place the parity symbols in a separate location
- * but the parity symbols and data symbols taken together do form a single
- * logical code word with the parity symbols appearing below the data
- * symbols.  The code symbols that are returned from this encoder are given
- * with the lowest order term at offset 0 in the (logically combined)
- * array.  So if c(x) is the resultant code polynomial, i.e.
+ * In order to use this encoder (and the decoder that follows) with other
+ * software, the following information on the conventions used in this
+ * software will be required.  The parity symbols and data symbols taken
+ * together form a single logical code word with the parity symbols
+ * appearing below the data symbols.  The code symbols that are returned
+ * from this encoder are given with the lowest order term at offset 0 in
+ * the array.  So if c(x) is the resultant Reed-Solomon code polynomial,
+ * i.e.
  *
  *    c(x) = c_NN * x^NN + c_(NN-1) * x^(NN-1) + ... + c_0 * x^0,
  *
@@ -208,14 +382,14 @@ static void generate_poly(rs_format_t *rs_format)
  *
  * and block[] is mapped into the parity[] and data[] arrays as follows
  *
- *    block[0]                     = parity[0]
- *    block[1]                     = parity[1]
- *      ...
- *    block[rs_format->parity - 1] = parity[rs_format->parity - 1]
- *    block[rs_format->parity    ] = data[0]
- *    block[rs_format->parity + 1] = data[1]
- *      ...
- *    block[rs_format->n - 1     ] = data[rs_format->k - 1]
+ *    block[0]                  = parity[0]
+ *    block[1]                  = parity[1]
+ *      ...                          ...
+ *    block[format->parity - 1] = parity[format->parity - 1]
+ *    block[format->parity    ] = data[0]
+ *    block[format->parity + 1] = data[1]
+ *      ...                         ...
+ *    block[format->n - 1     ] = data[format->k - 1]
  *
  * The encoding algorithm is the long division algorithm but where we only
  * care about the remainder.  The remainder is computed in place and the
@@ -233,289 +407,268 @@ static void generate_poly(rs_format_t *rs_format)
  *	7.  The remainder forms the parity symbols.
  */
 
-void reed_solomon_encode(data_t *parity, data_t *data, rs_format_t *rs_format)
+void reed_solomon_encode(rs_symbol_t *parity, const rs_symbol_t *data, rs_format_t format)
 {
-	data_t  *d;                     /* current data symbol */
-	data_t  *b;                     /* current remainder symbol */
-	gf  *g;                         /* current gen. poly. symbol */
-	gf   feedback;                  /* feed-back multiplier */
-	rs_format_t  format = *rs_format;  /* make local copy */
+	const rs_symbol_t  *d;  /* current data symbol */
+	rs_symbol_t  *b;        /* current remainder symbol */
+	gf  *g;                 /* current gen. poly. symbol */
+	gf  feedback;           /* feed-back multiplier */
+	rs_symbol_t  remainder[format.parity];
 
-	if(format.parity == 0)
+	if(!format.parity)
 		return;
 
-	memset(parity, 0, format.parity * sizeof(data_t));
+	memset(remainder, 0, format.parity);
 
 	/*
 	 * At the start of each iteration, b points to the most significant
 	 * symbol in the remainder for that iteration.
 	 */
 
-	b = &parity[format.remainder_start];
+	b = &remainder[format.remainder_start];
 
-	for(d = &data[format.k - 1]; d >= data; d--)
-		{
+	for(d = &data[(format.k - 1)*format.interleave]; d >= data; d -= format.interleave) {
 		feedback = Log_alpha[*d ^ *b];
-		if(feedback != INFINITY)
-			{
+		if(feedback != INFINITY) {
 			b--;
-			for(g = &format.g[format.parity - 1]; b >= parity; g--, b--)
+			for(g = &format.g[format.parity - 1]; b >= remainder; g--, b--)
 				if(*g != INFINITY)
 					*b ^= Alpha_exp[feedback + *g];
-			for(b = &parity[format.parity - 1]; g > format.g; b--, g--)
+			for(b = &remainder[format.parity - 1]; g > format.g; b--, g--)
 				if(*g != INFINITY)
 					*b ^= Alpha_exp[feedback + *g];
 			*b = Alpha_exp[feedback + *g];
-			}
-		else
+		} else
 			*b = 0;
-		if(--b < parity)
-			b = &parity[format.parity - 1];
-		}
+		if(--b < remainder)
+			b = &remainder[format.parity - 1];
+	}
+
+	/*
+	 * Copy parity symbols from remainder[] to parity[].
+	 */
+
+	for(feedback = 0; feedback < format.parity; parity += format.interleave)
+		*parity = remainder[feedback++];
 }
 
 
 /*
  * reed_solomon_decode()
  *
- * The bulk of this code has been taken from Phil Karn's decoder
- * implementation but with many minor modifications to things like the
- * directions of for loops, their bounds, etc. all with an eye to
- * performance.  The fundamental algorithm itself, however, has not been
- * changed.  The algorithms used here are the Berlekamp-Massey algorithm
- * for finding the error locations and the Forney algorithm for finding the
- * error magnitudes.
+ * The algorithms used here are the Berlekamp-Massey algorithm for finding
+ * the error locations and the Forney algorithm for finding the error
+ * magnitudes.  The implementations are a hybrid of time-domain and
+ * frequency-domain.
  */
 
-int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, rs_format_t *rs_format)
+static int compute_syndromes(gf *s, const rs_symbol_t *parity, const rs_symbol_t *data, int n, int num_parity, int interleave)
 {
-	int  i, j, k;                   /* general purpose loop indecies */
-	gf  *x, *y;                     /* general purpose loop pointers */
-	int  deg_lambda, deg_omega;     /* degrees of lambda(x) and omega(x) */
-	gf  tmp;                        /* temporary storage */
-	gf  discr;                      /* discrepancy in Berlekamp-Massey algo. */
-	gf  num, den;                   /* numerator & denominator for Forney alg. */
-	static gf temp[MAX_PARITY+1];   /* temporary storage polynomial */
-	static gf s[MAX_PARITY];        /* syndrome polynomial */
-	static gf lambda[MAX_PARITY+1]; /* error & erasure locator polynomial */
-	static gf b[MAX_PARITY+1];      /* shift register storage for B-M alg. */
-	static gf omega[MAX_PARITY];    /* error & erasure evaluator polynomial */
-	static gf root[MAX_PARITY];     /* roots of lambda */
-	static gf loc[MAX_PARITY];      /* error locations (reciprocals of root[]) */
-	int  count = 0;                 /* number of roots of lambda */
-	rs_format_t  format = *rs_format;  /* make local copy */
-
-	if(format.parity == 0)
-		return(0);
+	int  i;
+	gf  block[n--];
 
 	/*
 	 * Compute the syndromes by evaluating block(x) at the roots of
 	 * g(x), namely beta^(J0+i), i = 0, ... ,(n-k-1).  When finished,
-	 * convert them to alpha-rep and test for all zero.  If the
-	 * syndromes are all zero, block[] is a codeword and there are no
-	 * errors to correct.
+	 * convert them to alpha-rep.
 	 */
 
-	for(x = &s[format.parity]; x > s; *(--x) = parity[0]);
+	for(i = 0; i < num_parity; parity += interleave, i++)
+		block[i] = *parity;
+	for(; i <= n; data += interleave, i++)
+		block[i] = *data;
 
-	for(j = 1; j < format.parity; j++)
-		if(parity[j] != 0)
-			{
-			tmp = modNN(Log_alpha[parity[j]] + LOG_BETA*J0*j);
-			for(x = s; x < &s[format.parity]; x++)
-				{
-				*x ^= Alpha_exp[tmp];
-				#if (LOG_BETA==1)
-				if((tmp += j) >= NN)
-					tmp -= NN;
-				#else
-				tmp = modNN(tmp + LOG_BETA*j);
-				#endif /* LOG_BETA */
-				}
-			}
-	for(; j < format.n; j++)
-		if(data[j - format.parity] != 0)
-			{
-			tmp = modNN(Log_alpha[data[j - format.parity]] + LOG_BETA*J0*j);
-			for(x = s; x < &s[format.parity]; x++)
-				{
-				*x ^= Alpha_exp[tmp];
-				#if (LOG_BETA==1)
-				if((tmp += j) >= NN)
-					tmp -= NN;
-				#else
-				tmp = modNN(tmp + LOG_BETA*j);
-				#endif /* LOG_BETA */
-				}
-			}
-	for(x = &s[format.parity-1]; *x == 0; x--)
-		{
-		if(x == s)
-			return(0);
-		*x = INFINITY;
-		}
-	for(; x >= s; x--)
-		*x = Log_alpha[*x];
+	for(i = 0; i < num_parity; i++)
+		s[i] = polynomial_evaluate(block, n, modNN(LOG_BETA*(J0+i)));
+
+	return(num_parity ? polynomial_to_alpha(s, num_parity - 1) : -1);
+}
+
+
+static gf compute_discrepancy(int r, const gf *lambda, int deg_lambda, const gf *s, int deg_s)
+{
+	int  i = max(r - deg_s, 0);
+	gf  discrepancy = 0;
 
 	/*
-	 * Init lambda to be the erasure locator polynomial
+	 * Compute the Berlekamp-Massey discrepancy for the (r-1)-th step
+	 * number.  This is the convolution of lambda(x) with the
+	 * syndromes.  lambda(x) is assumed to be in poly-rep while the
+	 * syndromes are in alpha-rep.
+	 */
+
+	for(lambda = &lambda[i], s = &s[r - i]; i <= deg_lambda; lambda++, s--, i++)
+		if(*lambda && (*s != INFINITY))
+			discrepancy ^= Alpha_exp[Log_alpha[*lambda] + *s];
+
+	return(discrepancy);
+}
+
+
+static void add_poly_times_const(gf *dst, const gf *src, int deg, gf constant)
+{
+	/*
+	 * Compute dst(x) = dst(x) + constant * src(x).  Recall that
+	 * arithmetic is being performed over GF(2^n) so addition is the
+	 * same as subtraction i.e. we are also computing dst(x) = dst(x) -
+	 * constant * src(x).
+	 */
+
+	for(; deg >= 0; src++, dst++, deg--)
+		if(*src)
+			*dst ^= Alpha_exp[Log_alpha[*src] + constant];
+}
+
+
+static int compute_lambda(gf *lambda, int num_parity, const gf *erasure, int num_erase, const gf *s, int deg_s)
+{
+	int  deg_lambda;        /* degree of lambda */
+	gf  *x;                 /* general purpose loop pointer */
+	int  r;                 /* step number - 1 */
+	gf  log_loc_num;        /* log (base alpha) of current location number */
+	gf  discr;              /* discrepancy */
+	gf  b[num_parity+1];    /* shift register */
+
+	/*
+	 * Initialize lambda to be the erasure locator polynomial
+	 *
+	 * lambda(x) = (1 - x X1)*(1 - x X2)*...*(1 - x Xn)
+	 *
+	 * where Xi is the i-th location number = beta^(i-th location).
 	 */
 
 	lambda[0] = 1;
-	memset(&lambda[1], 0, format.parity*sizeof(gf));
+	memset(&lambda[1], 0, num_parity * sizeof(*lambda));
 
-	if(no_eras > 0)
-		{
-		lambda[1] = Alpha_exp[modNN(LOG_BETA*erasure[0])];
-		for(i = 1; i < no_eras; i++)
-			{
-			tmp = modNN(LOG_BETA*erasure[i]);
-			for(y = &lambda[i+1]; y > lambda; y--)
-				if(*(y-1) != 0)
-					*y ^= Alpha_exp[tmp + Log_alpha[*(y-1)]];
-			}
-		}
-	deg_lambda = no_eras;
+	for(deg_lambda = 0; deg_lambda < num_erase; deg_lambda++) {
+		log_loc_num = modNN(LOG_BETA * *(erasure++));
+		for(x = &lambda[deg_lambda+1]; x > lambda; x--)
+			if(*(x-1))
+				*x ^= Alpha_exp[log_loc_num + Log_alpha[*(x-1)]];
+	}
 
 	/*
 	 * Berlekamp-Massey algorithm to determine error+erasure locator
 	 * polynomial.  See Blahut, R., Theory and Practice of Error
-	 * Control Codes, section 7.5.
+	 * Control Codes, sections 7.5, 9.1 and 9.2.
 	 */
 
-	for(i = format.parity; i > deg_lambda; i--)
-		b[i] = INFINITY;
-	for(; i >= 0; i--)
-		b[i] = Log_alpha[lambda[i]];
+	polynomial_assign(b, lambda, num_parity);
 
-	for(j = no_eras; j < format.parity; j++)	/* j+1 is "r", the step number */
-		{
+	for(r = num_erase; r < num_parity; r++) {
+		/* b(x) <-- x*b(x) */
+		memmove(&b[1], &b[0], num_parity * sizeof(*b));
+		b[0] = 0;
+
 		/* compute discrepancy */
-		discr = 0;
-		for(i = deg_lambda; i >= 0; i--)
-			if((lambda[i] != 0) && (s[j - i] != INFINITY))
-				discr ^= Alpha_exp[Log_alpha[lambda[i]] + s[j - i]];
-
+		discr = compute_discrepancy(r, lambda, deg_lambda, s, deg_s);
+		if(!discr)
+			continue;
 		discr = Log_alpha[discr];
 
-		if(discr == INFINITY)
-			{
-			/* b(x) <-- x*b(x) */
-			memmove(&b[1], &b[0], format.parity * sizeof(gf));
-			b[0] = INFINITY;
+		/* lambda(x) <-- lambda(x) - discr*b(x) */
+		add_poly_times_const(lambda, b, num_parity, discr);
+
+		if(2 * deg_lambda > r + num_erase)
 			continue;
-			}
+		deg_lambda = r+1 + num_erase - deg_lambda;
 
-		/* temp(x) <-- lambda(x) - discr*x*b(x) */
-		for(i = format.parity; i >= 1; i--)
-			{
-			if(b[i-1] != INFINITY)
-				temp[i] = lambda[i] ^ Alpha_exp[discr + b[i-1]];
-			else
-				temp[i] = lambda[i];
-			}
-		temp[0] = lambda[0];
+		/* b(x) <-- b(x) + lambda(x)/discr */
+		add_poly_times_const(b, lambda, deg_lambda, NN - discr);
+	}
 
-		if(2 * deg_lambda <= j + no_eras)
-			{
-			deg_lambda = j+1 + no_eras - deg_lambda;
-			/* b(x) <-- discr^-1 * lambda(x) */
-			for(i = format.parity; i >= 0; i--)
-				{
-				if(lambda[i] != 0)
-					b[i] = modNN(NN - discr + Log_alpha[lambda[i]]);
-				else
-					b[i] = INFINITY;
-				}
-			}
-		else
-			{
-			/* b(x) <-- x*b(x) */
-			memmove(&b[1], &b[0], format.parity * sizeof(gf));
-			b[0] = INFINITY;
-			}
+	return(polynomial_to_alpha(lambda, num_parity));
+}
 
-		/* lambda(x) <-- temp(x) */
-		memcpy(lambda, temp, (format.parity + 1) * sizeof(gf));
-		}
-
-	for(i = format.parity; i > deg_lambda; i--)
-		lambda[i] = INFINITY;
-	for(; i >= 0; i--)
-		lambda[i] = Log_alpha[lambda[i]];
+static int find_roots(gf *lambda, int deg_lambda, gf *log_root, gf *erasure, const gf *log_beta)
+{
+	gf  temp[deg_lambda+1];
+	gf  *x;
+	int  i, j;
+	gf  result;
+	int  num_roots = 0;
 
 	/*
 	 * Find roots of the error & erasure locator polynomial by Chien
 	 * search (i.e. trial and error).  At each iteration, i, the j-th
 	 * component of temp[] contains the j-th coefficient of lambda
 	 * multiplied by alpha^(i*j).  We get components of temp[] for the
-	 * next iteration by multiplying each by alpha^j.  Note that the
-	 * 0-th coefficient of lambda is always 1 so we can handle it
-	 * explicitly.
+	 * next iteration by multiplying each by alpha^j.
 	 */
 
-	memcpy(&temp[1], &lambda[1], deg_lambda * sizeof(gf));
+	polynomial_assign(temp + 1, lambda + 1, deg_lambda - 1);
 
-#if LOG_BETA == 1
-	for(i = 1; i <= NN; i++)
-#else
-	for(i = 1, k = NN-Ldec; i <= NN; i++, k = modNN(NN - Ldec + k))
-#endif
-		{
-		tmp = 1;
+	for(i = 1; i <= NN; i++) {
+		result = 1;	/* 0-th order term is always = 1 */
 		for(j = deg_lambda, x = &temp[deg_lambda]; j > 0; x--, j--)
 			if(*x != INFINITY)
-				{
-				*x = modNN(*x + j);
-				tmp ^= Alpha_exp[*x];
-				}
-
-		if(tmp != 0)
+				result ^= Alpha_exp[*x = modNN(*x + j)];
+		if(result)	/* not a root */
 			continue;
 
 		/*
-		 * Store root and error location number.  If we've found as
-		 * many roots as lambda(x) has then abort to save time.
+		 * Store root
 		 */
 
-		root[count] = i;
-#if LOG_BETA == 1
-		loc[count] = NN - i;
-#else
-		loc[count] = k;
-#endif
-		if(loc[count] >= format.n)
-			return(-1);
-		if(++count == deg_lambda)
+		*(log_root++) = i;
+
+		/*
+		 * Store corresponding error location:
+		 *
+		 * root^-1 = beta^(ith location)
+		 */
+
+		*(erasure++) = log_beta[NN - i];
+
+		/*
+		 * Found as many roots as lambda(x) has?
+		 */
+
+		if(++num_roots >= deg_lambda)
 			break;
-		}
+	}
+
+	return(num_roots);
+}
+
+
+int reed_solomon_decode(rs_symbol_t *parity, rs_symbol_t *data, int num_erase, rs_format_t format)
+{
+	int  i;                 /* general purpose loop pointer */
+	gf  s[format.parity];   /* syndromes */
+	int  deg_s;             /* number of syndromes - 1 */
+	gf  lambda[format.parity+1];  /* error & erasure locator polynomial */
+	int  deg_lambda;        /* degree of lambda(x) */
+	gf  omega[format.parity];  /* error & erasure evaluator polynomial */
+	int  deg_omega;         /* degree of omega(x) */
+	gf  root[format.parity];   /* roots of lambda */
+	int  num_roots;         /* number of roots of lambda */
+	gf  magnitude;          /* error magnitude from Forney algorithm */
+	gf  denominator;        /* denominator for Forney algorithm */
+
+
+	deg_s = compute_syndromes(s, parity, data, format.n, format.parity, format.interleave);
+	if(deg_s < 0)
+		return(0);	/* all syndromes are 0 == code word is valid */
+
+	deg_lambda = compute_lambda(lambda, format.parity, format.erasure, num_erase, s, deg_s);
+
+	num_roots = find_roots(lambda, deg_lambda, root, format.erasure, format.log_beta);
+	if(num_roots != deg_lambda)
+		return(-RS_EDEGENERATEROOTS);	/* lambda(x) has degenerate roots == code word is uncorrectable */
 
 	/*
-	 * deg(lambda) != number of roots then there are degenerate roots
-	 * which means we've detected an uncorrectable error.
+	 * Compute error & erasure evaluator polynomial:
+	 * omega(x) = s(x)*lambda(x)
 	 */
 
-	if(deg_lambda != count)
-		return(-1);
+	deg_omega = polynomial_multiply(omega, format.parity - 1, s, deg_s, lambda, deg_lambda);
 
 	/*
-	 * Compute error & erasure evaluator poly omega(x) = s(x)*lambda(x)
-	 * (modulo x^(n-k)) in alpha rep.  Also find deg(omega).
+	 * after this, lambda[] holds lambda'(x)
 	 */
 
-	memset(omega, 0, format.parity * sizeof(gf));
-	for(i = deg_lambda; i >= 0; i--)
-		{
-		if(lambda[i] == INFINITY)
-			continue;
-		for(k = format.parity - 1, y = &s[k - i]; y >= s; k--, y--)
-			if(*y != INFINITY)
-				omega[k] ^= Alpha_exp[lambda[i] + *y];
-		}
-	for(x = &omega[format.parity - 1]; (x >= omega) && (*x == 0); x--)
-		*x = INFINITY;
-	for(deg_omega = x - omega; x >= omega; x--)
-		*x = Log_alpha[*x];
+	deg_lambda = polynomial_differentiate(lambda, deg_lambda);
 
   
 	/*
@@ -529,105 +682,29 @@ int reed_solomon_decode(data_t *parity, data_t *data, gf *erasure, int no_eras, 
 	 *
 	 * see Blahut section 7.5
 	 *
-	 * num = omega(X_l^-1) * (X_l^-1)^(J0-1) and  <--- ** huh? **
-	 * den = lambda'(X(l)^-1).
+	 * numerator = omega(X_l^-1) * (X_l^-1)^(J0-1) and  <--- ** huh? **
+	 * denominator = lambda'(X(l)^-1).
 	 */
 
-	/* this is now the degree of lambda'(x) */
-	deg_lambda = min(deg_lambda, format.parity-1) & ~1;
-
-	for(y = &root[count - 1]; y >= root; y--)
-		{
-		/* lambda[i+1] for i even is the formal derivative lambda' of lambda[i] */
-		den = 0;
-		for(x = &lambda[deg_lambda + 1], tmp = deg_lambda * *y; x >= lambda; tmp -= *y << 1, x -= 2)
-			if(*x != INFINITY)
-				den ^= Alpha_exp[modNN(*x + tmp)];
-		if(den == 0)
-			return(-1);
-    
-		num = 0;
-		for(i = tmp = 0; i <= deg_omega; i++)
-			{
-			if(omega[i] != INFINITY)
-				num ^= Alpha_exp[omega[i] + tmp];
-			if((tmp += *y) >= NN)
-				tmp -= NN;
-			}
-		if(num == 0)
+	for(i = 0; i < num_roots; i++) {
+		magnitude = polynomial_evaluate(omega, deg_omega, root[i]);
+		if(!magnitude)
 			continue;
-		num = modNN(Log_alpha[num] + (J0-1) * *y);
+		magnitude = modNN(Log_alpha[magnitude] + root[i]*(J0-1));
 
-		/* Apply error to block */
-		if(loc[y - root] < format.parity)
-			parity[loc[y - root]] ^= Alpha_exp[num + NN - Log_alpha[den]];
+		denominator = log_polynomial_evaluate(lambda, deg_lambda, root[i]);
+		if(!denominator)
+			return(-RS_EFORNEY);
+
+		magnitude = Alpha_exp[magnitude + NN - Log_alpha[denominator]];
+
+		if(format.erasure[i] < format.parity)
+			parity[format.erasure[i]*format.interleave] ^= magnitude;
+		else if(format.erasure[i] < format.n)
+			data[(format.erasure[i] - format.parity)*format.interleave] ^= magnitude;
 		else
-			data[loc[y - root] - format.parity] ^= Alpha_exp[num + NN - Log_alpha[den]];
-		}
+			return(-RS_EINVALIDROOT);
+	}
 
-	if(erasure != NULL)
-		memcpy(erasure, loc, count * sizeof(gf));
-	return(count);
-}
-
-
-/*
- * Encoder/decoder initialization --- call this first!
- *
- * If you want to select your own field generator polynomial, edit that
- * here.  I've chosen to put the numbers in octal format because I find it
- * easier to see the bit patterns than with either hexadecimal or decimal
- * formats.  Symbol sizes larger than 16 bits begin to require
- * prohibitively large multiplication look-up tables.  If additional field
- * generators are added be sure to edit the range check for MM in rs.h
- */
-
-int reed_solomon_init(unsigned int n, unsigned int k, rs_format_t *rs_format)
-{
-	int p =
-#if   (MM == 2)
-	        0000007;        /* x^2 + x + 1               */
-#elif (MM == 3)
-	        0000013;        /* x^3 + x + 1               */
-#elif (MM == 4)
-	        0000023;        /* x^4 + x + 1               */
-#elif (MM == 5)
-	        0000045;        /* x^5 + x^2 + 1             */
-#elif (MM == 6)
-	        0000103;        /* x^6 + x + 1               */
-#elif (MM == 7)
-	        0000211;        /* x^7 + x^3 + 1             */
-#elif (MM == 8)
-	        0000435;        /* x^8 + x^4 + x^3 + x^2 + 1 */
-#elif (MM == 9)
-	        0001021;        /* x^9 + x^4 + 1             */
-#elif (MM == 10)
-	        0002011;        /* x^10 + x^3 + 1            */
-#elif (MM == 11)
-	        0004005;        /* x^11 + x^2 + 1            */
-#elif (MM == 12)
-	        0010123;        /* x^12 + x^6 + x^4 + x + 1  */
-#elif (MM == 13)
-	        0020033;        /* x^13 + x^4 + x^3 + x + 1  */
-#elif (MM == 14)
-	        0042103;        /* x^14 + x^10 + x^6 + x + 1 */
-#elif (MM == 15)
-	        0100003;        /* x^15 + x + 1              */
-#elif (MM == 16)
-	        0210013;        /* x^16 + x^12 + x^3 + x + 1 */
-#endif
-
-	if((n > NN) || (k >= n) || (n-k > MAX_PARITY))
-		return(-1);
-	rs_format->n = n;
-	rs_format->k = k;
-	rs_format->parity = n - k;
-	rs_format->remainder_start = (rs_format->n - 1) % rs_format->parity;
-
-	generate_GF(p);
-	generate_poly(rs_format);
-
-	gen_ldec();
-
-	return(0);
+	return(num_roots);
 }

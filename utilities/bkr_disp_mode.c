@@ -1,12 +1,10 @@
 /*
- * bkr_display_mode()
- *
  * Common mode display function for command line utilities.
  *
  * The items to be displayed can be selected by passing invalid values for the
  * unwanted parameters.
  *
- * Copyright (C) 2000,2001  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,12 +23,12 @@
 
 #include <stdio.h>
 
-#include "backer.h"
+#include <backer.h>
+#include <bkr_disp_mode.h>
 
 void  bkr_display_mode(FILE *file, unsigned int mode)
 {
-	switch(BKR_VIDEOMODE(mode))
-		{
+	switch(BKR_VIDEOMODE(mode)) {
 		case BKR_PAL:
 		fputs("\tVideo mode:   [*] PAL   [ ] NTSC\n", file);
 		break;
@@ -38,9 +36,8 @@ void  bkr_display_mode(FILE *file, unsigned int mode)
 		fputs("\tVideo mode:   [ ] PAL   [*] NTSC\n", file);
 		default:
 		break;
-		}
-	switch(BKR_DENSITY(mode))
-		{
+	}
+	switch(BKR_DENSITY(mode)) {
 		case BKR_LOW:
 		fputs("\tData rate:    [*] LOW   [ ] HIGH\n", file);
 		break;
@@ -48,9 +45,8 @@ void  bkr_display_mode(FILE *file, unsigned int mode)
 		fputs("\tData rate:    [ ] LOW   [*] HIGH\n", file);
 		default:
 		break;
-		}
-	switch(BKR_FORMAT(mode))
-		{
+	}
+	switch(BKR_CODEC(mode)) {
 		case BKR_RAW:
 		fputs("\tData format:  [*] RAW   [ ] SP/LP  [ ] EP\n", file);
 		break;
@@ -61,5 +57,5 @@ void  bkr_display_mode(FILE *file, unsigned int mode)
 		fputs("\tData format:  [ ] RAW   [ ] SP/LP  [*] EP\n", file);
 		default:
 		break;
-		}
+	}
 }

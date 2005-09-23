@@ -1,4 +1,4 @@
-.\" Copyright (c) 2001 Kipp Cannon (kcannon@users.sourceforge.net)
+.\" Copyright (c) 2001,2002 Kipp Cannon (kcannon@users.sourceforge.net)
 .\"
 .\" This is free documentation; you can redistribute it and/or
 .\" modify it under the terms of the GNU General Public License as
@@ -20,13 +20,14 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BKRENCODE 8 "December 30, 2001" "Linux" "Backer"
+.TH BKRENCODE 8 "November 23, 2002" "Linux" "Backer"
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
 \fBbkrencode\fP [\fB\-Dh\fP|\fB\-Dl\fP] [\fB\-Fe\fP|\fB\-Fs\fP]
-[\fB\-Vn\fP|\fB\-Vp\fP] [\fB\-d\fP[\fBs\fP]] [\fB\-f\fP [\fIdevname\fP]]
-[\fB\-h\fP] [\fB\-s\fP] [\fB\-t\fP] [\fB\-u\fP] [\fB\-v\fP]
+[\fB\-Vn\fP|\fB\-Vp\fP] [\fB\-d\fP[\fBs\fP]] [\fB\-f\fP[\fIdevname\fP]]
+[\fB\-h\fP] [\fB\-s\fP] [\fB-T\fP\fIformat_table\fP] [\fB\-t\fP]
+[\fB\-u\fP] [\fB\-v\fP]
 .SH DESCRIPTION
 \fBbkrencode\fP is a user space implementation of the
 .IR backer (4)
@@ -57,59 +58,76 @@ Finally, if given the \fB-t\fP option \fBbkrencode\fP will disable the
 output of encoded/decoded data and instead print the size of the recording.
 When encoding data, the duration of tape required for the recording is
 displayed; when decoding a data stream, the number of bytes recovered is
-displayed.  Furthermore, in the ``encoding'' direction the \fB-t\fP option
-causes the data encoder to be by-passed altogether resulting in a
-significant performance improvement.
+displayed.
 .PP
 It is necessary to inform \fBbkrencode\fP of the desired output format when
 encoding a tape data stream and, likewise, the format a data stream is in
-that is to be decoded.  If the mode is not specified on the command line
-then the compiled-in default mode, \fBDEFAULT_MODE\fP, is used.  It is
-possible for \fBbkrencode\fP to automatically retrieve the format to use
-from a Backer device file.  This is done with the \fB\-f\fP option
-followed, if necessary, with the name of the device to use.  The format
-retrieval operation is safe to perform at any time:  it will not interfere
-with any transfer.
+that is to be decoded.  There are three ways in which \fBbkrencode\fP can
+be told the format:  the format can be specified, piecewise, via individual
+command line options; it can be obtained from a particular Backer device
+file specified via a command line option; or it can be retrieved
+automatically from
+.IR stdout (3)
+or
+.IR stdin (3)
+when encoding or decoding respectively.  The order of precedence is as
+follows.  First, the command line arguements are processed in the order in
+which they are given with later options overriding earlier ones.  After
+processing the command line arguements, any components of the format that
+are still unspecified are obtained by performing a format retrieval
+.IR ioctl (2)
+on
+.IR stdout (3)
+or
+.IR stdin (3)
+as appropriate.
 .SS OPTIONS
 .TP
 \fB\-Dh\fP, \fB\-Dl\fP
-Set the density to format the data for to high (\fBDh\fP) or low
+The byte stream is formated for high density (\fBDh\fP) or low density
 (\fBDl\fP).
 .TP
 \fB\-Fe\fP, \fB\-Fs\fP
-Set the tape speed to format the data for to EP (\fBFe\fP) or SP
-(\fBFs\fP).
+The byte stream is formated for EP (\fBFe\fP) or SP (\fBFs\fP).
 .TP
 \fB\-Vn\fP, \fB\-Vp\fP
-Set the video mode to format the data for to NTSC (\fBVn\fP) or PAL
+The byte stream is formated for NTSC video (\fBVn\fP) or PAL video
 (\fBVp\fP).
 .TP
 \fB\-d\fP, \fB-ds\fP
-When decoding, dump status information to
+While encoding or decoding a data stream, dump status information to
 .IR stderr (3).
 The information is presented in the same format as the device driver's
 \fB/proc\fP interface and can be used as input to
 .IR bkrmonitor (8).
 Normally the status is written to
 .IR stderr (3)
-in non-blocking mode allowing the decoding of the data stream to procede
-regardless of whether or not the recipient of the status information is
-able to keep up.  If the \fB-ds\fP variant is specified then the output is
-``synchronous'' which causes decoding to pause after each sector until the
-status information has been read.  Depending on the execution environment,
-this may result in a very large degredation in decoder performance but
-ensures the correct operation of the status read-out software.
+in non-blocking mode after each sector is transfered allowing the decoding
+of the data stream to procede regardless of whether or not the recipient of
+the status information is able to keep up.  If the \fB-ds\fP variant is
+specified then the output is ``synchronous'' which causes decoding to block
+until the status information has been read.  Depending on the execution
+environment, this may result in a very large degredation in decoder
+performance but ensures the correct operation of the status read-out
+software.  NOTE:  the use of these options overrides the \fB-v\fP option in
+order to prevent "verbosity" from confusing status information parsers.
 .TP
-\fB\-f\fP [\fIdevname\fP]
-Retrieve the mode to use from a Backer device file.  If \fIdevname\fP is
-provided then that file is used, otherwise the mode is retrieved from
-\fBDEVICE_NAME\fP.
+\fB\-f\fP[\fIdevname\fP]
+Retrieve the format to use for the byte stream from a Backer device file.
+If \fIdevname\fP is provided then that file is used, otherwise the mode is
+retrieved from \fB@DEFAULT_DEV@\fP.
 .TP
 \fB\-h\fP
 Print a usage message.
 .TP
 \fB\-s\fP
-When decoding, skip over bad sectors instead of aborting.
+When decoding, skip over bad sectors instead of aborting (mimics the
+behaviour of the device driver).
+.TP
+\fB\-T\fP\fIformat_table\fP
+Read a format parameter table from the file \fIformat_table\fP.  See
+.IR backer (4)
+for information on the format of this file.
 .TP
 \fB\-t\fP
 Only compute and display the space required for a recording --- do not
@@ -119,37 +137,40 @@ output encoded or decoded data.
 ``Unencode''.  Extract file data from a tape data stream.
 .TP
 \fB\-v\fP
-Generate additional messages.
+Be verbose.
 .SH EXAMPLES
 To save a file in short play high density NTSC mode using
 \fBbkrencode\fP to process the data, type
 .RS 3
 .sp
-\fB$\fP bkrencode -Vn -Dh -Ss < \fIfilename\fP > /dev/backer/0/nhr
+\fB$\fP bkrencode -Vn -Dh -Fs < \fIfilename\fP > /dev/backer/0/nhr
 .sp
 .RE
 and to retrieve it type
 .RS 3
 .sp
-\fB$\fP bkrencode -u -Vn -Dh -Ss < /dev/backer/0/nhr > \fIfilename\fP
+\fB$\fP bkrencode -u -Fs < /dev/backer/0/nhr > \fIfilename\fP
 .sp
 .RE
+where this time we have also omited from the command line those parts of
+the data format specifier that can be obtained from
+.IR stdin (3).
 To use \fBbkrencode\fP to allow
 .IR tar (1)
 to be used with high compression on a slow computer do something like
 .RS 3
 .sp
-\fB$\fP tar -cjO \fIfiles...\fP | bkrencode \fIoptions...\fP > /tmp/tape.dat
+\fB$\fP tar -cjO \fIfiles...\fP | bkrencode -Vn -Dh -Fs > /tmp/tape.dat
 .br
-\fB$\fP cp /tmp/tape.dat /dev/backer/0/\fIdevice\fP
+\fB$\fP cp /tmp/tape.dat /dev/backer/0/nhr
 .sp
 .RE
 .SH NOTES
 It is essential that \fBbkrencode\fP be set to a format appropriate for the
 mode used to transfer the data to/from tape.  If, for example,
 \fBbkrencode\fP is told to produce a PAL compatible data stream which is
-then written to tape via an NTSC device file the resulting recording will
-be irrecoverable.
+then written to tape via an NTSC device file, it will not be possible to
+recover any data from the resulting recording.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),

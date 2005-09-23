@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BACKER_ISA 4 "December 30, 2001" "Linux" "Special Files"
+.TH BACKER_ISA 4 "November 23, 2002" "Linux" "Special Files"
 .SH NAME
 backer_isa \- ISA Backer device support.
 .SH INTRODUCTION
@@ -35,15 +35,14 @@ all interface cards' resources specified manually via a module option.
 .SS OPTIONS
 This module accepts the following options.
 .TP
-\fBunits=\fP\fIport\fP:\fIdma\fP[:\fIport\fP:\fIdma\fP:...]
+\fBunits=\fP\fIport\fP:\fIdma\fP[:\fIport\fP:\fIdma\fP]...
 Specify the I/O port and DMA channel used by each ISA card, one pair of
 numbers per card, all separated by colons.  Any number of devices can be
 specified in this way and if any of them are successfully registered then
 autoprobing is disabled.
 .TP
 \fBadjust=\fP\fImicroseconds\fP
-Specify an adjustment to the default start-up delay in microseconds.  This
-cannot exceed +/- 256 microseconds (four line periods).
+Specify an adjustment to the default start-up delay in microseconds.
 .PP
 Early versions of the card could only use DMA channel 1.  Later versions
 could be jumpered to channel 1 or 3 and were shipped with a factory default

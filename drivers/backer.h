@@ -1,9 +1,7 @@
 /*
- * backer.h
- * 
  * Header file for Backer 16/32 device driver.
  *
- * Copyright (C) 2000,2001  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,6 +16,124 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+/*
+ * The meaning of some of the variables used in sector formating is as
+ * follows.  The diagram shows the layout for a complete frame (two
+ * sectors) starting on an odd field of video.
+ *
+ *           --  +-------------+  --
+ *           ^   |   leader    |   leader
+ *           |   +-------------+  --
+ *           |   |     A       |   ^
+ *           |   |     C       |   |
+ *           |   |     T R     |   |
+ *           |   |     I E     |   |
+ *  field_size   |     V G     |   active_size
+ *           |   |     E I     |   |
+ *           |   |       O     |   |
+ *           |   |       N     |   |
+ *           |   |             |   v
+ *           |   +-------------+  --
+ *           v   |   trailer   |   trailer
+ *           --  +-------------+  --
+ *               |  interlace  |   interlace
+ *               +-------------+  --
+ *               |   leader    |
+ *               +-------------+
+ *               |     A       |
+ *               |     C       |
+ *               |     T R     |
+ *               |     I E     |
+ *               |     V G     |
+ *               |     E I     |
+ *               |       O     |
+ *               |       N     |
+ *               |             |
+ *               +-------------+
+ *               |   trailer   |
+ *               +-------------+
+ *
+ * Television images are interlaced --- the lines of every other video
+ * field are drawn on the screen inbetween the lines of the previous video
+ * field thus increasing the resolution of the image through time-domain
+ * multiplexing.  The interlacing is accomplished by shifting the phase of
+ * "even" video fields with respect to "odd" video fields by 1/2 a line
+ * period.  In accomplishing this, the Backer hardware consumes one full
+ * additional line of data during odd video fields when generating an NTSC
+ * signal but no additional data for PAL signals.  The exact number of
+ * additional bytes to be inserted at the end of each odd video field is
+ * stored in the interlace parameter of the format.  In order to accomodate
+ * any possible hardware behaviour, the interlace parameter can be
+ * positive, 0 or even negative and need not be a multiple of the line
+ * width.
+ *
+ * The helical scanning technique employed by VCR video heads introduces
+ * noise at the top and bottom of each video field.  The role of the leader
+ * and trailer is to pad out these unusable portions of the video fields.
+ * The active region represents that portion of the field which can be used
+ * to reliably store data.  Since Backers do not recover a fixed number of
+ * bytes from each video field, it is necessary to provide a
+ * synchronization mark within the byte stream that can be searched for on
+ * playback to identify the locations of video fields.  In the case of this
+ * software, this mark consists of several bytes distributed uniformly
+ * throughout the active region.  The particular sequence of bytes used is
+ * called the "key sequence" which consists of key_length bytes placed
+ * every key_interval bytes within the active region.
+ *
+ * The remainder of the active region is available for the recording of
+ * data and its contents are processed in the stream buffer.  The stream
+ * buffer is also the staging area for data being copied to/from user
+ * space.  For the processing of this buffer, the meaning of a few more
+ * variables is shown below.  pos always points to the next byte to be
+ * read/written and if equal to end then the sector is empty/full
+ * respectively.
+ *
+ * The buffer contains three types of information:  a header containing
+ * information about the sector (its sequence number, etc.), file data, and
+ * finally parity bytes used for error correction.  The file data bytes and
+ * header together form the "data" area with the header appearing at its
+ * top end while the parity bytes form the "parity" area.
+ *
+ * Data is written sequentially into the data area upto the sector's
+ * maximum capacity at which point the header is inserted and then the
+ * parity bytes are computed.  The error control code employed is a
+ * Reed-Solomon code whose symbols are interleaved so as to distribute
+ * burst errors among separate R.S. blocks.  The number of R.S. blocks to
+ * be interleaved together is set by the interleave parameter.
+ *
+ * The header normally occupies the top 4 bytes of the data area.  If the
+ * sector contains less than its maximum capacity of data (eg. it is the
+ * last sector of the recording and is not full), then the header is
+ * expanded to occupy the top 5 bytes of the data area.  The additional
+ * byte is used to store the high 8 bits of the actual number of file data
+ * bytes in the sector with the low 4 bits being stored in a portion of the
+ * normal header set aside for that purpose.  The count of bytes is mapped
+ * into the resulting 12 bit number in such a way that the low four bits
+ * are never all 0.  This allows the 0 value to be used to indicate a
+ * normal, non-truncated, sector.
+ *
+ *             --  +-------------+
+ *             ^   |             |
+ *             |   |             |
+ *             |   |             |
+ *             |   |             |
+ *             |   |      D      |
+ *     data_size   |      A      |
+ *             |   |      T      |
+ *             |   |      A      |
+ *             |   |             |
+ *             |   |             |
+ *             |   |             |
+ *             |   +- hi 8 bits -+
+ *             |   +-------------+
+ *             v   |    Header   |
+ *             --  +-------------+
+ *             ^   |             |
+ *   parity_size   |    Parity   |
+ *             v   |             |
+ *             --  +-------------+
  */
 
 #ifndef  _BACKER_H
@@ -36,6 +152,7 @@
 #define  BKR_BIT_RECEIVE        0x40
 #define  BKR_BIT_NTSC_VIDEO     0x80
 
+#define  BKR_MIN_FRAME_FREQ     20      /* min frame rate in Hz */
 #define  BKR_LINE_PERIOD        64      /* microseconds (NTSC and PAL) */
 #define  BKR_FIRST_LINE_NTSC    10      /* first line of data in video field */
 #define  BKR_FIRST_LINE_PAL     6       /* ditto */
@@ -49,9 +166,13 @@
  * in the /proc file system.
  */
 
-#define  BKR_VIDEOMODE(x)      ((x) & 0x0003)
-#define  BKR_DENSITY(x)        ((x) & 0x000c)
-#define  BKR_FORMAT(x)         ((x) & 0x0030)
+#define  BKR_VIDEOMODE_MASK    0x0003
+#define  BKR_DENSITY_MASK      0x000c
+#define  BKR_CODEC_MASK        0x0030
+#define  BKR_MODE_MASK         (BKR_VIDEOMODE_MASK | BKR_DENSITY_MASK | BKR_CODEC_MASK)
+#define  BKR_VIDEOMODE(x)      ((x) & BKR_VIDEOMODE_MASK)
+#define  BKR_DENSITY(x)        ((x) & BKR_DENSITY_MASK)
+#define  BKR_CODEC(x)          ((x) & BKR_CODEC_MASK)
 #define  BKR_NTSC              0x0001           /* NTSC video mode */
 #define  BKR_PAL               0x0002           /* PAL video mode */
 #define  BKR_LOW               0x0004           /* Low density */
@@ -62,11 +183,38 @@
 
 
 /*
+ * Convert a mode (as above) to an index into the format array (below).
+ * Return < 0 if the mode is invalid.
+ */
+
+static int bkr_mode_to_format(int mode)
+{
+	int  format = 0;
+
+	if(BKR_DENSITY(mode) == BKR_HIGH)
+		format += 6;
+	else if(BKR_DENSITY(mode) != BKR_LOW)
+		return(-1);
+	if(BKR_VIDEOMODE(mode) == BKR_PAL)
+		format += 3;
+	else if(BKR_VIDEOMODE(mode) != BKR_NTSC)
+		return(-1);
+	if(BKR_CODEC(mode) == BKR_SP)
+		format += 2;
+	else if(BKR_CODEC(mode) == BKR_RAW)
+		format += 1;
+	else if(BKR_CODEC(mode) != BKR_EP)
+		return(-1);
+
+	return(format);
+}
+
+
+/*
  * Format information.
  */
 
-typedef struct
-	{
+typedef struct {
 	unsigned int  bytes_per_line;   /* width of one line of video */
 	unsigned int  field_size;       /* bytes in an even video field */
 	unsigned int  interlace;        /* difference between odd/even fields */
@@ -76,65 +224,54 @@ typedef struct
 	unsigned int  active_size;      /* see diagram above */
 	unsigned int  key_interval;     /* key byte spacing */
 	unsigned int  key_length;       /* number of key bytes */
-	unsigned int  gcr;              /* 1 == use GCR modulation */
-	unsigned int  modulation_pad;   /* extra space for modulation overhead */
-	unsigned int  buffer_size;      /* see diagram above */
+	unsigned int  modulation_pad;   /* modulation overhead */
 	unsigned int  interleave;       /* block interleave */
 	unsigned int  parity_size;      /* see diagram above */
 	unsigned int  data_size;        /* see diagram above */
-	} bkr_format_info_t;
+} bkr_format_info_t;
 
-#define BKR_FORMAT_INFO_INITIALIZER ( (bkr_format_info_t [])                                  \
-{ {  4, 1012,  4, 2028,  40, 32,  940,  42, 22, 1, 124,  816, 12,  96,  720 },      /* nle */ \
-  {  4, 1012,  4, 2028,   0,  0, 1012,  -1,  0, 0,   0, 2028,  1,   0, 2028 },      /* nlr */ \
-  {  4, 1012,  4, 2028,  32, 28,  952,  45, 21, 0,  21,  931,  7,  70,  861 },      /* nls */ \
-  {  4, 1220,  0, 2440,  48, 36, 1136,  39, 29, 1, 152,  984, 12,  96,  888 },      /* ple */ \
-  {  4, 1220,  0, 2440,   0,  0, 1220,  -1,  0, 0,   0, 2440,  1,   0, 2440 },      /* plr */ \
-  {  4, 1220,  0, 2440,  40, 36, 1144,  47, 24, 0,  24, 1120,  8,  80, 1040 },      /* pls */ \
-  { 10, 2530, 10, 5070, 100, 70, 2360,  81, 29, 1, 288, 2072, 28, 224, 1848 },      /* nhe */ \
-  { 10, 2530, 10, 5070,   0,  0, 2530,  -1,  0, 0,   0, 5070,  1,   0, 5070 },      /* nhr */ \
-  { 10, 2530, 10, 5070,  80, 70, 2380, 119, 20, 0,  20, 2360, 20, 200, 2160 },      /* nhs */ \
-  { 10, 3050,  0, 6100, 120, 90, 2840,  88, 32, 1, 344, 2496, 26, 208, 2288 },      /* phe */ \
-  { 10, 3050,  0, 6100,   0,  0, 3050,  -1,  0, 0,   0, 6100,  1,   0, 6100 },      /* phr */ \
-  { 10, 3050,  0, 6100, 100, 90, 2860, 130, 22, 0,  22, 2838, 22, 220, 2618 } } )   /* phs */
+#define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t [])                        \
+{ {  4, 1012,  4, 2028,  40, 32,  940,  44, 22, 102, 12,  96,  720 },     /* nle */ \
+  {  4, 1012,  4, 2028,   0,  0, 2028,   0,  0,   0,  1,   0, 2028 },     /* nlr */ \
+  {  4, 1012,  4, 2028,  32, 28,  952,  45, 22,   0, 10, 100,  830 },     /* nls */ \
+  {  4, 1220,  0, 2440,  48, 36, 1136,  40, 29, 123, 12,  96,  888 },     /* ple */ \
+  {  4, 1220,  0, 2440,   0,  0, 2440,   0,  0,   0,  1,   0, 2440 },     /* plr */ \
+  {  4, 1220,  0, 2440,  40, 36, 1144,  49, 24,   0, 14, 140,  980 },     /* pls */ \
+  { 10, 2530, 10, 5070, 100, 70, 2360,  84, 29, 259, 28, 224, 1848 },     /* nhe */ \
+  { 10, 2530, 10, 5070,   0,  0, 5070,   0,  0,   0,  1,   0, 5070 },     /* nhr */ \
+  { 10, 2530, 10, 5070,  80, 70, 2380, 125, 20,   0, 20, 200, 2160 },     /* nhs */ \
+  { 10, 3050,  0, 6100, 120, 90, 2840,  91, 32, 312, 26, 208, 2288 },     /* phe */ \
+  { 10, 3050,  0, 6100,   0,  0, 6100,   0,  0,   0,  1,   0, 6100 },     /* phr */ \
+  { 10, 3050,  0, 6100, 100, 90, 2860, 136, 22,   0, 22, 220, 2618 } }    /* phs */
 
 #define BKR_NUM_FORMATS (sizeof(BKR_FORMAT_INFO_INITIALIZER)/sizeof(bkr_format_info_t))
-
-
-/*
- * Convert a mode (as above) to an index into the format array.
- */
-
-static inline int bkr_mode_to_format(int mode)
-{
-	int  format = 0;
-
-	if(BKR_DENSITY(mode) == BKR_HIGH)
-		format += 6;
-	if(BKR_VIDEOMODE(mode) == BKR_PAL)
-		format += 3;
-	if(BKR_FORMAT(mode) == BKR_SP)
-		format += 2;
-	else if(BKR_FORMAT(mode) == BKR_RAW)
-		format += 1;
-
-	return(format);
-}
+#define BKR_NUM_FORMAT_PARMS (sizeof(bkr_format_info_t)/sizeof(unsigned int))
 
 
 /*
  * _sysctl() interface
  */
 
-enum
-	{
-	DEV_BACKER=6	/* FIXME:  get a number (from LANANA?) */
-	};
+enum {
+	DEV_BACKER=31	/* FIXME:  get a number (from LANANA?) */
+};
 
-enum
-	{
+enum {
 	BACKER_STATUS=1,
 	BACKER_FORMAT=2
-	};
+};
+
+
+/*
+ * bkr_sectors_per_second()
+ *
+ * The number of sectors generated each second computed from the given
+ * mode.
+ */
+
+static int bkr_fields_per_second(int mode)
+{
+	return(BKR_VIDEOMODE(mode) == BKR_PAL ? 50 : 60);
+}
 
 #endif /* _BACKER_H */

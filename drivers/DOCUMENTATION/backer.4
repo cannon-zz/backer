@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BACKER 4 "December 30, 2001" "Linux" "Special Files"
+.TH BACKER 4 "November 23, 2002" "Linux" "Special Files"
 .SH NAME
 backer \- Backer video tape based storage device.
 .SH INTRODUCTION
@@ -182,7 +182,14 @@ for more information on using this feature.
 Hardware and driver status information is provided through the \fB/proc\fP
 file system by the files \fB/proc/sys/dev/backer/\fP\fIn\fP\fB/status\fP.
 Each device in the system has its own status file which contains a sequence
-of data fields starting with the device's current operating state.
+of data fields starting with the device's current operating state.  The
+contents of the file can also be accessed through the
+.IR sysctl (2)
+system call.  To access Backer parameters via
+.IR sysctl (2),
+use the vector \fB{ CTL_DEV, DEV_BACKER,\fP \fIunit_number\fP+1,
+\fBBACKER_STATUS }\fP for the \fBname\fP field.  Both \fBlinux/sysctl.h\fP
+and \fBbacker.h\fP must be included for these constants to be defined.
 .PP
 The meaning of each field in this file is given below and indicated after
 each field heading is(are) the transfer direction(s) in which the field is
@@ -190,8 +197,7 @@ meaningful.  For example, a field marked ``reading'' is meaningless when
 the device is writing.  Between transfers, when the device is stopped or
 suspended, all fields will retain their values from the end of the last
 transfer.  All numeric fields except the sector number (see below) are
-displayed in unsigned decimal format.  The meaning of the fields is as
-follows.
+displayed in unsigned decimal format.
 .TP
 \fBCurrent State\fP (reading/writing)
 The unit's state:  STOPPED, READING, WRITING, or SUSPENDED.
@@ -201,18 +207,34 @@ A number indicating the video mode, bit density and data format of the
 current transfer.  The masks and flags used to interpret this number can be
 found in the header file, \fBbacker.h\fP.
 .TP
+\fBI/O Buffer\fP (reading/writing)
+The first field shows the number of bytes in the I/O buffer.  The second
+field shows the size of the I/O buffer.  Ideally the buffer will be kept
+completely full whilst writing and completely empty whilst reading.
+.TP
 \fBSector Number\fP (reading/writing)
 The sectors of every recording are numbered in increasing, sequential,
 order to provide a means by which buffer over- and underflows can be
-identified during playback.  The sector number is a 25 bit signed integer
-and so takes on values in the range -16777216 to +16777215 inclusively.
+identified during playback.  The sector number is a 28 bit signed integer
+and so takes on values in the range -134217728 to +134217727 inclusively.
 The numbering is arranged so that the first data sector of a recording is
 sector number 0.  The sequence can wrap back to 0 if the data stream is
-very long but this will take at least 4660 minutes (about 3.2 days) and so
-is unlikely to occur in the context of normal, VCR-based, operation.  This
-field shows the sector currently being transfered to/from user space.  The
-driver's buffers introduce a delay of several seconds between this and the
-sector being transfered to/from the tape.
+very long but this will take at least 621 hours (about 3.5 weeks) and so is
+unlikely to be an issue.  This field shows the sector currently being
+transfered to/from user space.  The driver's buffers introduce a delay of
+several seconds between this and the sector being transfered to/from the
+tape.
+.TP
+\fBBad Sectors\fP (reading)
+The number of sectors since the current read operation started that have
+contained blocks which the Reed-Solomon decoder identified as being
+uncorrectable.  Not all uncorrectable blocks can be detected (imagine
+errors occurring in such a way that they make the block look like another
+valid or correctable block).
+.TP
+\fBBad Sector Runs\fP (reading)
+The number of runs of consecutive bad sectors that have occured since the
+current read operation started.
 .TP
 \fBByte Errors\fP (reading)
 Shows the total number of bad symbols that have been successfully corrected
@@ -227,13 +249,7 @@ symbols then the block cannot be corrected.
 .TP
 \fBRecently\fP (reading)
 Shows the largest number of bad symbols that have been detected in any one
-block of data since the last time the \fB/proc\fP file was read.
-.TP
-\fBBad Blocks\fP (reading)
-The number of blocks which the Reed-Solomon decoder detected could not be
-corrected.  Not all uncorrectable blocks can be detected (imagine errors
-occurring in such a way that they make the block look like another valid or
-correctable block).
+block of data since the last time the \fB/proc\fP status file was read.
 .TP
 \fBFraming Errors\fP (reading)
 An upper bound can be placed on the number of bytes which need to be
@@ -241,11 +257,6 @@ searched before a sector key is found and this displays the number of times
 this bound was exceeded since the current read operation started.  Framing
 errors do not necessarily represent lost data but are symptomatic of a poor
 quality recording.
-.TP
-\fBOverrun Errors\fP (reading)
-The number of times the sector sequence number skipped in the positive
-direction indicating that the incoming video data filled the I/O buffer and
-the computer could not keep up.
 .TP
 \fBUnderflows\fP (reading)
 The number of times the sector sequence number skipped in the negative
@@ -272,42 +283,49 @@ playback.
 \fBLargest Field\fP (reading)
 The size in bytes of the largest video field encountered so far during
 playback.
-.TP
-\fBI/O Buffer\fP (reading/writing)
-The first field shows the number of bytes in the I/O buffer.  The second
-field shows the size of the I/O buffer.  Ideally the buffer will be kept
-completely full whilst writing and completely empty whilst reading.
 .PP
 The worst key and closest non-key must have a comfortable margin between
 them if one is going to uniquely identify sector keys in the data stream.
 The difference between the smallest and largest video fields shows the
 variability in the number of lines generated by a VCR during playback.
 .SS "FORMAT TABLE"
-The parameters describing each of the driver's data formats are stored,
-internally, in look-up tables.  Each Backer device has its own format table
-which is initialized from a global default and can be accessed via the file
+For each Backer device, the driver maintains a private format parameter
+look-up table which describes the characteristics of each of that device's
+on-tape data formats.  These parameter tables are initialized from a
+driver-wide default at driver start-up and can be accessed via the file
 \fB/proc/sys/dev/backer/\fP\fIn\fP\fB/format_table\fP or via the
 .IR sysctl (2)
-system call.  To access Backer parameters via
+system call.  To access Backer format parameters via
 .IR sysctl (2),
-the following vectors should be used for the \fBname\fP field:  for
-accessing status information use \fB{ CTL_DEV, DEV_BACKER, BACKER_STATUS
-}\fP; and for the format table use \fB{ CTL_DEV, DEV_BACKER, BACKER_FORMAT
-}\fP.  Both \fBlinux/sysctl.h\fP and \fBbacker.h\fP must be included for
-these constants to be defined.
+use the vector \fB{ CTL_DEV, DEV_BACKER,\fP \fIunit_number\fP+1,
+\fBBACKER_FORMAT }\fP for the \fBname\fP field.  Both \fBlinux/sysctl.h\fP
+and \fBbacker.h\fP must be included for these constants to be defined.
 .PP
-For each of the 12 data formats there are 15 signed integer parameters ---
-180 in total --- describing such things as the number of bytes in each
-video field, the number of parity bytes to use in each block, etc..  The
-\fBformat_table\fP file is simply a white-space separated list of the 180
-parameters.  See \fBbacker.h\fP and the driver source code for information
-on the parameters and techniques for construction of new parameter tables.
+Each device's parameter table is an array of signed integers that are
+grouped into sets, one for each on-tape format.  The numbers in each set
+describe such things as the number of bytes in each video field, the number
+of parity bytes to use in each block, etc..  The \fBformat_table\fP file is
+a white-space separated list of the numbers in a given device's parameter
+table.  See \fBbacker.h\fP and the driver source code for information on
+the parameters and techniques for the construction of new parameter tables.
+.PP
+Several of the user-space utilities associated with this driver, including
+.IR bkrcheck (8)
+and
+.IR bkrencode (8),
+require detailed knowledge of the on-tape data format.  These utilities
+have a copy of the driver's default format parameter table compiled into
+them but this, clearly, will not be appropriate when used with any device
+whose parameter table has been adjusted.  For this reason, any such utility
+has the ability to load a format parameter table at run-time from one of
+these \fBformat_table\fP files (or any other file in the same format).
 .PP
 \fIWARNING\fP:  It is possible to corrupt your kernel (crash your system)
-by loading invalid format tables into the driver.  This interface is only
-meant to provide an experienced user with an easier method for tuning the
-driver's behaviour than modifying its source code.  Competance is assumed.
-Use with care!
+by loading invalid format tables into the driver.  Write access to this
+interface is provided (to root-priveledged users only!) merely so that
+experienced users can have an easier method for tuning the driver's
+behaviour than modifying its source code and re-compiling.  Competance is
+assumed.  Use with care!
 .SH EXAMPLES
 The examples below assume that \fB/dev/tape\fP is a link to the desired
 device.
@@ -319,8 +337,8 @@ To save a file to tape, press Record and type
 .sp
 .RE
 On your television, when the recording first starts, you will see the
-beginning-of-record (BOR) mark which consists of vertical bars and will
-last for several seconds.  That will be followed by what, for the most
+beginning-of-record (BOR) mark which consists mostly of vertical bars and
+will last for several seconds.  That will be followed by what, for the most
 part, is random noise until the recording ends with the end-of-record (EOR)
 mark.  To verify the recording, position the tape just before or at the
 beginning of the recording,  press Play and type

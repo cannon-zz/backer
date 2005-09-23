@@ -1,10 +1,8 @@
 /*
- * stdio_dev.h
+ * Driver for Danmere's Backer 16/32 video tape backup cards.
  *
- * Function prototypes for Backer I/O on stdio.
+ * Copyright (C) 2000,2001,2002  Kipp C. Cannon
  *
- * Copyright (C) 2001 Kipp C. Cannon
- * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
@@ -20,11 +18,11 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _STDIO_DEV_H_
-#define _STDIO_DEV_H_
+#ifndef _BKR_SECTOR_RANDOMIZE_H
+#define _BKR_SECTOR_RANDOMIZE_H
 
-#include "backer_device.h"
+#include <bkr_bytes.h>
 
-extern bkr_device_ops_t  bkr_stdio_ops;
+void bkr_splp_sector_randomize(void *, int, u_int32_t);
 
-#endif /* _STDIO_DEV_H_ */
+#endif /* _BKR_SECTOR_RANDOMIZE_h */

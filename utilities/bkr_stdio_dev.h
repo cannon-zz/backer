@@ -1,10 +1,10 @@
 /*
- * bkr_disp_mode.h
+ * stdio_dev.h
  *
- * Header file for bkr_disp_mode.c
+ * Function prototypes for Backer I/O on stdio.
  *
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
- *
+ * Copyright (C) 2001,2002 Kipp C. Cannon
+ * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
@@ -20,11 +20,17 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _BKR_DISP_MODE_H
-#define _BKR_DISP_MODE_H
+#ifndef _STDIO_DEV_H_
+#define _STDIO_DEV_H_
 
-#include <stdio.h>
+#include <bkr_ring_buffer.h>
+#include <bkr_stream.h>
 
-void bkr_display_mode(FILE *, unsigned int);
+ssize_t read_ring(int fd, struct ring *ring, size_t count);
+ssize_t write_ring(int fd, struct ring *ring, size_t count);
+size_t fread_ring(struct ring *ring, size_t size, size_t nmemb, int fd);
+size_t fwrite_ring(struct ring *ring, size_t size, size_t nmemb, int fd);
 
-#endif /* _BKR_DISP_MODE_H */
+struct bkr_stream_ops_t *bkr_stdio_dev_init(void);
+
+#endif /* _STDIO_DEV_H_ */

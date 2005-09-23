@@ -1,5 +1,5 @@
 /* XPM */
-static char * bkrfont_xpm[] = {
+static char * bkr_font_xpm[] = {
 "475 14 3 1",
 " 	c None",
 ".	c #000000",

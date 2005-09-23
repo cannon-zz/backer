@@ -20,7 +20,7 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BACKER_PARPORT 4 "December 30, 2001" "Linux" "Special Files"
+.TH BACKER_PARPORT 4 "November 23, 2002" "Linux" "Special Files"
 .SH NAME
 backer_parport \- Parallel port Backer device support.
 .SH INTRODUCTION
@@ -43,7 +43,7 @@ station) and might become available at a later time.
 This module accepts the following options.  The \fBunits=\fP option is
 required.
 .TP
-\fBunits=\fP\fIparport\fP[:\fIparport\fP:...]
+\fBunits=\fP\fIparport\fP[:\fIparport\fP]...
 Specify the names of the parallel ports to which Backer devices are
 attached, for example ``parport0''.  Any number of ports can be specified
 and the driver will register one Backer device for each as they become
@@ -55,6 +55,38 @@ Specify an adjustment to the default start-up delay in microseconds.
 Due to limitations in the external Backer's design, only one can be
 attached to each parallel port.  If multiple devices are attached to the
 same port, then they cannot be controled independantly.
+.SH NOTES
+Before you can use this driver to interface with your external Backer you
+will first need to make sure your kernel's parallel port subsystem is
+properly configured.  Specifically, you need to do the following:
+.PD 0
+.RS +0.5i
+.TP 2
+o
+insure that you have a PC-style ECP parallel port
+.TP 2
+o
+insure the Linux parport driver is installed and recognizes the port as a
+PC-style ECP port
+.TP 2
+o
+insure the parport driver knows the port's interrupt line number
+.TP 2
+o
+insure the parport driver knows the port's DMA channel number
+.RE
+.PD 1
+.PP
+To check the last three points, look at the files
+
+\fB/proc/sys/dev/parport/\fP\fIport_name\fP\fB/modes\fP
+\fB/proc/sys/dev/parport/\fP\fIport_name\fP\fB/irq\fP
+\fB/proc/sys/dev/parport/\fP\fIport_name\fP\fB/dma\fP
+
+where \fIport_name\fP is the name of the parallel port to which your Backer
+is attached (eg. ``parport0'').  In the modes file you must see ``PCSPP'',
+``ECP'' and ``DMA'' all listed and the two files irq and dma must contain
+the correct numbers for the port.
 .SH BUGS
 Due to weaknesses in the design of Linux's parport architecture, it is not
 possible to use it to support the external Backer device.  Instead, it is

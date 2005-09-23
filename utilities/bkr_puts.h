@@ -1,9 +1,9 @@
 /*
- * bkr_aux_puts.h
+ * bkr_puts.h
  *
- * Header file for bkr_aux_puts.c
+ * Header file for bkr_puts.c
  *
- * Copyright (C) 2000  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,14 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "backer.h"
+#ifndef _BKR_PUTS_H
+#define _BKR_PUTS_H
 
-int bkr_aux_puts(const char *, char *, struct bkrformat *);
+#include <backer.h>
+
+#define  BKR_FONT_WIDTH  5	/* font width  */
+#define  BKR_FONT_HEIGHT 14	/* font height */
+
+int bkr_puts(const char *, unsigned char *, int, int, bkr_format_info_t *);
+
+#endif	/* _BKR_PUTS_H */

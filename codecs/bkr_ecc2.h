@@ -1,7 +1,5 @@
 /*
- * bkr_disp_mode.h
- *
- * Header file for bkr_disp_mode.c
+ * Driver for Danmere's Backer 16/32 video tape backup cards.
  *
  * Copyright (C) 2000,2001,2002  Kipp C. Cannon
  *
@@ -20,11 +18,20 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _BKR_DISP_MODE_H
-#define _BKR_DISP_MODE_H
 
-#include <stdio.h>
+#ifndef _BKR_ECC2_H
+#define _BKR_ECC2_H
 
-void bkr_display_mode(FILE *, unsigned int);
+#include <bkr_stream.h>
 
-#endif /* _BKR_DISP_MODE_H */
+/*
+ * ========================================================================
+ *
+ *                                 FUNCTIONS 
+ *
+ * ========================================================================
+ */
+
+const struct bkr_stream_ops_t *bkr_ecc2_codec_init(void);
+
+#endif /* _BKR_ECC2_H */

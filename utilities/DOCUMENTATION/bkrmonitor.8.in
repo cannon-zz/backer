@@ -1,4 +1,4 @@
-.\" Copyright (c) 2001 Kipp Cannon (kcannon@users.sourceforge.net)
+.\" Copyright (c) 2001,2002 Kipp Cannon (kcannon@users.sourceforge.net)
 .\"
 .\" This is free documentation; you can redistribute it and/or
 .\" modify it under the terms of the GNU General Public License as
@@ -20,44 +20,48 @@
 .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
 .\" USA.
 .\"
-.TH BKRMONITOR 8 "December 30, 2001" "Linux" "Backer"
+.TH BKRMONITOR 8 "November 23, 2002" "Linux" "Backer"
 .SH NAME
 bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
-\fBbkrmonitor\fP [\fB-d\fP \fIdevice\fP] [\fB\-h\fP]
-[\fB\-t\fP \fIinterval\fP]
+\fBbkrmonitor\fP [\fB-f\fP[\fIstatus_file\fP]] [\fB\-h\fP]
+[\fB\-t\fP\fIinterval\fP]
 .SH DESCRIPTION
 The \fBbkrmonitor\fP utility is a GTK+ application for monitoring the
 status of the
 .IR backer (4)
 driver.  It works by repeatedly parsing the contents of
-\fB/proc/sys/dev/backer/\fP\fIdevice\fP\fB/status\fP and displaying the
-information graphically.
+\fB/proc/sys/dev/backer/*/status\fP and/or a user-specified status file and
+displaying the information graphically.
 .PP
 See
 .IR backer (4)
 for the meaning of the information displayed.
 .PP
-The status file to be read can be specified by providing a device number
-with the \fB-d\fP option.  It is also possible to specify ``stdin'' instead
-of a device number in which case status information is read from
-.IR stdin (3).
-This feature may be used in conjunction with the \fB-d\fP option of
+At startup, \fBbkrmonitor\fP scans the \fB/proc\fP filesystem for
+.IR backer (4)
+status files and opens each one that it finds.  If provided with the
+\fB-f\fP option, \fBbkrmonitor\fP will also attempt to use the given file
+name as a source of status information or
+.IR stdin (3)
+if no file name is provided.  This feature may be used in conjunction with
+the \fB-d\fP option of
 .IR bkrencode (8)
 to monitor that utility's decoding status.  See \fBEXAMPLES\fP below for
 more information.
 .SS OPTIONS
 .TP
-\fB\-d\fP \fIdevice\fP
-Monitor device number \fIdevice\fP.  The default is 0.  If \fIdevice\fP is
-``stdin'' then program input is read from
+\fB\-f\fP[\fIstatus_file\fP]
+In addition to the status files found in the \fB/proc\fP filesystem, also
+obtain input by repeatedly parsing \fIstatus_file\fP.  If \fIstatus_file\fP
+is omitted then
 .IR stdin (3)
-rather than from the \fB/proc\fP file system.
+is parsed.
 .TP
 \fB\-h\fP
 Print a usage message.
 .TP
-\fB\-t\fP \fIinterval\fP
+\fB\-t\fP\fIinterval\fP
 Set the update interval to \fIinterval\fP milliseconds.
 .SH EXAMPLES
 Here is an example procedure by which the status of
@@ -86,13 +90,14 @@ The next step is to link \fBbkrmonitor\fP to
 through the pipe.  This is accomplished by typing, for example,
 .RS 3
 .sp
-\fB$\fP bkrmonitor -d stdin <pipe &
+\fB$\fP bkrmonitor -fpipe &
 .br
 \fB$\fP bkrencode -u -d <tape.raw >tape.dat 2>pipe
 .sp
 .RE
-where the raw tape data is in tape.raw and the decoded data is being saved
-in tape.dat.
+where, for clarity, the requisite format specifiers have been omitted from
+the command line of
+.IR bkrencode (8).
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrcheck (8),
@@ -104,6 +109,16 @@ sector number so if the number stops changing for some reason then the
 recent error graph stops decaying.  This will be seen if the graph is not
 zero at the end of a recording or while the driver is skipping over an
 underflow.
+.PP
+To minimize CPU load, \fBbkrmonitor\fP only actually reads and parses
+status information from the source being displayed.  This has several
+consequences.  Firstly, one should expect glitches when switching between
+sources since the information displayed will momentarily be out of date
+while it catches up to the current values in the status file.  Secondly, an
+application that generates status information like
+.IR bkrencode (8)
+can be blocked from running if \fBbkrmonitor\fP is switched to some other
+source.
 .SH AUTHOR
 Kipp Cannon (kcannon@users.sourceforge.net).
 .SH AVAILABILITY

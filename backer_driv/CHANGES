@@ -1,0 +1,35 @@
+0.4 ()
+	Fixed a bug in the sector locator algorithm which could cause the
+	decoder to skip ahead of the incoming tape data.
+
+	Fixed an erasure related buffer overflow in the Reed-Solomon
+	decoder but it was not affecting this driver since the driver does
+	not make use of erasures.
+
+	Removed "feature" which caused reads to not terminate automatically
+	if the tape data simply stopped (eg. without a proper EOR mark):
+	ETIMEDOUT is now returned from the block layer rather than
+	retrying.
+
+	Improved sanity when switching modes.  Although I'd never had
+	troubles myself, while checking the code I felt weird things might
+	happen under certain read / close / mode change / open
+	combinations.  Definitely all perfect now :-).
+
+	Allowed randomizer to handle odd sized blocks by always allocating
+	an even number of bytes for the block buffer.  This wasn't an issue
+	yet since the blocks in all current formats have an even number of
+	bytes in them.
+
+0.3 (2000/10/17)
+	Fixed bug in BKRIOCGETFORMAT ioctl which caused the block capacity
+	to be reported as the number of data bytes contained in the current
+	block rather than as the design capacity of a block.
+
+	Removed memory access priviledge checks from the read() and write()
+	methods --- the kernel (in 2.0.36 at least) checks for us.
+
+	Many documentation improvements.
+
+0.2 (2000/10/10)
+	First public release.

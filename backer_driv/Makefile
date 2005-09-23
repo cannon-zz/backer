@@ -1,6 +1,6 @@
 INCLUDEDIR = /usr/include
 
-INSMODFLAGS = dma=1
+INSMODFLAGS = 
 
 CC = gcc
 CFLAGS = -D__KERNEL__ -DMODULE -O2 -Wall -Wstrict-prototypes -I$(INCLUDEDIR)
@@ -17,7 +17,7 @@ all : $(TARGET)
 $(TARGET) : $(OBJECTS)
 	$(LD) $(LDFLAGS) $^ -o $@
 
-backer_fmt.o : backer_fmt.c backer.h backer_device.h backer_fmt.h
+backer_fmt.o : backer_fmt.c backer.h backer_device.h backer_fmt.h rs.h
 backer_isa.o : backer_isa.c backer.h backer_device.h backer_fmt.h
 rs.o :  rs.c rs.h
 

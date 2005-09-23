@@ -1,0 +1,10 @@
+0.4 ()
+	Fixed sector efficiency and data rate computation errors in bkrtest
+	--- you can now actually use the data rate along with your tape
+	length to compute a tape capacity.
+
+0.3 (2000/10/17)
+	Re-release to keep version number in step with driver.
+
+0.2 (2000/10/10)
+	First public release.

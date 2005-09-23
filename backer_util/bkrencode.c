@@ -1,7 +1,7 @@
 /*
  * bkrencode
  *
- * User-mode tape data reader/writer for the Backer tape device.
+ * Tape data encoder/decoder for the Backer tape device.
  *
  * Copyright (C) 2000  Kipp C. Cannon
  *
@@ -32,10 +32,13 @@
 #include "backer_fmt.h"
 #include "bkr_disp_mode.h"
 
+#define  DEFAULT_DEVICE  "/dev/backer"
+
+
 int main(int argc, char *argv[])
 {
 	int  tmp;
-	char  *devname = "/dev/backer";
+	char  *devname = DEFAULT_DEVICE;
 	struct bkrconfig  config;
 
 	/*

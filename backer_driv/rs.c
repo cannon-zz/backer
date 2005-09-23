@@ -308,7 +308,7 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
 		/*
 		 * Argh:  by all rights the following should be faster than the preceding but
 		 * time trials show it to be 5% slower on my PII-400.  I must be missing
-		 * something.  Must be some sort of data pre-fetch thing...
+		 * some sort of hardware exploit...
 		 *
 		feedback = Log_alpha[block[i] ^ block[b]];
 		if(feedback != INFINITY)
@@ -338,13 +338,13 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
  * unmodified.  The number of symbols corrected is returned or -1 if the code
  * word cannot be corrected.
  *
- * There are two ways the received vector can be corrupted.  An incorrect
- * symbol in the vector is called an "error".  If, for some reason, the
- * location of the incorrect symbol is known then it is instead called an
- * "erasure".  A Reed-Solomon code with n-k parity symbols can correct up to
- * and including n-k erasures or (n-k)/2 errors or any combination thereof
- * with each error counting as two erasures.  The number of corrupt bits within
- * a corrupt symbol is irrelevant:  the symbol is either bad or good.
+ * There are two types of corrupted symbol.  An incorrect symbol in the vector
+ * is called an "error".  If, for some reason, the location of the incorrect
+ * symbol is known then it is instead called an "erasure".  A Reed-Solomon code
+ * with n-k parity symbols can correct up to and including n-k erasures or
+ * (n-k)/2 errors or any combination thereof with each error counting as two
+ * erasures.  The number of corrupt bits within a corrupt symbol is
+ * irrelevant:  the symbol is either bad or good.
  *
  * If erasures are known, then their locations are passed to the decoder in
  * the erasure[] array and the number of them is passed in the no_eras
@@ -374,20 +374,20 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 	gf  tmp;                        /* temporary storage */
 	gf  discr;                      /* discrepancy in Berlekamp-Massey algo. */
 	gf  num, den;                   /* numerator & denominator for Forney alg. */
-	gf  temp[MAX_PARITY+1];         /* temporary storage polynomial */
-	gf  s[MAX_PARITY];              /* syndrome polynomial */
-	gf  lambda[MAX_PARITY+1];       /* error & erasure locator polynomial */
-	gf  b[MAX_PARITY+1];            /* shift register storage for B-M alg. */
-	gf  omega[MAX_PARITY];          /* error & erasure evaluator polynomial */
-	gf  root[MAX_PARITY];           /* roots of lambda */
-	gf  loc[MAX_PARITY];            /* error locations (reciprocals of root[]) */
+	static gf temp[MAX_PARITY+1];   /* temporary storage polynomial */
+	static gf s[MAX_PARITY];        /* syndrome polynomial */
+	static gf lambda[MAX_PARITY+1]; /* error & erasure locator polynomial */
+	static gf b[MAX_PARITY+1];      /* shift register storage for B-M alg. */
+	static gf omega[MAX_PARITY];    /* error & erasure evaluator polynomial */
+	static gf root[MAX_PARITY];     /* roots of lambda */
+	static gf loc[MAX_PARITY];      /* error locations (reciprocals of root[]) */
 	int  count = 0;                 /* number of roots of lambda */
 
 	/*
 	 * Compute the syndromes by evaluating block(x) at the roots of g(x),
 	 * namely beta^(J0+i), i = 0, ... ,(n-k-1).  When finished, convert
 	 * them to alpha-rep and test for all zero.  If the syndromes are
-	 * are zero, block[] is a codeword and there are no errors to correct.
+	 * all zero, block[] is a codeword and there are no errors to correct.
 	 */
 
 	for(i = rs_format->parity; i; s[--i] = block[0]);
@@ -609,10 +609,10 @@ int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format
 		block[loc[j]] ^= Alpha_exp[modNN(num + NN - Log_alpha[den])];
 		}
 
-
-	finish:
 	if(erasure != NULL)
 		memcpy(erasure, loc, count * sizeof(gf));
+
+	finish:
 	return(count);
 }
 

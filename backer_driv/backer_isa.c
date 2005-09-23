@@ -50,11 +50,11 @@ int   read(struct inode *, struct file *, char *, int);
 int   write(struct inode *, struct file *, const char *, int);
 int   ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 int   lseek(struct inode *, struct file *, off_t, int);
-void  bkr_device_reset(void);
-void  update_device_offset(unsigned int *, unsigned long bailout);
-void  start_transfer(void);
-void  stop_transfer(void);
-void  bkr_reset_dma(void);
+static void  bkr_device_reset(void);
+static void  update_device_offset(unsigned int *, unsigned long bailout);
+static void  start_transfer(void);
+static void  stop_transfer(void);
+static void  bkr_reset_dma(void);
 
 
 /*
@@ -192,14 +192,14 @@ void cleanup_module(void)
 /*
  * open() --- Arbitrate device open requests.
  *
- * The device can only be opened for reading/writing once at a time since there
- * is only one data stream to interact with but the device can be opened any
- * number of times if a direction is not given (i.e. O_RDWR).  Furthermore, to
- * protect the contents of the data stream only one user at a time is given
- * access to the device (super users are always given access).  A data transfer
- * is started when the device is opened with a specific transfer direction
- * (i.e. either O_RDONLY or O_WRONLY) with the transfer proceding in the
- * direction requested.
+ * The device can only be opened for reading/writing once at a time since
+ * there is only one data stream to interact with but the device can be
+ * opened any number of times if a direction is not given (i.e. O_RDWR).
+ * Furthermore, to protect the contents of the data stream only one user at
+ * a time is given access to the device (super users are always given
+ * access).  A data transfer is started when the device is opened with a
+ * specific transfer direction (i.e. either O_RDONLY or O_WRONLY) with the
+ * transfer proceding in the direction requested.
  */
 
 int open(struct inode *inode, struct file *filp)
@@ -227,7 +227,8 @@ int open(struct inode *inode, struct file *filp)
 
 	/*
 	 * If we've made it this far then this open request is defining the
-	 * transfer direction so some additional setup stuff has to be done.
+	 * transfer direction so some additional setup stuff has to be
+	 * done.
 	 */
 
 	best_nonmatch = 1000000;
@@ -294,10 +295,10 @@ void close(struct inode *inode, struct file *filp)
 /*
  * ioctl()
  *
- * The general intent is for this driver to provide a standard magnetic tape
- * interface.  To this end we try to implement as many of the standard mtio.h
- * ioctl's as make sense for this device.  Any of our own features that don't
- * fit into the mtio stuff are implemented as new calls.
+ * The general intent is for this driver to provide a standard magnetic
+ * tape interface.  To this end we try to implement as many of the standard
+ * mtio.h ioctl's as make sense for this device.  Any of our own features
+ * that don't fit into the mtio stuff are implemented as new calls.
  */
 
 int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long argument)
@@ -416,6 +417,7 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 /*
  * read(), write()
  *
+ * During reads, timeout checking is done in block.read().
  */
 
 int read(struct inode *inode, struct file *filp, char *buff, int count)
@@ -437,14 +439,12 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 
 		moved += chunk_size;
 		if((block.offset += chunk_size) == block.end)
-			{
 			if(block.read(bailout) == EOR_BLOCK)
 				break;
-			if(jiffies >= bailout)
-				return(moved ? moved : -ETIMEDOUT);
-			}
 		}
 
+	if(jiffies >= bailout)
+		return(moved ? moved : -ETIMEDOUT);
 	return(moved);
 }
 
@@ -586,7 +586,7 @@ void bkr_device_flush(unsigned long bailout)
  * write operations it is the tail.
  */
 
-void update_device_offset(unsigned int *offset, unsigned long bailout)
+static void update_device_offset(unsigned int *offset, unsigned long bailout)
 {
 	while(!(inb(ioport) & BIT_SYNC) && (jiffies < bailout));
 	while((inb(ioport) & BIT_SYNC) && (jiffies < bailout));
@@ -605,7 +605,7 @@ void update_device_offset(unsigned int *offset, unsigned long bailout)
  * Reset the Backer device to its power-on state.
  */
 
-void bkr_device_reset(void)
+static void bkr_device_reset(void)
 {
 	outb(0, ioport);
 }
@@ -617,7 +617,7 @@ void bkr_device_reset(void)
  * Start the tape <---> memory data transfer.
  */
 
-void start_transfer(void)
+static void start_transfer(void)
 {
 	device.command |= (device.direction == O_WRONLY) ? BIT_TRANSMIT : BIT_RECEIVE;
 	outb(device.command | BIT_DMA_REQUEST, ioport);
@@ -628,12 +628,12 @@ void start_transfer(void)
  * stop_transfer()
  *
  * Stop the tape <---> memory transfer and release DMA channel.  The DMA
- * controller is left fully configured so if someone else's code accidentally
- * initiates a transfer it will occur in a safe region of memory (i.e. our
- * buffer) but the buffer is cleared.
+ * controller is left fully configured so if someone else's code
+ * accidentally initiates a transfer it will occur in a safe region of
+ * memory (i.e. our buffer) but the buffer is cleared.
  */
 
-void stop_transfer(void)
+static void stop_transfer(void)
 {
 	device.command &= ~(BIT_TRANSMIT | BIT_RECEIVE);
 	outb(device.command, ioport);
@@ -654,7 +654,7 @@ void stop_transfer(void)
  * Resets the DMA channel.
  */
 
-void bkr_reset_dma(void)
+static void bkr_reset_dma(void)
 {
 	unsigned long  flags;
 

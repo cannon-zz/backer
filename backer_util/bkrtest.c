@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 	"Usage:  bkrtest [options]\n" \
 	"the following options are recognized:\n" \
 	"	-f devname   Use device devname (default /dev/backer)\n" \
-	"	-h           Display uages");
+	"	-h           Display usage");
 			exit(0);
 			break;
 			}
@@ -204,13 +204,12 @@ void gen_formated()
 	       format.footer_length,
 	       format.aux_offset,
 	       format.aux_length,
-	       100.0 - 100.0*(format.header_length + format.footer_length + format.aux_length)/format.sector_size,
+	       100.0 - 100.0*(format.header_length + format.footer_length + format.aux_length + KEY_LENGTH)/format.sector_size,
 	       format.block_size,
 	       format.block_capacity,
 	       format.block_parity,
-	       (format.sector_size - format.header_length - format.footer_length - format.aux_length)/format.block_size*format.block_capacity * ((BKR_VIDEOMODE(config.mode) == BKR_NTSC)?60:50),
-	       100.0*(format.sector_size - format.header_length - format.footer_length - format.aux_length)/format.block_size*format.block_capacity /
-	       format.sector_size);
+	       (format.bytes_per_line*2 * format.block_capacity - KEY_LENGTH) * ((BKR_VIDEOMODE(config.mode) == BKR_NTSC)?60:50),
+	       100.0*(format.bytes_per_line*2 * format.block_capacity - KEY_LENGTH)/format.sector_size);
 
 	length = format.block_capacity * format.bytes_per_line * 2 - KEY_LENGTH;
 

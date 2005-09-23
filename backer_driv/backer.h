@@ -49,7 +49,7 @@
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.3"
+#define  BKR_VERSION           "0.4"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
@@ -187,6 +187,10 @@ struct bkr_format
 #endif
 #if (BKR_SPEED(DEFAULT_MODE) != BKR_SP) && (BKR_SPEED(DEFAULT_MODE) != BKR_EP)
 #error "Bad tape speed specifier in DEFAULT_MODE"
+#endif
+
+#if (DEFAULT_TIMEOUT < BOR_LENGTH) || (DEFAULT_TIMEOUT > BKR_MAX_TIMEOUT)
+#error "DEFAULT_TIMEOUT too long or too short"
 #endif
 
 #if (KEY_LENGTH & 1) != 0

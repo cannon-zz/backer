@@ -6,11 +6,11 @@
  * To access the formating layer, the symbols defined here are required.  The
  * access sequence should be as follows:
  *
- *      1.  bkr_set_parms()
+ *      1.  bkr_set_parms()                 (only needed on format change)
  *      2.  bkr_format_reset()
- *      3.  bkr_write_bor()                 (optional)
+ *      3.  bkr_write_bor()                 (only needed when writing)
  *      4.  block.read() or block.write()
- *      5.  bkr_write_eor()                 (optional)
+ *      5.  bkr_write_eor()                 (only needed when writing)
  *
  * Note that reading and writing is done via the function pointers in the
  * block data structure which will point to the raw or formated I/O functions
@@ -128,7 +128,7 @@
 	  0xdf, 0xef, 0xd3, 0xde, 0xbc, 0xa8, 0x1e, 0x4c,    \
 	  0xe7, 0xd2, 0xce, 0xce, 0x36, 0x3d, 0x87, 0xc7 };
 
-#define BITS_INITIALIZER                                     \
+#define WEIGHT_INITIALIZER                                   \
 	{ 0x00, 0x01, 0x01, 0x02, 0x01, 0x02, 0x02, 0x03,    \
 	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
 	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
@@ -163,8 +163,8 @@
 	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08 };
 
 /*
- * Functions exported by formating layer.  The block read and write functions
- * are accessed through the pointers in the block data structure.
+ * Functions exported by formating layer.  The block read and write
+ * functions are accessed through the pointers in the block data structure.
  */
 
 int           bkr_set_parms(unsigned int, unsigned int);
@@ -180,7 +180,6 @@ unsigned int  bytes_in_buffer(void);
  */
 
 typedef  __u16  header_t;
-
 
 unsigned int  worst_match;                      /* these are for debugging only */
 unsigned int  best_nonmatch;

@@ -52,6 +52,67 @@
 
 
 /*
+ * Parameters
+ *
+ * Note the parity lengths must be multiples of 2.
+ */
+
+/* { bytes of leader, bytes of trailer, bytes of parity } */
+#define  FORMATS  {{  32, 28, 10 },     /* LOW  NTSC SP */   \
+                   {  32, 28, 14 },     /* LOW  NTSC EP */   \
+                   {  40, 32, 10 },     /* LOW  PAL  SP */   \
+                   {  40, 32, 14 },     /* LOW  PAL  EP */   \
+                   {  80, 70, 10 },     /* HIGH NTSC SP */   \
+                   {  80, 70, 14 },     /* HIGH NTSC EP */   \
+                   { 100, 80, 10 },     /* HIGH PAL  SP */   \
+                   { 100, 80, 14 }}     /* HIGH PAL  EP */
+
+/* convert mode to an index for the format array (see bkrconfig.mode) */
+static inline unsigned int BKR_MODE_TO_FORMAT(unsigned int mode)
+{
+	return((BKR_DENSITY(mode)==BKR_HIGH)<<2  | \
+	       (BKR_VIDEOMODE(mode)==BKR_PAL)<<1 | \
+	       (BKR_SPEED(mode)==BKR_EP));
+}
+
+#define WEIGHT_INITIALIZER                                   \
+	{ 0xff, 0xf7, 0xf7, 0xdb, 0xf7, 0xdb, 0xdb, 0xa3,    \
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
+	  0xf7, 0xdb, 0xdb, 0xa3, 0xdb, 0xa3, 0xa3, 0x5d,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
+	  0xdb, 0xa3, 0xa3, 0x5d, 0xa3, 0x5d, 0x5d, 0x25,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
+	  0xa3, 0x5d, 0x5d, 0x25, 0x5d, 0x25, 0x25, 0x09,    \
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
+	  0x5d, 0x25, 0x25, 0x09, 0x25, 0x09, 0x09, 0x01,    \
+	  0x25, 0x09, 0x09, 0x01, 0x09, 0x01, 0x01, 0x00 };
+
+#define  CORRELATION_THRESHOLD  0xcc
+
+
+/*
  * Function prototypes
  */
 
@@ -59,8 +120,8 @@ static int   bkr_block_read_fmt(f_flags_t, jiffies_t);
 static int   bkr_block_write_fmt(f_flags_t, jiffies_t);
 static int   bkr_block_read_raw(f_flags_t, jiffies_t);
 static int   bkr_block_write_raw(f_flags_t, jiffies_t);
-static void  bkr_block_randomize(__u32);
 static int   bkr_sector_blocks_remaining(void);
+static void  bkr_sector_randomize(void *, int, __u32);
 static int   bkr_sector_read(f_flags_t, jiffies_t);
 static int   bkr_sector_write(f_flags_t, jiffies_t);
 static int   bkr_find_sector(f_flags_t, jiffies_t);
@@ -70,9 +131,13 @@ static int   bkr_find_sector(f_flags_t, jiffies_t);
  * Global Data
  */
 
-static struct bkr_format  format[] = BKR_FORMATS;       /* format information */
-static unsigned char  key[] = KEY_INITIALIZER;          /* white noise */
-static unsigned char  weight[] = WEIGHT_INITIALIZER;    /* anti-correlation weights */
+static struct
+        {
+        unsigned int  leader;
+        unsigned int  trailer;
+        unsigned int  parity;
+        } format[] = FORMATS;                           /* format information */
+static unsigned char  weight[] = WEIGHT_INITIALIZER;    /* correlation weights */
 
 
 /*
@@ -81,17 +146,12 @@ static unsigned char  weight[] = WEIGHT_INITIALIZER;    /* anti-correlation weig
 
 static inline int BLOCKS_PER_SECOND(void)
 {
-	return(device.bytes_per_line * 2 * (BKR_VIDEOMODE(device.mode) == BKR_PAL ? 50 : 60));
+	return(sector.interleave * (BKR_VIDEOMODE(device.mode) == BKR_PAL ? 50 : 60));
 }
 
 static inline int SECTOR_KEY_OFFSET(void)
 {
-	return(sector.header_length + (block.parity + sizeof(header_t)) * sector.interleave);
-}
-
-static inline int CORR_THRESHOLD(int key_length)
-{
-	return(0.20 * (key_length << 3));
+	return(sector.leader + (block.parity + sizeof(block_header_t))*sector.interleave);
 }
 
 
@@ -106,10 +166,10 @@ static inline int CORR_THRESHOLD(int key_length)
 /*
  * bkr_set_parms()
  *
- * Sets all the format parameters based on the selected mode.  The mode
- * parameter is as in bkrmode.  Returns -EINVAL if the supplied mode is
- * invalid, -ENOMEM if the various buffers couldn't be allocated/resized,
- * or 0 if everything is A-OK.
+ * Sets all the format and device parameters based on the selected mode.
+ * The mode parameter is as in bkrmode.  Returns -EINVAL if the supplied
+ * mode is invalid, -ENOMEM if the various buffers couldn't be
+ * allocated/resized, or 0 if everything is A-OK.
  *
  * An even number of bytes is always allocated for the block buffer so the
  * randomizer can work 16 bits at a time.
@@ -117,8 +177,6 @@ static inline int CORR_THRESHOLD(int key_length)
 
 int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 {
-	unsigned int  header_offset, start_offset, aux_offset;
-
 	device.control = 0;
 
 	switch(BKR_DENSITY(mode))
@@ -141,62 +199,48 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 		case BKR_NTSC:
 		device.control |= BIT_NTSC_VIDEO;
 		sector.size = device.bytes_per_line * LINES_PER_FIELD_NTSC;
+		device.size = sector.size * 2 + device.bytes_per_line;
 		break;
 
 		case BKR_PAL:
-		sector.size = device.bytes_per_line * LINES_PER_FIELD_PAL;
+		sector.size = device.bytes_per_line * (LINES_PER_FIELD_PAL - 1);
+		device.size = (sector.size + device.bytes_per_line) * 2;
 		break;
 
 		default:
 		goto bad_mode;
 		}
+	device.size = max_buffer - max_buffer % device.size;
 
-	device.size = max_buffer - max_buffer % (sector.size * 2 + device.bytes_per_line);
-
-	sector.interleave = device.bytes_per_line;
-	sector.header_length = format[BKR_MODE_TO_FORMAT(mode)].header_length;
-	sector.aux_length = format[BKR_MODE_TO_FORMAT(mode)].aux_length;
-	sector.footer_length = format[BKR_MODE_TO_FORMAT(mode)].footer_length;
-	sector.footer_offset = sector.size - sector.footer_length;
+	sector.interleave = device.bytes_per_line * 2;
+	sector.leader  = format[BKR_MODE_TO_FORMAT(mode)].leader;
+	sector.trailer = format[BKR_MODE_TO_FORMAT(mode)].trailer;
+	sector.data_size = sector.size - sector.leader - sector.trailer;
 
 	switch(BKR_FORMAT(mode))
 		{
 		case BKR_FMT:
 		block.read = bkr_block_read_fmt;
 		block.write = bkr_block_write_fmt;
-		block.size = (sector.size - sector.header_length - sector.footer_length -
-		              sector.aux_length) / sector.interleave / 2;
+		block.size = sector.data_size / sector.interleave;
 		block.parity = format[BKR_MODE_TO_FORMAT(mode)].parity;
-		header_offset = block.parity;
-		start_offset = block.parity + sizeof(header_t);
-		aux_offset = sector.header_length + block.size * sector.interleave;
 		break;
 
 		case BKR_RAW:
 		block.read = bkr_block_read_raw;
 		block.write = bkr_block_write_raw;
-		block.size = sector.size;
+		block.size = sector.data_size;
 		block.parity = 0;
-		header_offset = 0;
-		start_offset = 0;
-		aux_offset = 0;
 		break;
 
 		default:
 		goto bad_mode;
 		}
 
-	free(sector.buffer);
-	free(block.buffer);
-	sector.buffer = (unsigned char *) malloc(sector.size);
-	block.buffer = (unsigned char *) malloc((block.size + 1) & ~1);
-	if((sector.buffer == NULL) || (block.buffer == NULL))
+	free(sector.data);
+	sector.data = (unsigned char *) malloc(sector.data_size);
+	if(sector.data == NULL)
 		return(-ENOMEM);
-
-	sector.aux = sector.buffer + aux_offset;
-	sector.footer = sector.buffer + sector.footer_offset;
-	block.header = (header_t *) (block.buffer + header_offset);
-	block.start = block.buffer + start_offset;
 
 	reed_solomon_init(block.size, block.size - block.parity, &block.rs_format);
 
@@ -216,43 +260,45 @@ int  bkr_set_parms(unsigned int mode, unsigned int max_buffer)
 /*
  * bkr_format_reset()
  *
- * Reset the block and sector formating layers.  This also resets the head
- * and tail offsets for the device buffer.  NOTE:  this has no bearing on
- * the actual I/O transfers which must always start at 0, this is done
- * merely to force the sector layer to start at 0 as well.
+ * Reset the block and sector formating layers.
  */
 
 void bkr_format_reset(void)
 {
 	/*
-	 * Block and sector layers
+	 * Sector layer
 	 */
 
-	block.end = block.buffer + block.size;
-	block.sequence = 0;
-	memset(sector.buffer, BKR_FILLER, sector.size);
+	sector.header_loc = (sector_header_t *) (sector.data + block.parity + sizeof(block_header_t));
+	sector.header = (sector_header_t) { KEY_INITIALIZER, 0 };
+	sector.oddfield = 1;
+	sector.need_sequence_reset = 1;
+	sector.offset = sector.data;
 	if(device.direction == O_WRONLY)
-		{
-		*block.header = DATA_BLOCK | BLOCK_SEQ(block.sequence);
-		block.offset = block.start;
-		sector.block = sector.footer + device.bytes_per_line;
-		}
-	else
-		{
-		block.offset = block.end;
-		sector.block = sector.aux;
-		}
+		sector.offset += sector.data_size - block.size;
 
 	/*
-	 * Device layer
+	 * Block layer
 	 */
 
-	device.oddfield = 1;
-	device.head = 0;
+	block.header.type = DATA_BLOCK;
+	block.header.header = 0;
+	block.header.truncate = 0;
+	switch(BKR_FORMAT(device.mode))
+		{
+		case BKR_FMT:
+		block.start = sector.offset + block.parity + sizeof(block_header_t);
+		break;
+
+		case BKR_RAW:
+		block.start = sector.data;
+		break;
+		}
+	block.end = block.start + block.size;
 	if(device.direction == O_WRONLY)
-		device.tail = 1;
+		block.offset = block.start;
 	else
-		device.tail = 0;
+		block.offset = block.end;
 
 	/*
 	 * Stats
@@ -308,20 +354,15 @@ int bkr_write_bor(jiffies_t bailout)
 	int  result = 0;
 	unsigned int  i;
 
-	block.offset = block.start;
-
-	*block.header &= ~BLOCK_TYPE(-1);
-	*block.header |= BOR_BLOCK;
+	block.header.type = BOR_BLOCK;
 
 	for(i = BLOCKS_PER_SECOND() * BOR_LENGTH; i && !result; i--)
 		{
-		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
 		result = bkr_block_write_fmt(0, bailout);
 		}
 
-	*block.header &= ~BLOCK_TYPE(-1);
-	*block.header |= DATA_BLOCK;
+	block.header.type = DATA_BLOCK;
 
 	return(result);
 }
@@ -338,12 +379,10 @@ int bkr_write_eor(jiffies_t bailout)
 			return(result);
 		}
 
-	*block.header &= ~BLOCK_TYPE(-1);
-	*block.header |= EOR_BLOCK;
+	block.header.type = EOR_BLOCK;
 
 	for(i = bkr_sector_blocks_remaining() + BLOCKS_PER_SECOND() * EOR_LENGTH; i && !result; i--)
 		{
-		memset(block.offset, BKR_FILLER, block.end - block.offset);
 		block.offset = block.end;
 		result = bkr_block_write_fmt(0, bailout);
 		}
@@ -354,102 +393,63 @@ int bkr_write_eor(jiffies_t bailout)
 /*
  * bkr_block_read_fmt()
  *
- * Read and decode one block of formated data.  If a BOR block is found
- * then the block sequence counter is reset and the block skipped.  If a
- * non-BOR block is found but it is out of sequence then it too is skipped.
- * Otherwise the block capacity is set appropriately.  Returns < 0 on
- * error, 1 on success and 0 on EOR.
+ * Read and decode one block of formated data.  We loop until we find a
+ * block type that we know how to process.  If a BOR block is found then we
+ * reset all the appropriate counters but otherwise skip it too.  Returns <
+ * 0 on error, 1 on success and 0 on EOR.
  */
 
 static int bkr_block_read_fmt(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
-	char  underflow_detect = 0;
-	static char  need_sequence_reset = 0;
 
 	while(1)
 		{
 		result = bkr_sector_read(f_flags, bailout);
 
+		block.start = sector.offset + block.parity + sizeof(block_header_t);
+		block.end = sector.offset + block.size;
+
 		if(result < 0)
 			{
-			block.end = block.offset;
+			block.offset = block.end;
 			return(result);
 			}
 
-		result = reed_solomon_decode(block.buffer, NULL, 0, &block.rs_format);
+		block.header = *(block_header_t *) (sector.offset + block.parity);
+		if(block.header.header)
+			block.start += sizeof(sector_header_t);
+		block.offset = block.start;
 
-		if(result < 0)
+		if(block.header.type == EOR_BLOCK)
 			{
-			block.end = block.offset;
-			errors.block++;
-			need_sequence_reset = 1;
-			return(-ENODATA);
+			block.end = block.start;
+			return(0);
 			}
 
-		if(result > errors.symbol)
-			errors.symbol = result;
+		if(block.header.truncate)
+			block.end = block.start + *(block.end - 1);
 
-		if(BLOCK_TYPE(*block.header) == BOR_BLOCK)
+		if(block.header.type == DATA_BLOCK)
+			return(1);
+
+		if(block.header.type == BOR_BLOCK)
 			{
-			block.sequence = BLOCK_SEQ(*block.header);
 			errors = ERRORS_INITIALIZER;
-			best_nonmatch = 1000000;
-			worst_match = 0;
+			best_nonmatch = 0;
+			worst_match = 1000000;
 			least_skipped = 1000000;
 			most_skipped = 0;
-			continue;
-			}
-
-		result = BLOCK_SEQ(BLOCK_SEQ(*block.header) - block.sequence);
-
-		if((result > 1) && (result <= BLOCK_SEQ(-1) >> 1))
-			{
-			errors.overrun++;
-			need_sequence_reset = 1;
-			}
-
-		if((result == 1) || need_sequence_reset)
-			{
-			block.sequence = BLOCK_SEQ(*block.header);
-			need_sequence_reset = 0;
-			break;
-			}
-
-		if(!underflow_detect)
-			{
-			errors.underflow++;
-			underflow_detect = 1;
 			}
 		}
-
-	bkr_block_randomize(block.sequence);
-
-	block.offset = block.start;
-	if(KEY_BLOCK(*block.header))
-		block.offset += KEY_LENGTH;
-
-	if(BLOCK_TYPE(*block.header) == EOR_BLOCK)
-		{
-		block.end = block.offset;
-		return(0);
-		}
-
-	block.end = block.buffer;
-	if(TRUNCATE_BLOCK(*block.header))
-		block.end += block.buffer[block.size-1];
-	else
-		block.end += block.size;
-
-	return(1);
 }
 
 /*
  * bkr_block_write_fmt()
  *
- * Encode and write one block of formated data.  After writing, the block
- * buffer is prepared for the next block:  the header is set up
- * appropriately, and the sector key is inserted if needed.
+ * Encode and write one block of formated data.  After writing, the next
+ * block is prepared:  the header is set up appropriately and space is set
+ * aside for the sector header if needed.
  */
 
 static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
@@ -458,83 +458,29 @@ static int bkr_block_write_fmt(f_flags_t f_flags, jiffies_t bailout)
 
 	if(block.offset < block.end)
 		{
-		*block.header |= TRUNCATE_BLOCK(-1);
-		block.buffer[block.size-1] = block.offset - block.buffer;
+		block.header.truncate = 1;
+		*(block.end - 1) = block.offset - block.start;
 		block.offset = block.end;
 		}
 
-	bkr_block_randomize(block.sequence);
-	reed_solomon_encode(block.buffer, &block.rs_format);
+	*(block_header_t *) (sector.offset + block.parity) = block.header;
 
 	result = bkr_sector_write(f_flags, bailout);
 	if(result < 0)
-		{
-		bkr_block_randomize(block.sequence);
 		return(result);
-		}
 
-	*block.header &= BLOCK_TYPE(-1);
-	*block.header |= block.sequence = BLOCK_SEQ(block.sequence + 1);
-
-	block.offset = block.start;
-	if(result == KEY_BLOCK(-1))
+	block.start = sector.offset + block.parity + sizeof(block_header_t);
+	block.end = sector.offset + block.size;
+	block.header.header = 0;
+	block.header.truncate = 0;
+	if(result)
 		{
-		*block.header |= KEY_BLOCK(-1);
-		memcpy(block.offset, key, KEY_LENGTH);
-		block.offset += KEY_LENGTH;
+		block.header.header = 1;
+		block.start += sizeof(sector_header_t);
 		}
+	block.offset = block.start;
 
 	return(0);
-}
-
-/*
- * bkr_block_randomize()
- *
- * (De-)Randomize the data area of a block based on the supplied seed.
- *
- * For the random number generator used see:
- * Knuth, D. E. 1981, Semi-Numerical Algorithms, 2nd ed., vol 2 of The Art of
- *    Computer Programing.
- */
-
-static void bkr_block_randomize(__u32 num)
-{
-	unsigned int  i, last;
-	/* Add me
-	unsigned int  index;
-	unsigned int  history[4];
-	 */
-
-	if(BLOCK_TYPE(*block.header) != DATA_BLOCK)
-		return;
-
-	last = block.parity + sizeof(header_t);
-	if(KEY_BLOCK(*block.header))
-		last += KEY_LENGTH;
-	last >>= 1;
-
-	/*
-	 * ADDME (replaces the other for loop below)
-	for(i = 0; i < 4; i++)
-		{
-		num = 1664525 * num + 1013904223;
-		history[i] = num >> 16;
-		}
-
-	for(i = (block.size+1) >> 1; i > last; )
-		{
-		num = 1664525 * num + 1013904223;
-		index = num >> 30;
-		((__u16 *) block.buffer)[--i] ^= history[index];
-		history[index] = num >> 16;
-		}
-	 */
-
-	for(i = (block.size+1) >> 1; i > last; )
-		{
-		num = 1664525 * num + 1013904223;
-		((__u16 *) block.buffer)[--i] ^= num >> 16;
-		}
 }
 
 /*
@@ -555,15 +501,15 @@ static int bkr_block_read_raw(f_flags_t f_flags, jiffies_t bailout)
 	if(device.tail + block.size >= device.size)
 		{
 		count = device.size - device.tail;
-		memcpy(block.buffer, device.buffer + device.tail, count);
-		memcpy(block.buffer + count, device.buffer, block.size - count);
+		memcpy(block.start, device.buffer + device.tail, count);
+		memcpy(block.start + count, device.buffer, block.size - count);
 		device.tail -= device.size;
 		}
 	else
-		memcpy(block.buffer, device.buffer + device.tail, block.size);
+		memcpy(block.start, device.buffer + device.tail, block.size);
 	device.tail += block.size;
 
-	block.offset = block.buffer;
+	block.offset = block.start;
 
 	return(1);
 }
@@ -580,15 +526,15 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 	if(device.head + block.size >= device.size)
 		{
 		count = device.size - device.head;
-		memcpy(device.buffer + device.head, block.buffer, count);
-		memcpy(device.buffer, block.buffer + count, block.size - count);
+		memcpy(device.buffer + device.head, block.start, count);
+		memcpy(device.buffer, block.start + count, block.size - count);
 		device.head -= device.size;
 		}
 	else
-		memcpy(device.buffer + device.head, block.buffer, block.size);
+		memcpy(device.buffer + device.head, block.start, block.size);
 	device.head += block.size;
 
-	block.offset = block.buffer;
+	block.offset = block.start;
 
 	return(0);
 }
@@ -614,9 +560,39 @@ static int bkr_block_write_raw(f_flags_t f_flags, jiffies_t bailout)
 
 static int bkr_sector_blocks_remaining(void)
 {
-	if(sector.block >= sector.footer)
-		return(sector.block - sector.footer + device.bytes_per_line);
-	return(sector.block - sector.aux);
+	return((sector.offset - sector.data) / block.size + 1);
+}
+
+
+/*
+ * bkr_sector_randomize()
+ *
+ * (De-)Randomize the data area of a sector using the supplied seed.
+ * The count of bytes to randomize must be a multiple of 4.
+ *
+ * For the random number generator used see:
+ * Knuth, D. E. 1981, Semi-Numerical Algorithms, 2nd ed., vol 2 of The Art of
+ *    Computer Programing.
+ */
+
+static void bkr_sector_randomize(void *location, int count, __u32 seed)
+{
+	unsigned int  index;
+	unsigned int  history[4];
+
+	for(index = 0; index < 4; index++)
+		{
+		seed = 1664525 * seed + 1013904223;
+		history[index] = seed;
+		}
+
+	for(count >>= 2; count; count--)
+		{
+		seed = 1664525 * seed + 1013904223;
+		index = seed >> 30;
+		((__u32 *)location)[count] ^= history[index];
+		history[index] = seed;
+		}
 }
 
 
@@ -629,41 +605,102 @@ static int bkr_sector_blocks_remaining(void)
 
 static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 {
-	int  result, count;
-	unsigned char  *location;
+	int  result;
+	int  i;
+	char  underflow_detect = 1;
 
-	if(sector.block == sector.aux)
+	if(sector.offset == sector.data)
 		{
-		result = bkr_find_sector(f_flags, bailout);
-		if(result < 0)
-			return(result);
-		if(result > sector.footer_length+device.bytes_per_line)
-			errors.sector++;
-
-		result = bkr_device_read(sector.footer_offset, f_flags, bailout);
-		if(result < 0)
-			return(result);
-
-		if(device.tail + sector.footer_offset >= device.size)
+		while(1)
 			{
-			count = device.size - device.tail;
-			memcpy(sector.buffer, device.buffer + device.tail, count);
-			memcpy(sector.buffer + count, device.buffer, sector.footer_offset - count);
-			device.tail -= device.size;
+			/*
+			 * Get the next sector.
+			 */
+
+			result = bkr_find_sector(f_flags, bailout);
+			if(result < 0)
+				return(result);
+			if(result > sector.trailer+device.bytes_per_line)
+				errors.frame++;
+
+			/*
+			 * De-interleave the sector data from the DMA
+			 * buffer.
+			 */
+
+			if(device.tail + sector.data_size >= device.size)
+				{
+				for(i = 0; i < block.size; i += 1 - sector.data_size)
+					{
+					if(device.tail + sector.interleave >= device.size)
+						{
+						for(; device.tail < device.size; i += block.size)
+							sector.data[i] = device.buffer[device.tail++];
+						device.tail = 0;
+						}
+					for(; i < sector.data_size; i += block.size)
+						sector.data[i] = device.buffer[device.tail++];
+					}
+				}
+			else
+				{
+				for(i = 0; i < block.size; i += 1 - sector.data_size)
+					for(; i < sector.data_size; i += block.size)
+						sector.data[i] = device.buffer[device.tail++];
+				}
+
+			/*
+			 * Do error correction.
+			 */
+
+			for(i = result = 0; (i < sector.data_size) && (result >= 0); i += block.size)
+				{
+				result = reed_solomon_decode(&sector.data[i], NULL, 0, &block.rs_format);
+				if(result > (int) errors.symbol)
+					errors.symbol = result;
+				}
+
+			if(result < 0)
+				{
+				errors.block++;
+				sector.need_sequence_reset = 1;
+				return(-ENODATA);
+				}
+
+			/*
+			 * Recover the sector number and skip repeated
+			 * sectors.
+			 */
+
+			if(sector.need_sequence_reset)
+				sector.need_sequence_reset = 0;
+			else
+				{
+				result = sector.header_loc->number - sector.header.number;
+
+				if(result > 1)
+					errors.overrun++;
+				else if(result < 1)
+					{
+					errors.underflow += underflow_detect;
+					underflow_detect = 0;
+					continue;
+					}
+				}
+			sector.header.number = sector.header_loc->number;
+			break;
 			}
-		else
-			memcpy(sector.buffer, device.buffer + device.tail, sector.footer_offset);
-		device.tail += sector.footer_offset;
 
-		sector.block = sector.footer + device.bytes_per_line;
+		/*
+		 * De-randomize the data and reset this sector.
+		 */
+
+		bkr_sector_randomize(sector.data, sector.data_size, sector.header.number);
+
+		sector.offset = sector.data + sector.data_size;
 		}
-	else if(sector.block == sector.footer)
-		sector.block = sector.aux + device.bytes_per_line;
 
-	location = --sector.block;
-	for(count = block.size; count; )
-		block.buffer[--count] = *(location -= sector.interleave);
-
+	sector.offset -= block.size;
 	return(0);
 }
 
@@ -679,38 +716,67 @@ static int bkr_sector_read(f_flags_t f_flags, jiffies_t bailout)
 
 static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
 {
-	int  result, count;
-	unsigned char  *location;
+	int  result;
+	int  i;
 
-	if(sector.block == sector.aux)
+	if(sector.offset == sector.data)
 		{
 		result = bkr_device_write(sector.size+device.bytes_per_line, f_flags, bailout);
 		if(result < 0)
 			return(result);
 
-		memcpy(device.buffer + device.head, sector.buffer, sector.size);
-		device.head += sector.size;
-		if(device.oddfield)
+		/*
+		 * Put the finishing touches on the sector data
+		 */
+
+		bkr_sector_randomize(sector.data, sector.data_size, sector.header.number);
+		*sector.header_loc = sector.header;
+		for(i = 0; i < sector.data_size; i += block.size)
+			reed_solomon_encode(&sector.data[i], &block.rs_format);
+
+		/*
+		 * Write the leader to the DMA buffer
+		 */
+
+		memset(device.buffer + device.head, BKR_FILLER, sector.leader);
+		device.head += sector.leader;
+
+		/*
+		 * Interleave the data into the DMA buffer
+		 */
+
+		for(i = 0; i < block.size; i += 1 - sector.data_size)
+			for(; i < sector.data_size; i += block.size)
+				device.buffer[device.head++] = sector.data[i];
+
+		/*
+		 * Write the trailer to the DMA buffer
+		 */
+
+		memset(device.buffer + device.head, BKR_FILLER, sector.trailer);
+		device.head += sector.trailer;
+
+		if(sector.oddfield || (BKR_VIDEOMODE(device.mode) == BKR_PAL))
 			{
 			memset(device.buffer + device.head, BKR_FILLER, device.bytes_per_line);
 			device.head += device.bytes_per_line;
 			}
-		device.oddfield ^= 1;
+		sector.oddfield ^= 1;
 
 		if(device.head == device.size)
 			device.head = 0;
 
-		sector.block = sector.footer + device.bytes_per_line;
+		/*
+		 * Reset for the next sector
+		 */
+
+		sector.header.number++;
+		sector.offset = sector.data + sector.data_size;
 		}
-	else if(sector.block == sector.footer)
-		sector.block = sector.aux + device.bytes_per_line;
 
-	location = --sector.block;
-	for(count = block.size; count; )
-		*(location -= sector.interleave) = block.buffer[--count];
-
-	if(sector.block == sector.aux + 1)
-		return(KEY_BLOCK(-1));
+	sector.offset -= block.size;
+	if(sector.offset == sector.data)
+		return(1);
 	return(0);
 }
 
@@ -718,22 +784,23 @@ static int bkr_sector_write(f_flags_t f_flags, jiffies_t bailout)
 /*
  * bkr_find_sector()
  *
- * Finds the next sector in the data stream and updates the device tail
- * appropriately.  The search is done by computing a correlation
- * coefficient for the data stream against a copy of the key block.  The
- * correlation test is a count of the total number of bits that are in
- * error (thus really an anti-correlation test).  If this number drops
- * below a threshold then we've found the key block and from its location
- * the start of the sector can be identified.  The value returned is the
- * number of bytes in the data stream that were skipped before the header
- * block was found.
+ * Finds the next sector in the data stream.  The search is done by
+ * computing a correlation coefficient for the data stream against a copy
+ * of the key.  If this number goes above a threshold then we've found the
+ * key and from its location the start of the sector can be identified.
+ * The value returned is the number of bytes in the data stream that were
+ * skipped before the sector start was found.  On success, the DMA buffer
+ * tail is left pointing to the first byte of sector data with enough bytes
+ * in the buffer for the sector to be retrieved.  On failure (eg. on
+ * -EWOULDBLOCK), the buffer tail is left pointing to the location it had
+ * advanced to when the failure occured (is suitable for a retry).
  */
 
 static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 {
 	int  result;
 	unsigned int  i, j;
-	unsigned int  anti_corr;
+	unsigned int  correlation;
 	unsigned int  skipped = -1;
 
 	result = bkr_device_read(SECTOR_KEY_OFFSET(), f_flags, bailout);
@@ -751,40 +818,44 @@ static int bkr_find_sector(f_flags_t f_flags, jiffies_t bailout)
 		skipped++;
 
 		if(skipped > 0)
-			if(anti_corr < best_nonmatch)
-				best_nonmatch = anti_corr;
+			if(correlation > best_nonmatch)
+				best_nonmatch = correlation;
 
-		result = bkr_device_read(KEY_LENGTH*sector.interleave, f_flags, bailout);
+		result = bkr_device_read(sector.size - SECTOR_KEY_OFFSET(), f_flags, bailout);
 		if(result < 0)
 			break;
 
-		anti_corr = 0;
+		correlation = 0;
 		j = KEY_LENGTH;
 		i = device.tail + KEY_LENGTH*sector.interleave;
 		if(i >= device.size)
 			{
 			i -= device.size;
 			while(i >= sector.interleave)
-				anti_corr += weight[device.buffer[i -= sector.interleave] ^ key[--j]];
+				correlation += weight[device.buffer[i -= sector.interleave] ^ sector.header.key[--j]];
 			i += device.size;
 			}
 		while(j)
-			anti_corr += weight[device.buffer[i -= sector.interleave] ^ key[--j]];
+			correlation += weight[device.buffer[i -= sector.interleave] ^ sector.header.key[--j]];
+		correlation /= KEY_LENGTH;
 		}
-	while(anti_corr > CORR_THRESHOLD(KEY_LENGTH));
+	while(correlation < CORRELATION_THRESHOLD);
 
 	device.tail -= SECTOR_KEY_OFFSET();
+	if(result >= 0)
+		{
+		if(correlation < worst_match)
+			worst_match = correlation;
+		if(skipped < least_skipped)
+			least_skipped = skipped;
+		if(skipped > most_skipped)
+			most_skipped = skipped;
+
+		result = skipped;
+		device.tail += sector.leader;
+		}
 	if((int) device.tail < 0)
 		device.tail += device.size;
 
-	if(anti_corr > worst_match)
-		worst_match = anti_corr;
-	if(skipped < least_skipped)
-		least_skipped = skipped;
-	if(skipped > most_skipped)
-		most_skipped = skipped;
-
-	if(result < 0)
-		return(result);
-	return(skipped);
+	return(result);
 }

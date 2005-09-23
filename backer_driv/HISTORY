@@ -1,3 +1,36 @@
+1.100 (2001/1/29)
+	*** THIS VERSION INCLUDES AN INCOMPATIBLE TAPE FORMAT CHANGE ***
+
+	New random number generator.
+
+	Fewer parity symbols:  10 & 14 rather than 16 & 20.
+
+	BKRIOCGETSTATUS will now update the DMA buffer offsets if too much
+	time has elapsed since the last update.
+
+	Fixed possible sequence glitch:  need_sequence_reset is now
+	explicitly set at the start of each transfer.
+
+	Fixed erroneous over-run reporting when an uncorrectable block is
+	found.
+
+	Complete overhaul of the block/sector nonsense.  For starters, the
+	new tape format elliminates the auxiliary data region.  With that
+	gone, the interleave ratio was increased by a factor of two which
+	is how the parity symbols could be safely reduced.  Next, the role
+	of data randomizing and ECC encoding/decoding was moved to the
+	sector layer.  With ECC done at the sector layer, the sector code
+	can now insert and retrieve a header which it uses to store a 32
+	bit sector number.  This elliminates the need for block sequence
+	numbers which shrinks each block header to just 1 byte thus
+	increasing the tape capacity even further.  This also allows more
+	bits in the block headers to be used to identify the block type
+	which might be used to multiplex several data streams together.
+	Since, at 32 bits, the sector number takes about 20000 hours to
+	loop around, it provides the data stream with an absolute position
+	marker.  This means there is now 100% accuracy in the
+	identification of buffer overruns.
+
 1.0 (2001/1/13)
 	More performance and foot print improvements to the Reed-Solomon
 	code.

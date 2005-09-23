@@ -37,64 +37,66 @@
 
 
 /*
- * The meaning of the variables used in sector formating is as follows.
- * The diagram shows the layout for a complete frame (two sectors) of data
- * starting on an odd field of video.  The parameter block_offset points
- * to the byte in the line of video immediately following the end of the
- * next block to be read/written.  The byte order on the diagram is
- * top-to-bottom.
+ * The meaning of some of the variables used in sector formating is as
+ * follows.  The diagram shows the layout for a complete frame (two
+ * sectors) of data starting on an odd field of video.  offset points to
+ * the first byte of the block currently being read/written.  interleave
+ * specifies the block interleave ratio (consecutive bytes from a single
+ * block are spaced this far apart when written to tape).  header_loc
+ * points to the location of the sector header within the data buffer.
  *
- *             --  +-------------+
- * header_length   |    header   |
- *             --  +-------------+
- *                 |             |
- *                 |      D      |
- *                 |             |
- *                 |      A      |
- *             --  +-------------+  <-- aux (pointer)
- *    aux_length   |     aux     |
- *             --  +-------------+
- *                 |      T      |
- *                 |             |
- *                 |      A      |
- *                 |             |
- *             --  +-------------+  <-- footer (pointer)
- * footer_length   |    footer   |
- *             --  +-------------+  <-- one extra line in NTSC mode
- *                 |    header   |
+ *    --       --  +-------------+
+ *    ^   leader   |   leader    |
+ *    |        --  +-------------+  --
+ *    |            |             |   ^
+ *    |            |      D      |   |
+ *    |            |             |   |
+ *    |            |      A      |   |
+ *    size         |             |   data_size
+ *    |            |      T      |   |
+ *    |            |             |   |
+ *    |            |      A      |   |
+ *    |            |             |   v
+ *    |        --  +-------------+  --
+ *    v  trailer   |   trailer   |
+ *    --       --  +-------------+  <-- one extra line in NTSC mode
+ *                 |   leader    |
  *                 +-------------+
  *                 |             |
  *                 |      D      |
  *                 |             |
  *                 |      A      |
- *                 +-------------+
- *                 |     aux     |
- *                 +-------------+
+ *                 |             |
  *                 |      T      |
  *                 |             |
  *                 |      A      |
  *                 |             |
  *                 +-------------+
- *                 |    footer   |
+ *                 |   trailer   |
  *                 +-------------+
  */
 
 
 /*
- * The meaning of the variables involved in block formating is as illustrated
- * in the following diagram.  The optional capacity field occupies the single
- * byte immediately preceding the header word in a block whose data is
- * truncated to less than full capacity.  In blocks used as key blocks, the
- * sector key occupies the first KEY_LENGTH symbols of the data area.  The
- * byte order for the diagram is top-to-bottom.
+ * The meaning of the variables involved in block formating is as
+ * illustrated in the following diagram.  The start pointer points to the
+ * first byte of data in the block while the end pointer points to the byte
+ * immediately after the last byte of data in the block.  The optional
+ * capacity field occupies the single byte at the end of a block whose data
+ * is truncated to less than full capacity and specifies, for that block,
+ * the zero-origin offset of the end pointer from the start pointer.  In
+ * blocks containing the sector header, the header occupies the first
+ * sizeof(sector_header_t) bytes of the data area.  In pass-through mode,
+ * the entire sector data buffer is used as a single block with the start
+ * and end pointers pointing to its start and end.
  *
  *             --  +-------------+  --
  *             ^   |             |   ^
  *             |   |    Parity   |   parity
  *             |   |             |   v
- *             |   +-------------+  --  <--- header (pointer)
+ *             |   +-------------+  --
  *             |   |    Header   |
- *             |   +-------------+      <--- start (pointer)
+ *             |   +-------------+  <--- start (pointer)
  *             |   |             |
  *             |   |             |
  *             |   |             |
@@ -107,7 +109,7 @@
  *             |   |             |
  *             |   +- - - - - - -+
  *             v   |   capacity  |
- *             --  +-------------+      <--- end (pointer)
+ *             --  +-------------+  <--- end (pointer)
  */
 
 
@@ -115,53 +117,85 @@
 #define BACKER_FMT_H
 
 #include "rs.h"
-#include "backer.h"
+
+/*
+ * Paramters
+ */
+
+#define  BKR_FILLER            0x33     /* filler for unused space */
+#define  KEY_LENGTH            28       /* bytes */
+#define  BOR_LENGTH            4        /* seconds */
+#define  EOR_LENGTH            1        /* seconds */
 
 #define KEY_INITIALIZER                                      \
 	{ 0xb9, 0x57, 0xd1, 0x0b, 0xb5, 0xd3, 0x66, 0x07,    \
 	  0x5e, 0x76, 0x99, 0x7d, 0x73, 0x6a, 0x09, 0x1e,    \
 	  0x89, 0x55, 0x3f, 0x21, 0xca, 0xa6, 0x36, 0xb7,    \
-	  0xdf, 0xf9, 0xaa, 0x17, 0x66, 0x46, 0x8a, 0x73,    \
-	  0xae, 0x98, 0xe8, 0xa3, 0xd7, 0xb7, 0x49, 0x1a,    \
-	  0xc0, 0x7c, 0x61, 0x06, 0xce, 0xa3, 0xa3, 0x33,    \
-	  0x21, 0x86, 0x79, 0x3d, 0x22, 0x59, 0xc5, 0xc0,    \
-	  0xa1, 0x7e, 0xbe, 0x71, 0x70, 0xce, 0x9e, 0x7d,    \
-	  0xdf, 0xef, 0xd3, 0xde, 0xbc, 0xa8, 0x1e, 0x4c,    \
-	  0xe7, 0xd2, 0xce, 0xce, 0x36, 0x3d, 0x87, 0xc7 };
+	  0xdf, 0xf9, 0xaa, 0x17 }
 
-#define WEIGHT_INITIALIZER                                   \
-	{ 0x00, 0x01, 0x01, 0x02, 0x01, 0x02, 0x02, 0x03,    \
-	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
-	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x01, 0x02, 0x02, 0x03, 0x02, 0x03, 0x03, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x02, 0x03, 0x03, 0x08, 0x03, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x03, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,    \
-	  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08 };
+/*
+ * Format structure
+ */
+
+typedef struct
+	{
+	unsigned char type : 2;         /* type */
+	unsigned char pad : 4;
+	unsigned char header : 1;       /* block contains sector header */
+	unsigned char truncate : 1;     /* block is truncated */
+	} block_header_t;
+
+#define  BOR_BLOCK     0                /* block is a BOR marker */
+#define  EOR_BLOCK     1                /* blcok is an EOR marker */
+#define  DATA_BLOCK    2                /* block contains data */
+#define  AUX_BLOCK     3                /* block contains auxiliary data */
+
+typedef struct
+	{
+	unsigned char key[KEY_LENGTH];                  /* sector key */
+	unsigned int  number __attribute__ ((packed));  /* sector number */
+	} sector_header_t;
+
+
+/*
+ * Data exported by formating layer
+ */
+
+unsigned int  worst_match;              /* these are for debugging only */
+unsigned int  best_nonmatch;
+unsigned int  least_skipped;
+unsigned int  most_skipped;
+
+struct bkrerrors errors;                /* error counts */
+
+struct
+	{
+	unsigned char  *offset;         /* pointer to next byte to be read/written */
+	unsigned char  *start;          /* see diagram above */
+	unsigned char  *end;            /* see diagram above */
+	block_header_t  header;         /* block header copy */
+	unsigned int  size;             /* see diagram above */
+	unsigned int  parity;           /* see diagram above */
+	int  (*read)(f_flags_t, jiffies_t);        /* pointer to appropriate read function */
+	int  (*write)(f_flags_t, jiffies_t);       /* pointer to appropriate write function */
+	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
+	} block;
+
+struct
+	{
+	unsigned char  *data;           /* uninterleaved data for current sector */
+	unsigned char  *offset;         /* pointer to current block */
+	unsigned int  interleave;       /* block interleave */
+	unsigned int  size;             /* sector size in bytes */
+	unsigned int  data_size;        /* data size in bytes */
+	unsigned int  leader;           /* see diagram above */
+	unsigned int  trailer;          /* see diagram above */
+	int  oddfield;                  /* current video field is odd */
+	int  need_sequence_reset;       /* we need to reset the sequence counter */
+	sector_header_t  *header_loc;   /* sector header location */
+	sector_header_t  header;        /* sector header copy */
+	} sector;
+
 
 /*
  * Functions exported by formating layer.  The block read and write
@@ -175,47 +209,5 @@ int           bkr_write_eor(jiffies_t);
 unsigned int  space_in_buffer(void);
 unsigned int  bytes_in_buffer(void);
 
-
-/*
- * Data exported by formating layer
- */
-
-typedef  __u16  header_t;
-
-unsigned int  worst_match;              /* these are for debugging only */
-unsigned int  best_nonmatch;
-unsigned int  least_skipped;
-unsigned int  most_skipped;
-
-struct bkrerrors errors;                /* error counts */
-
-struct
-	{
-	unsigned char  *buffer;         /* holds the current block */
-	header_t  *header;              /* see diagram above */
-	unsigned char  *offset;         /* pointer to next byte to be read/written */
-	unsigned char  *start;          /* see diagram above */
-	unsigned char  *end;            /* see diagram above */
-	unsigned int  size;             /* block size in bytes */
-	unsigned int  parity;           /* see diagram above */
-	unsigned int  sequence;         /* sequence number */
-	int  (*read)(f_flags_t, jiffies_t);        /* pointer to appropriate read function */
-	int  (*write)(f_flags_t, jiffies_t);       /* pointer to appropriate write function */
-	struct rs_format_t  rs_format;  /* Reed-Solomon format parameters */
-	} block;
-
-struct
-	{
-	unsigned char  *buffer;         /* holds the current sector */
-	unsigned char  *aux;            /* see diagram above */
-	unsigned char  *footer;         /* see diagram above */
-	unsigned char  *block;          /* pointer to current block */
-	unsigned int  interleave;       /* block interleave */
-	unsigned int  size;             /* sector size in bytes */
-	unsigned int  header_length;    /* see diagram above */
-	unsigned int  footer_offset;    /* sector.footer - sector.buffer */
-	unsigned int  footer_length;    /* see diagram above */
-	unsigned int  aux_length;       /* see diagram above */
-	} sector;
 
 #endif /* BACKER_FMT_H */

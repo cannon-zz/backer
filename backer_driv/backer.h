@@ -25,12 +25,25 @@
 
 #include <linux/types.h>
 
+/*
+ * Data Types
+ */
+
+typedef  unsigned long  jiffies_t;          /* type for jiffies */
+typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file */
+
+
+/*
+ * Parameters
+ */
+
+#define  BKR_DEF_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
+#define  BKR_MAX_TIMEOUT       120          /* seconds */
+
 #ifndef __KERNEL__
 #define  HZ  100
 #endif
 
-typedef  unsigned long  jiffies_t;          /* type for jiffies */
-typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file */
 
 /*
  * Hardware stuff
@@ -51,43 +64,21 @@ typedef  unsigned short  f_flags_t;         /* type for f_flags in struct file *
 #define  BIT_RECEIVE           0x40
 #define  BIT_NTSC_VIDEO        0x80
 
+
 /*
- * Device driver stuff
+ * IOCTL stuff
  */
-
-#define  BKR_NAME              "backer"
-#define  BKR_VERSION           "1.0"
-#define  BKR_MAJOR             60           /* adjust this for your system */
-
-#define  BKR_DEF_IOPORT        0x300        /* adjust this for your system */
-#define  BKR_DEF_DMA_CHANNEL   3            /* adjust this for your system */
-#define  BKR_DEF_BUFFER_SIZE   65500        /* bytes */
-#define  BKR_DEF_TIMEOUT       10           /* seconds */
-#define  BKR_DEF_MODE          (BKR_NTSC | BKR_LOW | BKR_FMT | BKR_SP)
-#define  BKR_MAX_TIMEOUT       120          /* seconds */
-
-#define  DMA_IO_TO_MEM         0x14         /* demand transfer, inc addr, auto-init */
-#define  DMA_MEM_TO_IO         0x18         /* demand transfer, inc addr, auto-init */
-#define  DMA_HOLD_OFF          512          /* stay this far back from transfer point */
-
-#define  MIN_UPDATE_FREQ       3            /* minimum rate for DMA status updates in Hz */
-#define  MAX_UPDATE_FREQ       50           /* maximum rate for DMA status updates in Hz */
-#define  MIN_SYNC_FREQ         50           /* minimum sync frequency in Hz if video OK */
 
 struct bkrerrors                            /* Error counts */
 	{
 	unsigned int  symbol;               /* most symbol errors in any one block */
 	unsigned int  block;                /* uncorrectable blocks since BOR */
-	unsigned int  sector;               /* framing errors since BOR */
+	unsigned int  frame;                /* framing errors since BOR */
 	unsigned int  overrun;              /* buffer overruns since BOR */
 	unsigned int  underflow;            /* underflow warnings since BOR */
 	};
 
 #define  ERRORS_INITIALIZER  ((struct bkrerrors) {0, 0, 0, 0, 0})
-
-/*
- * IOCTL stuff
- */
 
 struct bkrstatus                            /* Status structure (read only) */
 	{
@@ -101,16 +92,15 @@ struct bkrstatus                            /* Status structure (read only) */
 
 struct bkrformat                            /* Format structure (read only) */
 	{
-	unsigned int  bytes_per_line;
 	unsigned int  buffer_size;          /* == bytes per frame * an integer */
 	unsigned int  sector_size;          /* bytes */
-	unsigned int  header_length;        /* bytes */
-	unsigned int  footer_length;        /* bytes */
-	unsigned int  aux_offset;           /* bytes from start of sector */
-	unsigned int  aux_length;           /* bytes */
+	unsigned int  leader;               /* bytes */
+	unsigned int  trailer;              /* bytes */
+	unsigned int  interleave;           /* interleave ratio */
 	unsigned int  block_size;           /* bytes */
-	unsigned int  block_capacity;       /* bytes (meaningless in pass-through mode) */
 	unsigned int  block_parity;         /* bytes */
+	unsigned int  block_capacity;       /* bytes */
+	unsigned int  sector_capacity;      /* bytes */
 	};
 
 struct bkrconfig                            /* Config structure (read/write) */
@@ -123,12 +113,8 @@ struct bkrconfig                            /* Config structure (read/write) */
 #define  BKRIOCGETMODE         _IOR('m', 11, struct bkrconfig)    /* get configuration */
 #define  BKRIOCSETMODE         _IOW('m', 11, struct bkrconfig)    /* set configuration */
 #define  BKRIOCGETFORMAT       _IOR('m', 12, struct bkrformat)    /* get format */
-#define  BKRIOCGETAUX          _IOR('m', 13, 0)                   /* read aux buffer */
-#define  BKRIOCSETAUX          _IOW('m', 13, 0)                   /* write aux buffer */
 
-/*
- * For bkrconfig.mode
- */
+/* For bkrconfig.mode */
 
 #define  BKR_VIDEOMODE(x)      ((x) & 0x0003)
 #define  BKR_DENSITY(x)        ((x) & 0x000c)
@@ -143,97 +129,5 @@ struct bkrconfig                            /* Config structure (read/write) */
 #define  BKR_SP                0x0040           /* VCR is in SP/LP mode */
 #define  BKR_EP                0x0080           /* VCR is in EP mode */
 
-/* convert mode to an index for the tape format array (see BKR_FORMATS) */
-static inline unsigned int BKR_MODE_TO_FORMAT(unsigned int mode)
-{
-	return((BKR_DENSITY(mode)==BKR_HIGH)<<2  | \
-	       (BKR_VIDEOMODE(mode)==BKR_PAL)<<1 | \
-	       (BKR_SPEED(mode)==BKR_EP));
-}
-
-
-/*
- * General Formating
- *
- * Note KEY_LENGTH and the parity lengths must be multiples of 2.
- *
- * UPCOMING TAPE FORMAT CHANGES
- * -reduce the number of parity symbols (12 & 16 rather than 16 & 20)
- * -new data randomizer
- * -make sector layer responsible for the sector key
- * -reduction in size of auxiliary region
- * -possible ellimination of auxiliary region
- * -if aux region is elliminated then block interleave will change
- */
-
-#define  TAPE_FORMAT           0            /* tape format version (not yet used!) */
-#define  BKR_FILLER            0x33         /* filler for unused space */
-#define  KEY_LENGTH            28           /* bytes (must be a multiple of 2) */
-#define  BOR_LENGTH            4            /* seconds */
-#define  EOR_LENGTH            1            /* seconds */
-
-struct bkr_format
-        {
-        unsigned int  header_length;
-        unsigned int  aux_length;
-        unsigned int  footer_length;
-        unsigned int  parity;
-        };
-                     /* head aux foot prty */
-#define  BKR_FORMATS  {{ 32,  56, 28, 16 },       /* LOW  NTSC SP */   \
-                       { 32,  56, 28, 20 },       /* LOW  NTSC EP */   \
-                       { 32,  56, 28, 16 },       /* LOW  PAL  SP */   \
-                       { 32,  56, 28, 20 },       /* LOW  PAL  EP */   \
-                       { 80, 140, 70, 16 },       /* HIGH NTSC SP */   \
-                       { 80, 140, 70, 20 },       /* HIGH NTSC EP */   \
-                       { 80, 140, 70, 16 },       /* HIGH PAL  SP */   \
-                       { 80, 140, 70, 20 }}       /* HIGH PAL  EP */
-
-/*
- * Block Layer
- */
-
-#define  BLOCK_TYPE(x)         ((x) & 0xc000)     /* type */
-#define  KEY_BLOCK(x)          ((x) & 0x2000)     /* block contains sector key */
-#define  TRUNCATE_BLOCK(x)     ((x) & 0x1000)     /* block is truncated */
-#define  BLOCK_SEQ(x)          ((x) & 0x0fff)     /* sequence number */
-#define  BOR_BLOCK             0x0000             /* is a BOR block */
-#define  EOR_BLOCK             0x4000             /* is an EOR block */
-#define  DATA_BLOCK            0x8000             /* is a data block */
-
-
-
-/*
- * Parameter checks.
- */
-
-#if BKR_DEF_BUFFER_SIZE >= 65536
-#error "BKR_DEF_BUFFER_SIZE too high"
-#endif
-
-#if (BKR_VIDEOMODE(BKR_DEF_MODE) != BKR_PAL) && (BKR_VIDEOMODE(BKR_DEF_MODE) != BKR_NTSC)
-#error "Bad video mode specifier in BKR_DEF_MODE"
-#endif
-#if (BKR_DENSITY(BKR_DEF_MODE) != BKR_HIGH) && (BKR_DENSITY(BKR_DEF_MODE) != BKR_LOW)
-#error "Bad density specifier in BKR_DEF_MODE"
-#endif
-#if (BKR_FORMAT(BKR_DEF_MODE) != BKR_FMT) && (BKR_FORMAT(BKR_DEF_MODE) != BKR_RAW)
-#error "Bad format specifier in BKR_DEF_MODE"
-#endif
-#if (BKR_SPEED(BKR_DEF_MODE) != BKR_SP) && (BKR_SPEED(BKR_DEF_MODE) != BKR_EP)
-#error "Bad tape speed specifier in BKR_DEF_MODE"
-#endif
-
-#if (BKR_DEF_TIMEOUT < BOR_LENGTH) || (BKR_DEF_TIMEOUT > BKR_MAX_TIMEOUT)
-#error "BKR_DEF_TIMEOUT too long or too short"
-#endif
-
-#if (KEY_LENGTH & 1) != 0
-#error "KEY_LENGTH must be a multiple of 2"
-#endif
-
-#if (MIN_UPDATE_FREQ > HZ) || (MAX_UPDATE_FREQ > HZ) || (MIN_SYNC_FREQ > HZ)
-#error "One of the *_FREQ parameters is too high"
-#endif
 
 #endif /* _BACKER_H */

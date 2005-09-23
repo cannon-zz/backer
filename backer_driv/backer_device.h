@@ -31,12 +31,15 @@
 #include "backer.h"
 
 /*
- * Functions exported to formating layer
+ * Functions exported by the device layer
  */
 
-int  bkr_device_read(unsigned int, f_flags_t, jiffies_t);
-int  bkr_device_write(unsigned int, f_flags_t, jiffies_t);
-int  bkr_device_flush(jiffies_t);
+void  bkr_device_reset(unsigned int);
+int   bkr_device_start_transfer(void);
+void  bkr_device_stop_transfer(void);
+int   bkr_device_read(unsigned int, f_flags_t, jiffies_t);
+int   bkr_device_write(unsigned int, f_flags_t, jiffies_t);
+int   bkr_device_flush(jiffies_t);
 
 
 /*
@@ -50,7 +53,6 @@ struct
 	unsigned int  head;             /* offset of next write transfer */
 	unsigned int  tail;             /* offset of next read transfer */
 	unsigned int  bytes_per_line;   /* width of one line of video */
-	unsigned int  oddfield;         /* current video field is odd */
 	unsigned long  last_update;     /* jiffies at time of last update */
 	unsigned int  mode;             /* as in bkrconfig */
 	unsigned int  owner;            /* owner's user id */

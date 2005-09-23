@@ -1,7 +1,7 @@
 /*
- * bkrtest
+ * bkrcheck
  *
- * Command line utility for generating test patterns on the Backer device.
+ * Command line utility for checking the health of the Backer device.
  *
  * Copyright (C) 2000  Kipp C. Cannon
  *
@@ -21,6 +21,7 @@
  */
 
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -30,8 +31,10 @@
 #include <sys/termios.h>
 
 #include "backer.h"
-#include "bkr_aux_puts.h"
+#include "backer_fmt.h"
 #include "bkr_disp_mode.h"
+
+#define  PROGRAM_NAME  "bkrcheck"
 
 /*
  * Function prototypes
@@ -53,21 +56,17 @@ struct bkrconfig config;
 int main(int argc, char *argv[])
 {
 	int  i;
-	unsigned int  offset = 0;
 	struct termios oldterm, newterm;
-	char  *aux;
 	char  *device = "/dev/backer";
+	long  size = -1;
+	double  time;
 	int  term, outfile;
-	char string[] = " TEST PATTERN " \
-	                " !\"#$%&'()*+,-./0123456789:;<=>?" \
-	                "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_" \
-	                "`abcdefghijklmnopqrstuvwxyz{|}~";
 
 	/*
 	 * Opening banner
 	 */
 
-	puts("Backer test pattern generator.");
+	puts("Backer Health Check.");
 
 	/*
 	 * Process command line options
@@ -83,37 +82,37 @@ int main(int argc, char *argv[])
 			case 'h':
 			default:
 			puts(
-	"Usage:  bkrtest [options]\n" \
+	"Usage:  bkrcheck [options] [filname]\n" \
 	"the following options are recognized:\n" \
 	"	-f devname   Use device devname (default /dev/backer)\n" \
-	"	-h           Display usage");
+	"	-h           Display usage\n" \
+	"	filename     Calculate tape required for filename (incl. BOR + EOR)");
 			exit(0);
 			break;
 			}
-
-	/*
-	 * Adjust terminal mode
-	 */
-
-	if((term = open("/dev/tty", O_RDWR)) < 0)
+	if(optind < argc)
 		{
-		perror("bkrtest");
-		exit(0);
+		outfile = open(argv[optind], O_RDONLY);
+		if(outfile < 0)
+			{
+			perror(PROGRAM_NAME);
+			exit(0);
+			}
+		size = lseek(outfile, 0, SEEK_END);
+		close(outfile);
 		}
-	ioctl(term, TCGETS, &oldterm);
-	newterm = oldterm;
-	newterm.c_lflag &= ~(ICANON | ECHO);
-	newterm.c_cc[VMIN] = newterm.c_cc[VTIME] = 0;
-	ioctl(term, TCSETS, &newterm);
 
 	/*
 	 * Open device and retrieve current mode and format
 	 */
 
-	if((outfile = open(device, O_WRONLY)) < 0)
+	if(size >= 0)
+		outfile = open(device, O_RDWR);
+	else
+		outfile = open(device, O_WRONLY);
+	if(outfile < 0)
 		{
-		ioctl(term, TCSETS, &oldterm);
-		perror("bkrtest");
+		perror(PROGRAM_NAME);
 		exit(0);
 		}
 	ioctl(outfile, BKRIOCGETMODE, &config);
@@ -121,6 +120,37 @@ int main(int argc, char *argv[])
 
 	puts("\nCurrent Device Mode:");
 	bkr_display_mode(config.mode, config.timeout);
+
+	/*
+	 * If we are checking a transfer time, do so and quit.
+	 */
+
+	if(size >= 0)
+		{
+		time = rint((double) size / format.sector_capacity / ((BKR_VIDEOMODE(config.mode) == BKR_NTSC) ? 60 : 50));
+		time += BOR_LENGTH + EOR_LENGTH;
+		printf("\n%s will occupy %dh:", argv[optind], (int) floor(time / 3600.0));
+		time = fmod(time, 3600.0);
+		printf("%02dm:", (int) floor(time / 60.0));
+		time = fmod(time, 60.0);
+		printf("%02ds of tape.\n\n", (int) rint(time));
+		exit(0);
+		}
+
+	/*
+	 * Adjust terminal mode
+	 */
+
+	if((term = open("/dev/tty", O_RDWR)) < 0)
+		{
+		perror(PROGRAM_NAME);
+		exit(0);
+		}
+	ioctl(term, TCGETS, &oldterm);
+	newterm = oldterm;
+	newterm.c_lflag &= ~(ICANON | ECHO);
+	newterm.c_cc[VMIN] = newterm.c_cc[VTIME] = 0;
+	ioctl(term, TCSETS, &newterm);
 
 	/*
 	 * Generate test pattern
@@ -141,31 +171,10 @@ int main(int argc, char *argv[])
 	 * Dump data until 'q' is pressed.
 	 */
 
-	aux = (char *) malloc(format.aux_length);
-
-	bkr_aux_puts(&string[offset], aux, &format);
-	ioctl(outfile, BKRIOCSETAUX, aux);
-
+	puts("Press 'q' to quit.");
 	do
-		{
-		switch(i = fgetc(stdin))
-			{
-			case 'j':
-			offset = (offset == 0) ? strlen(string) : offset-1;
-			break;
-
-			case 'k':
-			offset = (offset == strlen(string)) ? 0 : offset+1;
-			break;
-			}
-		if(i > 0)
-			{
-			bkr_aux_puts(&string[offset], aux, &format);
-			ioctl(outfile, BKRIOCSETAUX, aux);
-			}
 		write(outfile, data, length);
-		}
-	while(i != 'q');
+	while(fgetc(stdin) != 'q');
 
 	/*
 	 * Clean up and quit
@@ -174,7 +183,6 @@ int main(int argc, char *argv[])
 	ioctl(term, TCSETS, &oldterm);
 	close(term);
 	close(outfile);
-	free(aux);
 	free(data);
 	exit(0);
 }
@@ -191,32 +199,27 @@ void gen_formated()
 	printf("\nFormat Parameters:\n" \
 	       "\tBuffer size:       %u bytes (%u sectors)\n" \
 	       "\tSector size:       %u bytes\n" \
-	       "\tBytes per line:    %u\n" \
-	       "\tHeader length:     %u bytes\n" \
-	       "\tFooter length:     %u bytes\n" \
-	       "\tAux offset:        %u bytes from sector start\n" \
-	       "\tAux length:        %u bytes\n" \
-	       "\tSector efficiency: %4.1f%%\n" \
+	       "\tSector leader:     %u bytes\n" \
+	       "\tSector trailer:    %u bytes\n" \
+	       "\tInterleave ratio:  %u:1\n" \
 	       "\tBlock size:        %u bytes\n" \
+	       "\tParity size:       %u bytes (max %u errors per block)\n" \
 	       "\tBlock capacity:    %u bytes\n" \
-	       "\tECC size:          %u bytes\n"\
-	       "\tData rate:         %u bytes/second (%4.1f%% net efficiency)\n\n" \
-	       "Press 'j', 'k' to scroll text and 'q' to quit.\n",
+	       "\tSector capacity:   %u bytes (%4.1f%% net efficiency)\n" \
+	       "\tData rate:         %u bytes/second\n\n" \
+	       "Writing '\\0's.  ",
 	       format.buffer_size, format.buffer_size/format.sector_size,
 	       format.sector_size,
-	       format.bytes_per_line,
-	       format.header_length,
-	       format.footer_length,
-	       format.aux_offset,
-	       format.aux_length,
-	       100.0 - 100.0*(format.header_length + format.footer_length + format.aux_length + KEY_LENGTH)/format.sector_size,
+	       format.leader,
+	       format.trailer,
+	       format.interleave,
 	       format.block_size,
+	       format.block_parity, format.block_parity/2,
 	       format.block_capacity,
-	       format.block_parity,
-	       (format.bytes_per_line*2 * format.block_capacity - KEY_LENGTH) * ((BKR_VIDEOMODE(config.mode) == BKR_NTSC)?60:50),
-	       100.0*(format.bytes_per_line*2 * format.block_capacity - KEY_LENGTH)/format.sector_size);
+	       format.sector_capacity, 100.0*format.sector_capacity/format.sector_size,
+	       format.sector_capacity * ((BKR_VIDEOMODE(config.mode) == BKR_NTSC) ? 60 : 50));
 
-	length = format.block_capacity * format.bytes_per_line * 2 - KEY_LENGTH;
+	length = format.sector_capacity;
 
 	data = (unsigned char *) malloc(length);
 
@@ -232,32 +235,37 @@ void gen_formated()
 void gen_raw(void)
 {
 	int i, j;
+	int  bytes_per_line;
+
+	if(BKR_DENSITY(config.mode) == BKR_HIGH)
+		bytes_per_line = BYTES_PER_LINE_HIGH;
+	else
+		bytes_per_line = BYTES_PER_LINE_LOW;
 
 	printf("\nFormat Parameters:\n" \
 	       "\tBuffer size:       %u bytes (%u sectors)\n" \
-	       "\tSector size:       %u bytes\n" \
-	       "Press 'q' to quit.\n",
+	       "\tSector size:       %u bytes\n",
 	       format.buffer_size, format.buffer_size/format.sector_size,
 	       format.sector_size);
 
 	switch(BKR_VIDEOMODE(config.mode))
 		{
 		case BKR_PAL:
-		length = LINES_PER_FIELD_PAL * format.bytes_per_line * 2;
+		length = LINES_PER_FIELD_PAL * bytes_per_line * 2;
 		data = (unsigned char *) malloc(length);
-		for(i = 0; i < length; i++)
-			data[i] = i/format.bytes_per_line + 1;
+		for(i = 0; i < length/2; i++)
+			data[i] = i/bytes_per_line + 1;
 		for(j = 0; i < length; i++, j++)
-			data[i] = j/format.bytes_per_line + 1;
+			data[i] = j/bytes_per_line + 1;
 		break;
 
 		case BKR_NTSC:
-		length = LINES_PER_FIELD_NTSC * format.bytes_per_line * 2 + format.bytes_per_line;
+		length = LINES_PER_FIELD_NTSC * bytes_per_line * 2 + bytes_per_line;
 		data = (unsigned char *) malloc(length);
-		for(i = 0; i < (length+format.bytes_per_line)/2; i++)
-			data[i] = i/format.bytes_per_line + 1;
+		for(i = 0; i < (length+bytes_per_line)/2; i++)
+			data[i] = i/bytes_per_line + 1;
 		for(j = 0; i < length; i++, j++)
-			data[i] = j/format.bytes_per_line + 1;
+			data[i] = j/bytes_per_line + 1;
 		break;
 		}
 }

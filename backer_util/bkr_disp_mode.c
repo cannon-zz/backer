@@ -5,7 +5,7 @@
  *
  * The items to be displayed can be selected by passing invalid values for the
  * unwanted parameters.  For example, if the timeout passed to this function
- * exceeds BKR_MAX_TIMEOUT then it will not be displayed.
+ * is too high then it will not be displayed.
  *
  * Copyright (C) 2000  Kipp C. Cannon
  *

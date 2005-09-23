@@ -36,6 +36,7 @@
 
 #define  PROGRAM_NAME    "bkrencode"
 #define  DEFAULT_DEVICE  "/dev/backer"
+#define  BUFFER_SIZE     16384
 
 /*
  * Function prototypes
@@ -59,20 +60,16 @@ int main(int argc, char *argv[])
 {
 	int  tmp;
 	char  *devname = DEFAULT_DEVICE;
-	struct bkrconfig  config;
+	struct bkrconfig  config = { BKR_DEF_MODE, 0 };
 
 	/*
 	 * Some setup stuff
 	 */
 
-	block.buffer = NULL;
-	sector.aux = NULL;
+	sector.data = NULL;
 	device.direction = O_WRONLY;
 
-	config.mode = BKR_DEF_MODE;
-	config.timeout = BKR_DEF_TIMEOUT;
-
-	if((device.buffer = (unsigned char *) malloc(BKR_DEF_BUFFER_SIZE)) == NULL)
+	if((device.buffer = (unsigned char *) malloc(BUFFER_SIZE)) == NULL)
 		{
 		fputs(PROGRAM_NAME ": cannot allocate memory\n", stderr);
 		exit(-1);
@@ -192,17 +189,15 @@ int main(int argc, char *argv[])
 	        (device.direction == O_RDONLY) ? "DECODING" : "ENCODING");
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
 
-	if(bkr_set_parms(config.mode, BKR_DEF_BUFFER_SIZE) < 0)
+	if(bkr_set_parms(config.mode, BUFFER_SIZE) < 0)
 		{
 		perror(PROGRAM_NAME);
 		exit(-1);
 		}
 
-	bkr_format_reset();
-	device.tail = 0;
-
 	/*
-	 * Grab interrupt signal so we can write a nice EOR before exiting.
+	 * Grab interrupt signal so we can write a nice EOR before exiting
+	 * on SIGINT.
 	 */
 
 	signal(SIGINT, sigint_handler);
@@ -212,18 +207,23 @@ int main(int argc, char *argv[])
 	 * Transfer data one block at a time until EOF is reached.
 	 */
 
+	bkr_device_reset(0);
+	bkr_format_reset();
+
 	setbuf(stderr, NULL);
+	bkr_device_start_transfer();
 	switch(device.direction)
 		{
 		case O_RDONLY:
 		while(!feof(stdin))
 			{
+			errno = 0;
 			tmp = block.read(0, 1);
 			if(tmp == 0)
 				break;
 			if(tmp < 0)
 				errno = -tmp;
-			while(block.offset < block.end)
+			while((block.offset < block.end) && !errno)
 				block.offset += fwrite(block.offset, 1, block.end - block.offset, stdout);
 			if(errno)
 				{
@@ -251,6 +251,7 @@ int main(int argc, char *argv[])
 		bkr_write_eor(1);
 		break;
 		}
+	bkr_device_stop_transfer();
 	fclose(stdout);
 
 	exit(0);
@@ -284,6 +285,25 @@ void sigint_handler(int num)
  *
  * These functions pass on any error codes returned by the file system.
  */
+
+void  bkr_device_reset(unsigned int direction)
+{
+	device.head = 0;
+	device.tail = 0;
+}
+
+
+int  bkr_device_start_transfer(void)
+{
+	return(0);
+}
+
+
+void bkr_device_stop_transfer(void)
+{
+	return;
+}
+
 
 int bkr_device_read(unsigned int length, f_flags_t f_flags, jiffies_t bailout)
 {

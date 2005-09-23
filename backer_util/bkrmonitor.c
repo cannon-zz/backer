@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/mtio.h>
 #include <gtk/gtk.h>
 #include "backer.h"
 
@@ -51,13 +52,15 @@ struct
 	GtkWidget  *ntsc, *pal;
 	GtkWidget  *high, *low;
 	GtkWidget  *ep, *sp;
-	GtkWidget  *symbol, *block, *sector, *overrun, *underflow;
+	GtkWidget  *sector;
+	GtkWidget  *symbol, *block, *frame, *overrun, *underflow;
 	GtkWidget  *worst, *best, *least, *most;
 	GtkWidget  *buffer_status;
 	} widgets;
 struct  bkrstatus  status;
 struct  bkrformat  format;
 struct  bkrconfig  config;
+struct  mtpos      pos;
 
 
 /*
@@ -186,34 +189,39 @@ int main(int argc, char *argv[])
 
 	/* Error counts */
 
-	table = gtk_table_new(5, 2, FALSE);
+	table = gtk_table_new(6, 2, FALSE);
 	gtk_box_pack_start(GTK_BOX(vbox), table, TRUE, TRUE, 0);
 
-	widget = gtk_label_new("Most Symbol Errors");
+	widget = gtk_label_new("Sector Number");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 0, 1);
-	widget = gtk_label_new("Uncorrectable Blocks");
+	widget = gtk_label_new("Most Symbol Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 1, 2);
-	widget = gtk_label_new("Framing Errors");
+	widget = gtk_label_new("Uncorrectable Blocks");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 2, 3);
-	widget = gtk_label_new("Over-run Errors");
+	widget = gtk_label_new("Framing Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 3, 4);
-	widget = gtk_label_new("Underflow Warnings");
+	widget = gtk_label_new("Over-run Errors");
 	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 4, 5);
-
-	widgets.symbol = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 0, 1);
-
-	widgets.block = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.block, 1, 2, 1, 2);
+	widget = gtk_label_new("Underflows Detected");
+	gtk_table_attach_defaults(GTK_TABLE(table), widget, 0, 1, 5, 6);
 
 	widgets.sector = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sector, 1, 2, 2, 3);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.sector, 1, 2, 0, 1);
+
+	widgets.symbol = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.symbol, 1, 2, 1, 2);
+
+	widgets.block = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.block, 1, 2, 2, 3);
+
+	widgets.frame = gtk_label_new("0");
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.frame, 1, 2, 3, 4);
 
 	widgets.overrun = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 3, 4);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.overrun, 1, 2, 4, 5);
 
 	widgets.underflow = gtk_label_new("0");
-	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 4, 5);
+	gtk_table_attach_defaults(GTK_TABLE(table), widgets.underflow, 1, 2, 5, 6);
 
 	/* Debuging information */
 
@@ -289,9 +297,13 @@ gint update_status(gpointer data)
 {
 	char  text[20];
 
+	ioctl(devfile, MTIOCPOS, &pos);
 	ioctl(devfile, BKRIOCGETSTATUS, &status);
 
 	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), status.bytes);
+
+	sprintf(text, "%lu", pos.mt_blkno);
+	gtk_label_set_text(GTK_LABEL(widgets.sector), text);
 
 	sprintf(text, "%u", status.errors.symbol);
 	gtk_label_set_text(GTK_LABEL(widgets.symbol), text);
@@ -299,8 +311,8 @@ gint update_status(gpointer data)
 	sprintf(text, "%u", status.errors.block);
 	gtk_label_set_text(GTK_LABEL(widgets.block), text);
 
-	sprintf(text, "%u", status.errors.sector);
-	gtk_label_set_text(GTK_LABEL(widgets.sector), text);
+	sprintf(text, "%u", status.errors.frame);
+	gtk_label_set_text(GTK_LABEL(widgets.frame), text);
 
 	sprintf(text, "%u", status.errors.overrun);
 	gtk_label_set_text(GTK_LABEL(widgets.overrun), text);

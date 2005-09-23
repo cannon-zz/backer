@@ -1,3 +1,18 @@
+1.100 (2001/1/29)
+	A re-work of the device driver header files forced some stuff to
+	get a make-over.
+
+	bkrlog's rocky career continues with it's very life now hanging in
+	the balance.  It's raison d'etre --- the auxiliary data region ---
+	has left us.  I really liked writing rude messages into my system
+	backups, though, so I'm not going to delete it quite yet... ;-)
+
+	bkrtest has been reborn as bkrcheck and its role has expanded.  If
+	you give it a file name, it will tell you how much tape that file
+	will occupy given the current driver settings.
+
+	bkrmonitor now displays the current sector number.
+
 1.0 (2001/1/13)
 	Changed the 'N' glyph in bkrfont.xpm.
 

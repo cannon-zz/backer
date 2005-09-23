@@ -36,21 +36,21 @@ the video mode, bit density and data format.  In alphabetical order, the
 device names are:
 .PP
 .TS
-l l l.
-Name (devfs)	Name (no devfs)	Minor (see text)
+l l.
+Name	Minor
 _
-\fBbacker/\fP\fIn\fP\fB/nhe\fP	\fBbackernhe\fP	0
-\fBbacker/\fP\fIn\fP\fB/nhr\fP	\fBbackernhr\fP	1
-\fBbacker/\fP\fIn\fP\fB/nhs\fP	\fBbackernhs\fP	2
-\fBbacker/\fP\fIn\fP\fB/nle\fP	\fBbackernle\fP	3
-\fBbacker/\fP\fIn\fP\fB/nlr\fP	\fBbackernlr\fP	4
-\fBbacker/\fP\fIn\fP\fB/nls\fP	\fBbackernls\fP	5
-\fBbacker/\fP\fIn\fP\fB/phe\fP	\fBbackerphe\fP	6
-\fBbacker/\fP\fIn\fP\fB/phr\fP	\fBbackerphr\fP	7
-\fBbacker/\fP\fIn\fP\fB/phs\fP	\fBbackerphs\fP	8
-\fBbacker/\fP\fIn\fP\fB/ple\fP	\fBbackerple\fP	9
-\fBbacker/\fP\fIn\fP\fB/plr\fP	\fBbackerplr\fP	10
-\fBbacker/\fP\fIn\fP\fB/pls\fP	\fBbackerpls\fP	11
+\fBbacker/\fP\fIn\fP\fB/nhe\fP	0
+\fBbacker/\fP\fIn\fP\fB/nhr\fP	1
+\fBbacker/\fP\fIn\fP\fB/nhs\fP	2
+\fBbacker/\fP\fIn\fP\fB/nle\fP	3
+\fBbacker/\fP\fIn\fP\fB/nlr\fP	4
+\fBbacker/\fP\fIn\fP\fB/nls\fP	5
+\fBbacker/\fP\fIn\fP\fB/phe\fP	6
+\fBbacker/\fP\fIn\fP\fB/phr\fP	7
+\fBbacker/\fP\fIn\fP\fB/phs\fP	8
+\fBbacker/\fP\fIn\fP\fB/ple\fP	9
+\fBbacker/\fP\fIn\fP\fB/plr\fP	10
+\fBbacker/\fP\fIn\fP\fB/pls\fP	11
 .TE
 .PP
 When used with the device file system, the device files are created
@@ -61,25 +61,16 @@ file's name identifies the video mode (NTSC/PAL), the bit density
 (high/low), and the data format (SP/EP/raw) selected by accessing that
 device file.
 .PP
-Depending on how the driver was compiled, not all mode combinations will be
-present.  Minor numbers are assigned sequentially at run time to those
-modes which are available and the table above shows the assignment when all
-modes are available.  To adjust mode availability, see the
-\fBminor_to_mode[]\fP array in the sources.
+Depending on how the driver was compiled, some mode combinations might not
+be available.  To adjust mode availability, see the \fBminor_to_mode[]\fP
+array in the sources.
 .PP
 If the backer device is to be used as the default tape device then it is
 helpful to create a symbolic link \fB/dev/tape\fP that points to the
-preferred mode.  For example:
-.RS
-.sp
-cd /dev
-.br
-ln -s backer/0/nhs tape
-.sp
-.RE
+preferred mode.
 .SH DESCRIPTION
-The driver presents the Backer device as a set of character special files,
-one for each available format, that try to behave somewhat like tape
+The driver presents the Backer device as a set of character device special
+files, one for each available format, that try to behave somewhat like tape
 devices.  It is not possible to provide a fully functional tape interface
 because the tape transport itself (your VCR) is not under computer control.
 This means that every task requires operator assistance to complete.  Apart
@@ -97,26 +88,28 @@ pass-through mode.  One of the formats is intended for short play (SP)
 recordings and the other for extended play (EP) recordings while the
 pass-through mode disables all data processing within the driver allowing
 the raw tape data stream to be read and written.  The desired settings are
-selected by accessing the appropriate device file.
+selected by accessing the appropriate device file.  Any combination of the
+device files can be opened any number of times but, once a device is open,
+only the original user (or a super user) is allowed to open it again.
 .PP
-Any combination of the device files can be opened any number of times but
-only one transfer is allowed at a time.  Once a transfer has been started
-on a file descriptor, all other
+A data transfer is started by making a call to
 .IR read (2)
-and
-.IR write (2)
-calls on all descriptors will fail but
+or
+.IR write (2).
+For obvious practical reasons, only one transfer is allowed at a time so
+once a transfer has been started on one of the file descriptors, all other
+reads and writes on all descriptors will fail but
 .IR ioctl (2)
-calls can still be made on those descriptors to retrieve the driver status,
-etc..  Since the hardware is not full duplex, if a device is opened with
-mode \fBO_RDWR\fP the first read/write call selects the transfer direction
-and any subsequent calls in the other direction fail.
+calls can still be made in order to retrieve the driver status, etc..
+Since the hardware is not full duplex, if a device is opened with mode
+\fBO_RDWR\fP the first read/write call selects the transfer direction and
+any subsequent calls in the other direction fail.
 .PP
 Data written to and read from the non-raw files is clean, synchronous and
 commensurate:  it will be retrieved error-free;  the, say, 2000th byte
-written will be the 2000th byte read back;  exactly as many bytes as were
-written will be played back (the data is not padded to a multiple of some
-size).
+written will be the 2000th byte read back;  and exactly as many bytes as
+were written will be played back (the data is not padded to a multiple of
+some size).
 .PP
 The raw device files provide access to the actual tape data.  When writing,
 the first byte written is placed in the first position in the top line of
@@ -124,7 +117,7 @@ the first video field and so on.  When reading, all the pleasantries of the
 raw video signal are present:  tape noise, missing video lines, etc..  Have
 fun.
 .SH EXAMPLES
-The examples below assume that \fB/dev/tape\fP points to the desired
+The examples below assume that \fB/dev/tape\fP is a link to the desired
 device.
 .SS "BASIC USE"
 To save a file to tape, press Record and type
@@ -165,8 +158,8 @@ long, then the device's buffer can underflow (writing) or overflow
 relatively high transfer speed for its buffer size, even tar's default
 record size can result in excessive delays if additional processing is
 being performed (like compression).  When writing, this is harmless
-(although tape is wasted) because the driver can detect the underflow
-condition in the data stream and correct it during playback.  When reading,
+(although tape is wasted) because during playback the driver can detect the
+underflow condition in the data stream and correct it.  When reading,
 however, the buffer overflows result in data loss.
 .PP
 The default record size for GNU tar is 10 kilobytes (twenty 512-byte
@@ -236,7 +229,7 @@ drive and driver status.  The structure's fields are filled as follows:
 Set to \fBMT_ISUNKNOWN\fP.
 .TP
 \fBmt_dsreg\fP (device dependent status bits)
-Set the the current mode.  See \fBbacker.h\fP and specifically the
+Set the current mode.  See \fBbacker.h\fP and specifically the
 \fBbkrconfig\fP structure for information on the code for each mode.
 .TP
 \fBmt_gstat\fP (device independent status bits)
@@ -395,9 +388,7 @@ planned for version 3 will generally improve the driver's performance in
 this regard but the best defense is to not abuse your tapes.
 .SH FILES
 .IP /dev/backer/*/*
-The device file names when devfs is in use.
-.IP /dev/backer*
-The device file names when devfs is not available.
+The device file names.
 .SH BUGS
 Sometimes the hardware skips the first line of data in the DMA buffer.
 This shifts the video image up one line and makes it hard for the driver to

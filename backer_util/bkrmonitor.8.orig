@@ -24,12 +24,14 @@
 .SH NAME
 bkrmonitor \- Backer tape I/O monitor.
 .SH SYNOPSIS
-\fBbkrmonitor\fP [-h] [-f \fIdevname\fP] [-t \fIinterval\fP]
+\fBbkrmonitor\fP [\fB\-h\fP] [\fB\-o\fP] [\fB\-f\fP \fIdevname\fP]
+[\fB\-t\fP \fIinterval\fP]
 .SH DESCRIPTION
-The \fBbkrmonitor\fP utility is a GTK+ application for monitoring the
-status of the
+The \fBbkrmonitor\fP utility is an application for monitoring the status of
+the
 .IR backer (4)
-driver.  When you run the program it shows a window in which it
+driver.  If GTK+ is available, then it is a built as a graphical
+application.  When you run the program it shows a window in which it
 continuously displays the information returned by \fBMTIOCPOS\fP and
 \fBBKRIOCGETSTATUS\fP
 .IR ioctl (2)
@@ -39,6 +41,10 @@ driver mode.  This is because the amount of the DMA buffer that gets used
 depends on the mode so the value \fBbkrmonitor\fP uses for ``full scale''
 must be reset.
 .PP
+If GTK+ is not available then \fBbkrmonitor\fP is built as a text-only
+application.  It then behaves as though \fB\-o\fP is always specified on
+the command line.
+.PP
 This application can help to diagnose any problems you might encounter
 recovering data from tapes since it can display the exact type of read
 error that occurred.  It is not necessary for \fBbkrmonitor\fP to be running
@@ -47,15 +53,21 @@ counts are only reset when a new transfer is started.
 .PP
 .SS OPTIONS
 .TP
-\-h
+\fB\-h\fP
 Print a usage message.
 .TP
-\-f \fIdevname\fP
-When automatically retrieving the desired mode, retrieve it from
-\fIdevname\fP.  If this option is not given then the mode is retrieved from
-the compiled-in default file.
+\fB\-o\fP
+Write the current status to stdout and quit.
 .TP
-\-t \fIinterval\fP
+\fB\-f\fP \fIdevname\fP
+Monitor the activity of \fIdevname\fP.  If this option is not given then
+\fBDEVICE_NAME\fP is monitored.  Note that it is not necessary to monitor
+the same device file as the transfer is occurring on:  the same diagnostic
+information is returned by
+.IR ioctl (2)
+calls made to any of the device files.
+.TP
+\fB\-t\fP \fIinterval\fP
 Set the update interval to \fIinterval\fP milliseconds.
 .SS DISPLAY
 The meanings of the fields in the display are as follows.
@@ -92,7 +104,7 @@ the computer could not keep up.
 \fBUnderflows Detected\fP
 The number of times the block sequence number skipped in the negative
 direction indicating repeated sectors on the tape.  This indicates that
-when the data was written, the computer could not generate data as fast as
+when the data was written, the computer could not generate it as fast as
 it was being sent to tape causing the DMA buffer to empty (and then loop).
 Apart from wasting several tens of kilobytes of tape, underflows are
 non-destructive.
@@ -130,6 +142,12 @@ kept completely full while writing and completely empty while reading.
 .IR backer (4),
 .IR bkrcheck (8),
 .IR bkrencode (8)
+.SH BUGS
+The decay of the recent error indicator graph is keyed to increments in the
+sector number so if the number stops changing for some reason then the
+recent error graph stops decaying.  This will be seen if the graph is not
+zero at the end of a recording or while the driver is skipping over an
+underflow.
 .SH AUTHOR
 Kipp Cannon (kcannon@users.sourceforge.net).
 .SH AVAILABILITY

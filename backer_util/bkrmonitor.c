@@ -26,8 +26,31 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
-#include <gtk/gtk.h>
+
 #include "backer.h"
+
+
+#ifdef GTK_CONFIG
+
+#include <gtk/gtk.h>
+void  create_gtk_window(void);
+#define  ONCE_INITIALIZER  0
+
+#else
+
+typedef  int  gint;
+typedef  void  *gpointer;
+typedef  void  GtkWidget;
+#define  gtk_init(x,y)           do { } while(0)
+#define  gtk_timeout_add(x,y,z)  do { } while(0)
+#define  gtk_main()              do { } while(0)
+#define  create_gtk_window()     do { } while(0)
+#define  TRUE   1
+#define  FALSE  0
+#define  ONCE_INITIALIZER  1
+
+#endif /* GTK_CONFIG */
+
 
 #define  PROGRAM_NAME    "bkrmonitor"
 #define  DEFAULT_UPDATE  50                     /* milliseconds */
@@ -77,18 +100,15 @@ struct  mtpos      pos;
 int main(int argc, char *argv[])
 {
 	int  i;
+	int  once = ONCE_INITIALIZER;
 	char  *devname = DEFAULT_DEVICE;
-	GtkWidget  *window;
-	GtkWidget  *vbox;
-	GtkWidget  *table;
-	GtkWidget  *widget;
 
 	/*
 	 * Parse command line.
 	 */
 
 	gtk_init(&argc, &argv);
-	while((i = getopt(argc, argv, "f:ht:")) != EOF)
+	while((i = getopt(argc, argv, "f:hot:")) != EOF)
 		switch(i)
 			{
 			case 'f':
@@ -99,6 +119,10 @@ int main(int argc, char *argv[])
 			update_interval = atoi(optarg);
 			break;
 
+			case 'o':
+			once = 1;
+			break;
+
 			case 'h':
 			default:
 			puts(
@@ -106,6 +130,7 @@ int main(int argc, char *argv[])
 	"the following options are recognized:\n" \
 	"       -f devname  Use device devname (default " DEFAULT_DEVICE ")\n" \
 	"       -t num      Set the update interval to num milliseconds\n" \
+	"       -o          Print status to stdout and quit\n" \
 	"       -h          Display usage");
 			exit(0);
 			}
@@ -113,7 +138,8 @@ int main(int argc, char *argv[])
 		update_interval = DEFAULT_UPDATE;
 
 	/*
-	 * Open device file and get info.
+	 * Open device file and get info.  If in once-only mode, print the
+	 * results and quit.
 	 */
 
 	devfile = open(devname, O_RDONLY);
@@ -125,9 +151,58 @@ int main(int argc, char *argv[])
 	ioctl(devfile, MTIOCGET, &mtget);
 	ioctl(devfile, BKRIOCGETFORMAT, &format);
 
+	if(once)
+		{
+		ioctl(devfile, MTIOCPOS, &pos);
+		ioctl(devfile, BKRIOCGETSTATUS, &status);
+		
+		printf("Current Status of %s\n", devname);
+		printf("Sector Number:  %lu\n", pos.mt_blkno);
+		printf("Total Errors Corrected:  %u\n", status.health.total_errors);
+		printf("Errors in Worst Block:   %u\n", status.errors.symbol);
+		printf("Uncorrectable Blocks:    %u\n", status.errors.block);
+		printf("Framing Errors:       %u\n", status.errors.frame);
+		printf("Overrun Errors:       %u\n", status.errors.overrun);
+		printf("Underflows Detected:  %u\n", status.errors.underflow);
+		printf("Worst Key:        %u\n", status.health.worst_key);
+		printf("Closest Non-Key:  %u\n", status.health.best_nonkey);
+		printf("Least Skipped:    %u\n", status.health.least_skipped);
+		printf("Most Skipped:     %u\n", status.health.most_skipped);
+		printf("DMA Buffer:  %u/%u\n", status.bytes, format.buffer_size);
+
+		exit(0);
+		}
+
 	/*
-	 * Create window.
+	 * Create the window and go.
 	 */
+
+	create_gtk_window();
+
+	gtk_timeout_add(update_interval, update_status, NULL);
+
+	error_rate.rate = 0;
+	error_rate.last_block = 0;
+
+	gtk_main();
+
+	exit(0);
+}
+
+
+/*
+ * create_gtk_window()
+ */
+
+#ifdef GTK_CONFIG
+void create_gtk_window(void)
+{
+	GtkWidget  *window;
+	GtkWidget  *vbox;
+	GtkWidget  *table;
+	GtkWidget  *widget;
+
+	/* window */
 
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_policy(GTK_WINDOW(window), FALSE, FALSE, TRUE);
@@ -295,26 +370,8 @@ int main(int argc, char *argv[])
 	/* Done */
 
 	gtk_widget_show_all(window);
-
-
-	/*
-	 * Add update_status() as a timer call-back
-	 */
-
-	gtk_timeout_add(update_interval, update_status, NULL);
-
-
-	/*
-	 * Start
-	 */
-
-	error_rate.rate = 0;
-	error_rate.last_block = 0;
-
-	gtk_main();
-
-	exit(0);
 }
+#endif /* GTK_CONFIG */
 
 
 /*
@@ -338,6 +395,7 @@ gint update_status(gpointer data)
 		}
 	error_rate.last_block = pos.mt_blkno;
 
+#ifdef GTK_CONFIG
 	gtk_progress_set_value(GTK_PROGRESS(error_rate.widget), error_rate.rate);
 	gtk_progress_set_value(GTK_PROGRESS(widgets.buffer_status), status.bytes);
 
@@ -373,6 +431,7 @@ gint update_status(gpointer data)
 
 	sprintf(text, "%u", status.health.most_skipped);
 	gtk_label_set_text(GTK_LABEL(widgets.most), text);
+#endif  /* GTK_CONFIG */
 
 	return(TRUE);
 }

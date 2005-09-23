@@ -24,33 +24,32 @@
 .SH NAME
 bkrcheck \- Backer device I/O testing tool.
 .SH SYNOPSIS
-\fBbkrcheck\fP [-h] [-f \fIdevname\fP] [\fIfilename\fP]
+\fBbkrcheck\fP [\fB\-h\fP] [\fB\-f\fP \fIdevname\fP] [\fIfilename\fP]
 .SH DESCRIPTION
 \fBbkrcheck\fP performs two functions.  If no file name is given, then it
 tests the operation of the
 .IR backer (4)
-device driver by writing a test pattern to a device file.  If a file name
-is given then it, instead, computes the length of tape required to store
-the file.
+device driver by writing a test pattern to one of the device files.  If,
+instead, a file name is given then it computes the length of tape required
+to store the file using the format of one of the device files.  In both
+cases, a particular device file can be specified with the \fB-f\fP option.
 .PP
-In both cases, a particular device file can be specified otherwise the
-compiled-in default file is used.  When computing the length of tape, the
-mode can be retrieved from a backer device even if a transfer is in
-progress as the format retrieval
+When computing the length of tape, the mode can be retrieved from
+a backer device even if a transfer is in progress as the format retrieval
 .IR ioctl (2)
 does not interfere with tape I/O.
 .SS OPTIONS
 .TP
-\-h
+\fB\-h\fP
 Print a usage message.
 .TP
-\-f \fIdevname\fP
-Write the test pattern to \fIdevname\fP or, when computing the length of
-tape required to store a given file, retrieve the tape format to be used
-from \fIdevname\fP.
+\fB\-f\fP \fIdevname\fP
+Use \fIdevname\fP for communication with the device driver.  The default is
+\fBDEVICE_NAME\fP.
 .TP
 \fIfilename\fP
-Compute the length of tape required to store \fIfilename\fP.
+Instead of writing a test pattern, compute the length of tape required to
+store \fIfilename\fP.
 .SH "SEE ALSO"
 .IR backer (4),
 .IR bkrencode (8),

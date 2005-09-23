@@ -1,43 +1,55 @@
-                           INSTALLATION INSTRUCTIONS
-                           =========================
+                            WORKING WITH THE DRIVER
+                            =======================
 
 
-LOADING/UNLOADING THE DRIVER
-----------------------------
+See INSTALL for instructions on compiling, installing and loading the
+driver.
 
-To load the driver, login as root and type
 
-	insmod backer [options]
 
-where the following options can be set:
+TROUBLESHOOTING
+---------------
 
-	ioport=num
-		Set the I/O port to num.
-	dma=num
-		Set the DMA channel to num.
-	timeout=num
-		Set the timeout to num seconds.
+WON'T COMPILE.  Well... it compiles just fine on my own machine so it would
+help if you could find the problem and let me know what it was.  Otherwise
+you'd better just contact me and we'll have to sort it out.
 
-Here's an example install command:
+DRIVER WON'T LOAD.  Are you logged in as root?  Check /var/log/messages for
+complaints about unavailable resources.  If there's an I/O port conflict,
+well you know what to do (just be sure to recompile with updated parameters
+or set the correct options on the insmod command line).  If there's a
+problem reserving a DMA buffer, try freeing some memory or rebooting your
+system and loading the driver soon after start-up.
 
-	insmod backer ioport=0x304 dma=3 timeout=20
+DRIVER LOADS BUT YOU CAN'T OPEN THE DEVICE FILE.  If the error message is
+"Permission denied" then check the permissions of the /dev entry.  They
+must allow you access to the device.
 
-You'll get an error message if the driver couldn't be installed.  If that
-happens, check /var/log/messages to see what the problem was.  The driver will
-have printed a little banner and will have complained if it couldn't reserve a
-particular resource.  Note that to allow the DMA channel to be shared, the
-driver will only request access to it when the device is actually in use so
-successfully loading the driver does not guarantee that there are no resource
-conflicts.
-
-To test the driver just type
+YOU CAN OPEN THE DEVICE BUT YOU CAN'T TRANSFER DATA.  Do the following test
+to see what error message you see
 
 	cat /dev/zero > /dev/tape
 
-to verify that data is being written to video.  On your television set you
-should see some vertical bars for a few seconds (the BOR mark) followed by
-something that looks like noise.  Press CTRL-C to stop the test.
+If you see "Device or resource busy" then make sure that no other process
+is transfering data and that the DMA channel is available (check
+/proc/dma).  If you see "Input/output error" or "Connection timed out" then
+make sure your VCR is properly connected to the card (and turned on) and
+make sure that you have the driver set for the correct DMA channel.
 
-To unload the module type
+YOU GET MANY ERRORS WHEN READING TAPES.  Is the tape you are using of good
+quality?  Are your video cables OK?  Generally if the picture you see on TV
+while recording looks nice and crisp then the cables are fine.  It might be
+that the data format is not appropriate for your video equipment.  You can
+experiment with the parameters in the backer_fmt.h and backer_fmt.c file
+yourself or contact me and I can help you adjust them.  If you figure them
+out yourself then send me the information so I can make the default
+settings as generic as possible.
 
-	rmmod backer
+YOU GET FATAL ERRORS FROM tar DURING READS.  I find that tar's buffering of
+the data stream defeats itself in that, by default, tar processes so much
+data at a time that the device driver's buffer overflows between tar's
+(infrequent) reads/writes.  The problem is solved on my system by reducing
+tar's record size to its minimum value with the option -b 1.  Larger values
+would probably work too but I haven't found any problems with this small
+record size either so I just use this.  This option must be given during
+playback if it was used when recording.

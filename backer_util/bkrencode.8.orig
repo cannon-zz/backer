@@ -24,8 +24,8 @@
 .SH NAME
 bkrencode \- Backer tape data processor.
 .SH SYNOPSIS
-\fBbkrencode\fP [-h] [-u] [-V n|p] [-D h|l] [-F e|s] [-a] [-f
-\fIdevname\fP]
+\fBbkrencode\fP [\fB\-h\fP] [\fB\-u\fP] [\fB\-V\fP n|p] [\fB\-D\fP h|l]
+[\fB\-F\fP e|s] [\fB\-a\fP] [\fB\-f\fP \fIdevname\fP]
 .SH DESCRIPTION
 \fBbkrencode\fP is a user space implementation of the
 .IR backer (4)
@@ -35,11 +35,11 @@ data and encode it into a byte stream suitable for being written directly
 to tape or accept a raw byte stream recovered from tape and decode the file
 data out of it.  The default is to encode file data to tape data.
 .PP
-There are two uses for \fBbkrencode\fP.  On the one hand it allows the tape
-data stream to be processed ``off line''.  This is useful for systems which
-are not fast enough to process the tape data in real time.  Tape data can
-be prepared on disk ahead of time with \fBbkrencode\fP and then dumped to
-tape via a raw device (and vice versa when reading tapes).  This, of
+There are two primary uses for \fBbkrencode\fP.  The first is to allow
+slower systems to make full use of a Backer's high density modes by
+removing the need to process the tape data stream in real time.  Tape data
+can be prepared on disk ahead of time with \fBbkrencode\fP, then dumped to
+tape via a raw device.  To read a tape, the process is reversed.  This, of
 course, requires enough free disk space to be available to act as a buffer.
 The other use of \fBbkrencode\fP is to allow tapes recorded with older
 versions of the device driver to be recovered when the current version of
@@ -51,45 +51,43 @@ tape data stream and, likewise, the format the data stream is in when it's
 being decoded.  If the mode is not specified on the command line then the
 compiled-in default mode is used.  It is possible for \fBbkrencode\fP to
 automatically retrieve the format to use from a device file.  This is done
-with the \fI-a\fP option combined with the \fI-f\fP option if necessary and
-can be done whether or not the device is actually in use for a transfer at
-the time.
+with the \fB\-a\fP option combined, if necessary, with the \fB\-f\fP option
+and can be done whether or not the device is actually in use for a transfer
+at the time.
 .SS OPTIONS
 .TP
-\-h
+\fB\-h\fP
 Print a usage message.
 .TP
-\-u
-Unencode.  Extract file data from tape data stream.
+\fB\-u\fP
+"Unencode".  Extract file data from a tape data stream.
 .TP
-\-V [np]
+\fB\-V\fP [np]
 Set the video mode to format the data for to NTSC (n) or PAL (p).
 .TP
-\-D [hl]
+\fB\-D\fP [hl]
 Set the density to format the data for to high (h) or low (l).
 .TP
-\-F [es]
+\fB\-F\fP [es]
 Set the tape speed to format the data for to EP (e) or SP (s).
 .TP
-\-a
+\fB\-a\fP
 Automatically retrieve the mode to use from a Backer device file.
 .TP
-\-f \fIdevname\fP
+\fB\-f\fP \fIdevname\fP
 When automatically retrieving the desired mode, retrieve it from
 \fIdevname\fP.  If this option is not given then the mode is retrieved from
-the compiled-in default file.
+\fBDEVICE_NAME\fP.
 .SH EXAMPLES
-The following examples assume that the device file system is in use.  If
-not, adjust the device names appropriately.  To save a file to tape with a
-short play high density NTSC recording using \fBbkrencode\fP to process the
-data type
-.RS
+To save a file in short play high density NTSC mode using
+\fBbkrencode\fP to process the data type
+.RS 3
 .sp
 bkrencode -V n -D h -S s < \fIfilename\fP > /dev/backer/0/nhr
 .sp
 .RE
 and to retrieve it type
-.RS
+.RS 3
 .sp
 bkrencode -u -V n -D h -S s < /dev/backer/0/nhr > \fIfilename\fP
 .sp
@@ -97,7 +95,7 @@ bkrencode -u -V n -D h -S s < /dev/backer/0/nhr > \fIfilename\fP
 To use \fBbkrencode\fP to allow
 .IR tar (1)
 to be used with high compression on a slow computer do something like
-.RS
+.RS 3
 .sp
 tar -czO \fIfilenames...\fP | bkrencode > /tmp/tape.dat
 .br

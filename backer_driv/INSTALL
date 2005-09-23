@@ -1,6 +1,7 @@
                            INSTALLATION INSTRUCTIONS
                            =========================
 
+
 HARDWARE
 --------
 
@@ -11,6 +12,7 @@ to see which I/O ports and DMA channels are being used by taking a look at
 the two files /proc/ioports and /proc/dma.  Set your Backer to a free I/O
 port and DMA channel then just follow the installation instructions that
 came with the card.
+
 
 
 SOFTWARE
@@ -35,56 +37,126 @@ should be set are:
 
 In the Makefile, BKR_MAJOR is the major number the device inodes will have.
 You can set this to anything your system isn't using.  It currently
-defaults to 60 which is in one of the blocks of number set aside for
-``experimental and local use''.  A number must be chosen even if you are
-using the device filesystem.
+defaults to 60 which is in one of the blocks of numbers set aside for
+``experimental and local use''.  You only need to change it if you already
+have something using 60.
 
 MODULES_DIR is the directory the compiled driver will be placed in.  The
-default is /lib/modules/misc which is probably fine.
+default is /lib/modules/misc.
 
 PREFIX is the top of the hierarchy in which the manual page will be placed.
 The man page is put in PREFIX/man/man4.
 
 The parameters in backer_isa.c specify the hardware settings and the
 timeout.  These can all be set at module load time although you might as
-well configure them now to simplify things later.
+well configure them now in order to simplify things later.
 
-The timeout is the length of time the driver will wait before aborting an
-operation in the event of a problem and the only reason to adjust it is if
-you want to tweak the driver's behaviour to your own tastes.  It should not
-be less than the length of the BOR mark or the driver will timeout while
-waiting for data to start during playback.  It also must not be less than
-the time required to empty the DMA buffer or the driver will timeout while
-flushing its buffers at the end of a recording.
-
-
-2.  Compile the driver by typing "make".  Easy enough.
+The timeout does not need to be adjusted unless you want to tweak the
+driver's behaviour to your own tastes.  It is the length of time the driver
+will wait for an operation to finish before deciding something's wrong and
+aborting.  It should not be less than the length of the BOR mark or the
+driver will timeout while waiting for data to start during playback.  It
+also must not be less than the time required to empty the DMA buffer or the
+driver will timeout while flushing its buffers at the end of a recording.
 
 
-3.  Install the driver, device inodes and man page by typing "make
-install".  This puts the driver into MODULES_DIR and runs depmod -a to
-rebuild the module dependancy database.  Then it checks to see if devfs is
-in use and if not it creates the device inodes in /dev.  Finally it
-installs the man page.
+2.  Compile the driver by typing
 
-If the status of devfs cannot be determined and it is not being used then
-you will have to create the device inodes yourself by running "make devs".
+	make
 
-4.  Create link named /dev/tape.  The driver is designed to imitate a
+
+3.  Install the driver, device inodes and man page by typing
+
+	make install
+
+This puts the driver into MODULES_DIR and runs depmod -a to rebuild the
+module dependancy database.  Then it checks to see if devfs is in use and
+if not it creates the device inodes in /dev.  Finally it installs the man
+page.
+
+If devfs is not being used but the install script can't determine that fact
+then you will have to manually instruct make to create the device inodes by
+typing
+
+	make devs
+
+
+4.  OPTIONAL.  Create /dev/tape link.  The driver is designed to imitate a
 standard magnetic tape drive and if you want to use your Backer as your
-default tape device you should also create a symbolic link called /dev/tape
-that points to your preferred device.  For example (assuming devfs),
+default tape device you should create a symbolic link called /dev/tape that
+points to your preferred device.  If you don't have devfs then you'll do
+this by typing something like (using nhs as an example)
 
-	cd /dev
-	ln -s backer/0/nhs tape
+	ln -s backer/0/nhs /dev/tape
 
-selects high density NTSC in SP mode as the default tape format.  Note that
-if you are using devfs you will have to create this link every time the
-system reboots.  Usually a system will have several such links (for example
-/dev/mouse will be a link to the prefered mouse device) and some mechanism
-will be in place to automatically create them.  One could either use a
-script to create them or put them into a .tar file which is unpacked into
-/dev by the boot scripts.  I leave it up to you to figure out how your
-system accomplishes this.
+which would select high density NTSC in SP mode as the default tape format.
 
-5.  Done!
+If you are using the device filesystem then you will have to create this
+link every time the system reboots.  This can be taken care of for you if
+you are running devfsd.  To configure devfsd to automatically create and
+remove the /dev/tape link as the driver is loaded and unloaded, add
+something like the following lines to your /etc/devfsd.conf
+
+	REGISTER	backer	EXECUTE	ln -s backer/0/nhs /dev/tape
+	UNREGISTER	backer	EXECUTE rm -f /dev/tape
+
+and then tell devfsd to re-read its config file by doing
+
+	killall -HUP devfsd
+
+
+5.  OPTIONAL.  To let your system take care of automatically loading and
+unloading the driver add the following lines to /etc/modules.conf
+
+	alias /dev/backer backer
+	alias /dev/tape backer
+	options backer <options>
+
+where the second line should, obviously, only be added if /dev/tape is a
+link to a backer device and the last line is only needed if you need to
+specify options (like the I/O port).  See below for available options.
+Re-read the config file by doing
+
+	depmod -a
+
+
+
+LOADING/UNLOADING THE DRIVER
+----------------------------
+
+To load the driver manually, login as root and type
+
+	insmod backer [options]
+
+where the following options can be set:
+
+	ioport=num
+		Set the I/O port to num.
+	dma=num
+		Set the DMA channel to num.
+	timeout=num
+		Set the timeout to num seconds.
+
+Here's an example load command:
+
+	insmod backer ioport=0x304 dma=3 timeout=20
+
+You'll get an error message if the driver couldn't be loaded.  If that
+happens, check /var/log/messages to see what the problem was.  The driver
+will have printed a little banner and will have complained if it couldn't
+reserve a particular resource.  Note that to allow the DMA channel to be
+shared, the driver will only request access to it when the device is
+actually in use so successfully loading the driver does not guarantee that
+there are no resource conflicts.
+
+To test the driver just type
+
+	cat /dev/zero > /dev/tape
+
+to verify that data is being written to video.  On your television set you
+should see some vertical bars for a few seconds (the BOR mark) followed by
+something that looks like noise.  Press CTRL-C to stop the test.
+
+To unload the module type
+
+	rmmod backer

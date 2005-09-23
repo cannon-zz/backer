@@ -1,3 +1,29 @@
+2.0 (2001/4/12)
+	Changed the flags used to represent the data format to help fix a
+	bug in bkrencode.
+
+	Moved the minor numbers around again.  Very sorry!  This was done
+	in anticipation of potentially migrating the driver into the main
+	kernel tree.  Now each operating mode is assigned a fixed minor
+	number --- no more shuffling of minor numbers depending on which
+	modes are actually compiled in and which aren't.  If you have been
+	using the driver with all modes enabled then you will not see a
+	difference.
+
+	Found and fixed a bug in the Makefile's dev target when updating it
+	for the new minor numbers.  The modes NTSC/low/raw and NTSC/low/SP
+	had their minor numbers backwards.
+
+	If devfs is not in use, the inodes created by the Makefile now have
+	the same names as the devfs versions (a tree off /dev).
+
+	Moved more documentation from the postscript file to text files.
+
+	Finally found the cause of the "Unresolved symbol" warnings from
+	depmod:  my kernels are compiled with symbol versioning turned on
+	so all the symbol names are mangled.  Fixed the problem by
+	symbol-versioning the driver.
+
 1.107(beta) (2001/3/24)
 	*** INCOMPATIBLE TAPE FORMAT CHANGE ***
 

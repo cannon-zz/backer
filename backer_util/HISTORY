@@ -1,3 +1,14 @@
+2.0 (2001/4/12)
+	Documentation updates and corrections.
+
+	bkrencode couldn't be set for EP mode due to a conflict in the mode
+	flags.  Fixed by changing the flags around a bit.
+
+	bkrmonitor can now send its output to stdout and will be built as a
+	text-only version if GTK is not available.
+
+	The Makefile's been given a make-over.
+
 1.107 (2001/3/24)
 	Adjusted some more of bkrcheck's messages.
 

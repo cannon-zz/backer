@@ -38,8 +38,6 @@
 
 int  bkr_device_reset(int mode)
 {
-	device.size = 0;
-
 	if(BKR_DENSITY(mode) == BKR_HIGH)
 		device.bytes_per_line = BYTES_PER_LINE_HIGH;
 	else

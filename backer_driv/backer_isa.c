@@ -69,7 +69,8 @@
  */
 
 #define  BKR_NAME               "backer"
-#define  BKR_VERSION            "1.107(beta)"
+#define  BKR_VERSION            "2.0"
+#define  BKR_MINOR_BASE         0       /* first minor number */
 
 #define  BKR_BUFFER_SIZE        65536   /* bytes */
 #define  BKR_MAX_TIMEOUT        120     /* seconds */
@@ -168,30 +169,40 @@ static struct file_operations file_ops[] =      /* file I/O functions */
 	WRITING_OPS
 	};
 
-#define  NUM_MODES  (sizeof(minor_to_mode)/sizeof(minor_to_mode[0]))
 static int minor_to_mode[] =
-	{
 #ifdef FIXME
+	{
 	BKR_NTSC | BKR_HIGH | BKR_EP,
-#endif
 	BKR_NTSC | BKR_HIGH | BKR_RAW,
 	BKR_NTSC | BKR_HIGH | BKR_SP,
-#ifdef FIXME
 	BKR_NTSC | BKR_LOW  | BKR_EP,
-#endif
 	BKR_NTSC | BKR_LOW  | BKR_RAW,
 	BKR_NTSC | BKR_LOW  | BKR_SP,
-#ifdef FIXME
 	BKR_PAL  | BKR_HIGH | BKR_EP,
-#endif
 	BKR_PAL  | BKR_HIGH | BKR_RAW,
 	BKR_PAL  | BKR_HIGH | BKR_SP,
-#ifdef FIXME
 	BKR_PAL  | BKR_LOW  | BKR_EP,
-#endif
 	BKR_PAL  | BKR_LOW  | BKR_RAW,
 	BKR_PAL  | BKR_LOW  | BKR_SP
 	};
+#else
+	{
+	-1,
+	BKR_NTSC | BKR_HIGH | BKR_RAW,
+	BKR_NTSC | BKR_HIGH | BKR_SP,
+	-1,
+	BKR_NTSC | BKR_LOW  | BKR_RAW,
+	BKR_NTSC | BKR_LOW  | BKR_SP,
+	-1,
+	BKR_PAL  | BKR_HIGH | BKR_RAW,
+	BKR_PAL  | BKR_HIGH | BKR_SP,
+	-1,
+	BKR_PAL  | BKR_LOW  | BKR_RAW,
+	BKR_PAL  | BKR_LOW  | BKR_SP
+	};
+#endif /* FIXME */
+
+#define  NUM_MODES  (sizeof(minor_to_mode)/sizeof(minor_to_mode[0]))
 
 static devfs_handle_t  dev_directory = NULL;   /* root of device tree */
 static devfs_handle_t  dev_entry[NUM_MODES];   /* devfs handles */
@@ -225,7 +236,7 @@ int __init init_module(void)
 	char  name[6];
 
 	EXPORT_NO_SYMBOLS;
-	printk(KERN_INFO BKR_NAME ": Backer 16/32 driver version " BKR_VERSION ":  ");
+	printk(KERN_INFO BKR_NAME ": Backer 16/32 tape device driver version " BKR_VERSION ": ");
 
 	/*
 	 * Initialize some data.
@@ -237,6 +248,8 @@ int __init init_module(void)
 	device.direction = STOPPED;
 	device.alloc_size = BKR_BUFFER_SIZE;
 	sector.buffer = NULL;
+
+	memset(dev_entry, 0, NUM_MODES * sizeof(devfs_handle_t));
 
 	if(timeout > BKR_MAX_TIMEOUT)
 		timeout = BKR_MAX_TIMEOUT;
@@ -268,13 +281,16 @@ int __init init_module(void)
 	for(i = 0; i < NUM_MODES; i++)
 		{
 		result = minor_to_mode[i];
+		if(result < 0)
+			continue;
 		sprintf(name, "%u/%c%c%c", 0,
 		        (BKR_VIDEOMODE(result) == BKR_PAL) ? 'p' : 'n',
 		        (BKR_DENSITY(result) == BKR_HIGH) ? 'h' : 'l',
 		        (BKR_FORMAT(result) == BKR_RAW) ? 'r' :
 		         ((BKR_FORMAT(result) == BKR_SP) ? 's' : 'e'));
 		dev_entry[i] = devfs_register(dev_directory, name, DEVFS_FL_AUTO_OWNER, BKR_MAJOR,
-		                 i, S_IFCHR | S_IRUSR | S_IWUSR, &file_ops[STOPPED], NULL);
+		                 BKR_MINOR_BASE + i, S_IFCHR | S_IRUSR | S_IWUSR,
+		                 &file_ops[STOPPED], NULL);
 		if(dev_entry[i] == NULL)
 			{
 			printk("can't register device\n");
@@ -293,7 +309,7 @@ int __init init_module(void)
 	 * Driver installed.
 	 */
 
-	printk("loaded\n" KERN_INFO BKR_NAME ": dma=%u ioport=%#x timeout=%u\n",
+	printk("OK\n" KERN_INFO BKR_NAME ": dma=%u ioport=%#x timeout=%u\n",
 	       device_isa.dma, device_isa.ioport, timeout/HZ);
 	return(0);
 
@@ -341,8 +357,10 @@ static int open(struct inode *inode, struct file *filp)
 {
 	kdev_t  minor;
 
-	minor = MINOR(inode->i_rdev);
+	minor = MINOR(inode->i_rdev) - BKR_MINOR_BASE;
 	if(minor >= NUM_MODES)
+		return(-ENODEV);
+	if(minor_to_mode[minor] < 0)
 		return(-ENODEV);
 
 	filp->private_data = kmalloc(sizeof(bkr_private_t), GFP_KERNEL);
@@ -462,15 +480,16 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 		case BKRIOCGETSTATUS:
 		switch(device.direction) /* sync the buffer head/tail */
 			{
-			case WRITING:
-			bkr_device_write(0, O_NONBLOCK, jiffies+timeout);
+			case STOPPED:
 			break;
 
 			case READING:
 			bkr_device_read(0, O_NONBLOCK, jiffies+timeout);
 			break;
 
-			case STOPPED:
+			case WRITING:
+			bkr_device_write(0, O_NONBLOCK, jiffies+timeout);
+			break;
 			}
 		arg.bkrstatus.bytes = bytes_in_buffer();
 		arg.bkrstatus.errors = errors;
@@ -841,7 +860,7 @@ void bkr_device_stop_transfer(void)
  *
  * Doesn't actually "read" data... just waits until the requested length of
  * data starting at device.tail becomes available in the DMA buffer.
- * Returns 0 on success, -EINTR on interrupt, -ETIMEDOUT on timeout,
+ * Returns 0 on success, -EINTR on signal, -ETIMEDOUT on timeout,
  * -EWOULDBLOCK if the operation would block (and we don't want it to) or
  * any error code returned by update_dma_offset().
  */

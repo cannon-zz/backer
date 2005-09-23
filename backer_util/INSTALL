@@ -4,9 +4,8 @@
 Here are the steps for installing the utilities associated with the Backer
 device driver.
 
-1.  Edit the Makefile
-
-There are a few things that need to be set in the Makefile.  These are:
+1.  Edit the Makefile.  There are a few things that need to be set in the
+Makefile.  These are:
 
     DRIVER_DIR    The location of the device driver sources.
     DEVICE_NAME   The default device name to compile into the utilities.
@@ -16,12 +15,22 @@ The defaults for these are probably fine.  The executables will be put in
 PREFIX/bin and the man pages in PREFIX/man/man8
 
 
-2.  Build the utilities.
+2.  Build the utilities.  Typing
 
-Typing "make" builds the utilities.  If GTK is not installed then
-bkrmonitor will not be built.
+	make
+	
+builds the utilities and the man pages.  If GTK is not installed then
+bkrmonitor will be built as a text-only application.  If GTK is installed
+but the build script can't find it, manually specify the location of
+gtk-config like this
+
+	make GTK_CONFIG=/usr/bin/gtk-config
+
+or whatever is appropriate for your system.
 
 
-3.  Install
+3.  Install.  Typing
 
-Typing "make install" installs the utilities and their man pages.
+	make install
+
+installs the utilities and their man pages.

@@ -1,60 +1,81 @@
 #
 # Some things to set for your system
 #
-#    DRIVER_DIR : location of driver sources (no trailing slash).
+#    DRIVER_DIR : location of driver sources.
 #    DEVICE_NAME : file to use as default device.
-#    PREFIX : top of installation hierarchy (no trailing slahs).
+#    PREFIX : top of installation hierarchy.
 #
 
-DRIVER_DIR = ../backer-driv-1.107
+DRIVER_DIR = ../backer-driv-2.0
 DEVICE_NAME = /dev/tape
 PREFIX = /usr/local
 
 #
 # Here we go...
 #
+# If building a package, DESTDIR can be set if desired.
+#
 
-BIN_DIR = $(PREFIX)/bin
-MAN_DIR = $(PREFIX)/man
-CC = gcc
+DESTDIR =
+BIN_DIR = $(DESTDIR)/$(PREFIX)/bin
+MAN_DIR = $(DESTDIR)/$(PREFIX)/man
+
+TARGETS = bkrcheck bkrencode bkrmonitor
+MAN_PAGES = $(TARGETS:%=%.8)
+
 CFLAGS = -O3 -Wall -Wstrict-prototypes -I$(DRIVER_DIR) -DDEFAULT_DEVICE=\"$(DEVICE_NAME)\"
 
-all : bkrcheck bkrencode bkrmonitor
+GTK_CONFIG = $(shell which gtk-config)
 
-bkrcheck : bkrcheck.c $(DRIVER_DIR)/backer.h bkr_disp_mode.c
-	$(CC) $(CFLAGS) -lm -o bkrcheck bkrcheck.c bkr_disp_mode.c
+.PHONY : all install uninstall clean realclean
 
-bkrencode : bkrencode.c bkr_disp_mode.c stdio_dev.c \
-            $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c $(DRIVER_DIR)/rs.h \
+all : $(TARGETS) $(MAN_PAGES)
+	@echo "Done."
+
+bkrcheck : bkrcheck.c bkr_disp_mode.c $(DRIVER_DIR)/backer.h
+	$(CC) $(CFLAGS) -lm -o $@ bkrcheck.c bkr_disp_mode.c
+
+bkrencode : bkrencode.c bkr_disp_mode.c stdio_dev.c $(DRIVER_DIR)/backer_fmt.c \
+            $(DRIVER_DIR)/rs.c bkr_disp_mode.h $(DRIVER_DIR)/rs.h \
             $(DRIVER_DIR)/backer.h $(DRIVER_DIR)/backer_device.h \
             $(DRIVER_DIR)/backer_fmt.h
-	$(CC) $(CFLAGS) -o bkrencode bkrencode.c bkr_disp_mode.c stdio_dev.c \
-	    $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c
+	$(CC) $(CFLAGS) -o $@ bkrencode.c bkr_disp_mode.c stdio_dev.c \
+	   $(DRIVER_DIR)/backer_fmt.c $(DRIVER_DIR)/rs.c
 
 bkrmonitor : bkrmonitor.c $(DRIVER_DIR)/backer.h
-	$(CC) $(CFLAGS) $(shell gtk-config --cflags --libs) -o bkrmonitor \
+ifneq ($(GTK_CONFIG),)
+	$(CC) $(CFLAGS) -DGTK_CONFIG $(shell $(GTK_CONFIG) --cflags --libs) -o $@ \
 	    bkrmonitor.c
+else
+	@echo
+	@echo "ATTENTION:  GTK+ not found:  building bkrmonitor as text-only."
+	@echo "Ignore \"unused variable\" warnings."
+	@echo
+	$(CC) $(CFLAGS) -o $@ bkrmonitor.c
+endif
+
+%.8 : %.8.orig Makefile
+	sed -e "s?DEVICE_NAME?${DEVICE_NAME}?" < $< > $@
 
 install: all
 	install -d -m 0755 $(BIN_DIR)
 	install -d -m 0755 $(MAN_DIR)/man8
-	install -m 0755 bkrcheck $(BIN_DIR)
-	install -m 0755 bkrencode $(BIN_DIR)
-	install -m 0755 bkrmonitor $(BIN_DIR)
-	[ -x bkrcheck ]   && install -m 0644 bkrcheck.8 $(MAN_DIR)/man8
-	[ -x bkrencode ]  && install -m 0644 bkrencode.8 $(MAN_DIR)/man8
-	[ -x bkrmonitor ] && install -m 0644 bkrmonitor.8 $(MAN_DIR)/man8
+	for x in $(TARGETS); do \
+	   install -m 0755 $${x} $(BIN_DIR) && install -m 0644 $${x}.8 $(MAN_DIR)/man8; \
+	done
+	@echo "Done."
 
 uninstall:
-	rm -f $(BIN_DIR)/bkrcheck
-	rm -f $(BIN_DIR)/bkrencode
-	rm -f $(BIN_DIR)/bkrmonitor
-	rm -f $(MAN_DIR)/man8/bkrcheck.8
-	rm -f $(MAN_DIR)/man8/bkrencode.8
-	rm -f $(MAN_DIR)/man8/bkrmonitor.8
+	for x in $(TARGETS); do \
+	   { \
+	   rm -f $(BIN_DIR)/$${x}; \
+	   rm -f $(MAN_DIR)/man8/$${x}.8; \
+	   } \
+	done
+	@echo "Done."
 
 clean:
 	rm -f *.o core
 
 realclean: clean
-	rm -f bkrcheck bkrencode bkrmonitor
+	rm -f $(TARGETS) $(MAN_PAGES)

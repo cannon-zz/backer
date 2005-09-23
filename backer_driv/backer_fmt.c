@@ -58,8 +58,6 @@
 
 /*
  * Global Data
- *
- * 2370 = 2 * 3 * 5 * 79
  */
 
 /* Read the docs for important info before adjusting these! */
@@ -231,6 +229,7 @@ int bkr_format_reset(int mode, direction_t direction)
 	reed_solomon_init(block.size, block.data, &sector.rs_format);
 
 	errors = ERRORS_INITIALIZER;
+	health = HEALTH_INITIALIZER;
 
 	sector.mode = mode;
 

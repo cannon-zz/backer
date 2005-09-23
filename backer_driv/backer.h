@@ -113,9 +113,9 @@ struct bkrformat                                /* Format structure (read only) 
 #define  BKR_PAL               0x0002           /* PAL video mode */
 #define  BKR_LOW               0x0004           /* low density */
 #define  BKR_HIGH              0x0008           /* high density */
-#define  BKR_RAW               0x0010           /* read/write raw data */
-#define  BKR_SP                0x0020           /* VCR is in SP/LP mode */
-#define  BKR_EP                0x0030           /* VCR is in EP mode */
+#define  BKR_RAW               0x0000           /* read/write raw data */
+#define  BKR_SP                0x0010           /* VCR is in SP/LP mode */
+#define  BKR_EP                0x0020           /* VCR is in EP mode */
 
 
 #endif /* _BACKER_H */

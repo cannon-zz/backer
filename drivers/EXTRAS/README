@@ -5,6 +5,15 @@ This directory contains some extra things that users of the device driver
 might find helpful.
 
 
+devfsd.conf
+===========
+
+This file contains example entries for use in your system's
+/etc/devfsd.conf file.  These entries configure devfsd to automatically
+create and remove the /dev/tape link as the appropriate Backer device file
+becomes available.
+
+
 format.gnumeric
 ===============
 
@@ -17,44 +26,59 @@ tables to be produced.  This will be needed by anyone who needs to
 customize the tape format for their video equipment or who needs to work
 around a faulty Backer device.
 
-The columns shaded in green are the columns that are meant to be adjusted.
-The other columns must not be edited directly because they are either
-computed parameters or are determined by the Backer device's hardware
-characteristics.  In extreme cases, you might find that you need to edit
-the "Even Field Size" and "Interlace" columns.  Faulty Backers have been
-observed that generate the wrong number of lines per video field.  These
-can be brought back to life, so to speak, by loading a custom format into
-the driver to work around the problem.
+The columns shaded in green are free parameters and can be adjusted at
+will.  The yellow columns are hardware parameters and although they can be
+adjusted, they must match the behaviour of your Backer device.  The
+remaining columns cannot be adjusted.  They are computed paramters whose
+formulae have been carefully matched to the data processing algorithms and
+should never be edited.  Of the hardware parameters, you are most likely to
+need to edit the "Even Field Size" and "Interlace" columns.  Faulty Backers
+have been observed that generate the wrong number of lines per video field.
+These can be brought back to life, so to speak, by loading a custom format
+into the driver to work around the problem.
 
-When adjusting numbers, the columns to pay particular attention to are the
-"Buffer Size" and the "Data Size" columns.  Both must be integers.
+When adjusting numbers, pay particular attention to the "Block Size" and
+"Modulation Pad" columns:  THESE NUMBERS MUST BE INTEGERS.
 
 Once a format table has been arrived at, there are two options for loading
-it into the driver and both techniques require an ASCII copy of the
-contents of the Gnumeric work sheet.  To dump the work sheet to an ASCII
+it into the driver and both techniques require an ASCII text copy of the
+contents of the Gnumeric work sheet.  To dump the work sheet to a text
 file, follow these steps.  Select "Save As" from the "File" menu and for
 "File format" select "Text File Export".  Enter a file name and click "OK".
 Add "Sheet1" to the "Sheets to export" list and click "Next".  For the
 "Separator" select "Space" and for "Quoting" select "Never" then click
-"Finish".  You now have the work sheet in ASCII form but you will have to
+"Finish".  You now have the work sheet in text form but you will have to
 open it in a text editor and perform some modifications before it can be
-used.  You must delete the first line (containing the column headings) as
-well as all text prior to the first open brace ("{") on each line.
-Finally, the "Parity" column must be deleted along with the extra comma.
+used.  You must delete the entire first line (containing the column
+headings) as well as all text prior to the first open brace ("{") in each
+of the remaining lines.  You now have a text file containing an ANSI C
+array initializer for your new format table.
 
-If you wish to use the new format table as the global default for the
-driver, replace the table in backer.h with the new table and recompile the
-driver and utilities.  Note that after doing the editing described above,
-the ASCII dump of the work sheet will already contain the commas and braces
-needed for proper C syntax so no further editing is necessary.
+If you wish to use the new format table as the driver-wide default, replace
+the table in backer.h with the new table and recompile the driver and
+utilities.
 
 If you wish to load the table into the driver at runtime (for example to
-use it with only one specific Backer device) then all braces and commas
-must be removed from the file leaving nothing but 180 numbers.  To load
-this table into the driver, simply copy it to the appropriate format_table
-file in the /proc filesystem.  For example:
+use it with only one specific Backer device) then some further editing is
+required.  Remove all braces and commas from the file leaving nothing but
+white space-separated numbers (line breaks are OK).  To load this table
+into the driver, simply copy it to the appropriate format_table file(s) in
+the /proc filesystem.  For example, the command
 
 	cp format.txt /proc/sys/dev/backer/0/format_table
 
-to replace device number 0's format table with the new one.  The new table
+will replace Backer unit 0's format table with the new one.  The new table
 will take effect at the start of the next data transfer.
+
+
+modules.conf
+============
+
+This file contains example entries for your system's /etc/modules.conf
+file.  The entries provided map attempts to access /dev/tape and anything
+under the /dev/backer/ tree to the module backer.o which automates the
+loading of the device driver.  The entries also map the module
+backer_lowlevel to the modules backer_isa.o and backer_parport.o in that
+order which causes both to be automatically loaded when backer.o is loaded.
+Finally, it provides the name of the parallel port to which a Backer device
+is attached.

@@ -1,0 +1,571 @@
+\documentclass{article}
+\usepackage{fullpage}
+\usepackage{graphics}
+
+\title{Additional Info for the Backer 16/32 Device Driver}
+\author{Kipp Cannon\footnote{\texttt{kcannon@users.sourceforge.net}}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Programming}
+
+\subsection{Tape format}
+\label{prog:format}
+
+If you want to play around with the tape format parameters, here's an
+explanation of their function
+\begin{itemize}
+\item
+In \texttt{backer\_fmt.h}
+\begin{description}
+\item[\texttt{BKR\_LEADER}]
+The bit pattern to fill the leader of the video field with.  Do not use
+\texttt{0x00}.
+
+\item[\texttt{BKR\_TRAILER}]
+The bit pattern to fill the trailer of the video field with.  Do not use
+\texttt{0x00}.
+
+\item[\texttt{BKR\_FILLER}]
+The bit pattern to fill unused portions of the video field with.  Do not
+use \texttt{0x00}.
+
+\item[\texttt{KEY\_LENGTH}]
+The number of bytes in the sector key.
+
+\item[\texttt{BOR\_LENGTH}]
+The number of seconds for which the beginning of record mark should last.
+This must be long enough for a VCR to synchronise itself to the video
+signal.  I have found that 4 seconds provides a good safety margin for my
+own equipment but perhaps, for a more ``generic'' value, it might be better
+to set this to a longer time.
+
+\item[\texttt{EOR\_LENGTH}]
+The number of seconds for which the end of record mark should last.  The
+only real restriction here is that this must not be 0.  A minimum of two
+EOR sectors are required in order to guarantee that the driver reports EOF
+to the operating system (an EOR sector causes the internal buffer to be
+flushed unless it's already empty in which case EOF is returned) but more
+can be generated to provide a better visual display for a human operator.
+My current preference is for 1 second's worth.
+\end{description}
+
+\item
+In \texttt{backer\_fmt.c}
+\begin{description}
+\item[\texttt{CORRELATION\_THRESHOLD}]
+The threshold that must be reached in order for the sector locator
+algorithm to decide that it has found the sector key.  If you need to
+adjust this, run \texttt{bkrmonitor} on a full tape of data and set the
+threshold between the ``Worst match'' and ``Closest non-match'' values.
+
+\item[\texttt{format[]}]
+An array of parameters which describe the data format for each operating
+mode.  The leader size specifies the number of bytes to set aside for the
+leader at the start of each sector;  the trailer, the number of bytes for
+the trailer at the end of each sector.  The interleave specifies the number
+of blocks in each sector (and, thus, the number of bytes separating
+sequential bytes of each block).  The parity size gives the number of
+parity bytes in each block of data.  The leader and trailer lengths should
+both be multiples of the number of bytes in each line of video in the
+selected mode.  The parity length should be an even number.  After
+subtracting the leader and trailer from the sector, the size of each block
+is found by dividing the number of bytes remaining by the interleave.  This
+must be an integer.  The block size must be large enough to hold its parity
+bytes and the sector key (not the whole sector header).  Subject to these
+restrictions, you are free to adjust these numbers to anything you desire.
+\end{description}
+
+\end{itemize}
+\textbf{NOTE:}  when playing around with these numbers, do not rebuild the
+driver itself unless you really know what you're doing because you can
+damage your system if you put the wrong numbers in.  If you want to play
+around with new tape formats, then here's how to do it safely.  First, go
+ahead and edit the driver formating code all you want.  Then, rather than
+rebuilding the driver, build \texttt{bkrencode} (see the utilities package)
+using the modified driver sources.  Test out your changes by doing all your
+I/O via \texttt{bkrencode} and the appropriate raw device.  This way your
+data processing is done in user space so if you make a mistake and get a
+segmentation fault you won't trash your system.  Once you've convinced
+yourself that your changes work then you can go ahead and rebuild the
+driver to incorporate them.
+
+
+\section{Tape Format}
+
+\subsection{My Format}
+
+The details of the data format are intimately tied to the practical reality
+of the tapes being \emph{video} tapes.  The data stream is naturally
+divided into sectors with each sector corresponding to the contents of one
+field of video (\(\frac{1}{2}\) a frame).  Each sector has three major
+components: a leader, a trailer, and an interleaved data region which
+caries the sector's information content.  A diagram of the sector layout is
+shown in Figure \ref{fig1}.
+\begin{figure}
+\begin{center}
+\begin{picture}(250,190)
+\put(0,0){\framebox(250,25)[c]{trailer}}
+\multiput(25,30)(25,0){9}{\line(0,1){130}}
+\multiput(0,32)(0,2){64}{\line(1,0){250}}
+\put(0,30){\framebox(250,130)[c]{useable}}
+\put(0,165){\framebox(250,25)[c]{leader}}
+\end{picture}
+\end{center}
+\caption{The sector format for high data rate shown (not to scale) as it
+appears on a television set.  The order in which bytes are written to tape
+is left-to-right top-to-bottom.  The section in the middle is the fraction
+of the sector available for data storage although some of it must be used
+for parity bytes and a sector header.  In low data rate mode there are 4
+bytes per line rather than the 10 shown here.}
+\label{fig1}
+\end{figure}
+
+The leader functions as a cushion giving the VCR's video head a chance to
+stabilize onto the video track during playback.  VCRs with poor tracking
+may need larger leaders for this purpose.  The trailer's role is to provide
+a cushion at the end of the video field to accommodate the loss of video
+lines during playback.  VCRs seem to not generate an exact number of video
+lines in each frame and I have found my own equipment to fail to playback
+as many as 6 of the last lines of the video field.
+
+The rest of the sector is set aside for useable information.  Since video
+tapes are noisy environments, an error control coding scheme must be
+implemented.  The particular scheme used here is an interleaved
+Reed-Solomon code.  The useable portion of the sector is logically divided
+into blocks containing data and parity bytes.  The parity bytes are
+computed using a reduced Reed-Solomon code and the parity bytes from all
+blocks are grouped together at the top of the sector.
+
+At the bottom end of the sector's data area is the sector header which
+contains a 22 bit sequence number, 5 bits identifying the type of data in
+the sector, a flag indicating whether or not the sector is truncated, the 4
+high bits of the number of bytes stored in the sector, and the sector
+``key''.  The sequence number is used to skip over repeated sectors during
+playback and identify buffer over-runs.  The 5 bit type can be one of three
+values indicating that the sector is a BOR marker, and EOR marker or
+contains data (this field only needs 2 bits but it is expanded to occupy
+all of the unused bits so that future format extensions will appear as
+unrecognized sector types to older versions of the driver).
+
+If the sector does not contain its full complement of data (eg.\ it is the
+last sector in a file) then the truncate flag in the header is set and the
+low 8 bits of the count of bytes in the sector is stored in the last byte
+of the data area while the upper 4 bits are stored in the header.
+
+Because the number of lines played back for each video field is not a
+constant, it is necessary to implement a mechanism by which sectors can be
+found in the byte stream.  This is done by placing a specific sequence of
+bytes, called the sector key, into each sector.  By searching for this byte
+sequence during playback one can identify the location of a sector.
+Specifically, the key is written into the sector as part of the sector
+header.
+
+The Backer hardware is not capable of decoding a video signal that contains
+long runs of 0's.  We wish to be able to record arbitrary data on the tape,
+so to reduce the risk of runs of 0's being written the data area of each
+sector is mixed with pseudo-random numbers generated using the sector
+number as a seed.  This is done before the sector header is written into
+the sector which leaves it unaffected and thus recoverable without having
+to know the sector number.
+
+Finally, since video tape is not a high quality data environment it is
+necessary to provide error control coding.  After the sector has been
+prepared (all of the blocks have been written, it's been randomized and the
+header has been inserted) the sector is fed through a Reed-Solomon encoder
+block-by-block to generate the parity symbols.
+
+After being prepared, the useable portion of the sector is interleaved onto
+the tape to distribute burst errors equitably among the blocks.
+
+
+\subsection{Danmere's Format}
+
+I myself am not interested in reverse engineering Danmere's tape format as
+I have no need to exchange data with Windows machines.  However, if someone
+else is interested in doing the grunt work of deciphering the format then I
+would be more than happy to implement a Danmere-compatible back end like
+\texttt{bkrencode} if I was given the needed information.  To those who are
+interested, I have already taken a little stab at it and have accumulated
+some tidbits that might be helpful clues.  To assist you in cracking the
+code, I should point out that this driver is perfectly capable of reading
+tapes written with Danmere's Windows software:  put the driver into raw
+mode, play one of Danmere's tapes into it and dump the data to disk.  Then
+use your favourite binary file viewer and go crazy.
+
+
+\section{Error Control}
+
+Here are some notes on the ECC scheme I've used. There are three types of
+errors that can occur in this environment and, in increasing order of
+severity, they are (i) signal drop outs (ii) framing errors and (iii)
+buffer over-run errors.
+
+Signal drop outs are caused mostly by tape defects and power line noise
+(hair dryers being turned on and off, etc.) although they could also, in
+principle, be caused by hardware glitches (eg.\ excessive phase drift in
+the shift clock).  Because the drop outs tend to result in bursts of lost
+data, their effect on the data stream is reduced by interleaving the bytes.
+Analysis of the noise I see with my own equipment has shown that it is
+generally confined to a single line of video.  In every operating mode, the
+interleaving I use spreads bytes out farther than this.  A signal drop out
+then almost never appears as more than a single symbol error in each of the
+blocks it effects --- something easily handled with an error control code.
+
+The error control code used is a reduced Reed-Solomon code using 8 bit
+symbols.  For NTSC video in both high and low densities, 8 parity symbols
+are generated for each block of 119 bytes.  That means 4 single byte errors
+can be corrected in each block of data.  This appears to be plenty as I
+have never seen more than 2 on a decent recording but it is much less than
+Danmere's default setting of 6 parity bytes in each block of 26.  Danmere
+would appear to feel that high interleave ratios are advantageous.
+
+A framing error occurs when the key sequence of a sector is not recognized
+and/or a false one recognized in its place.  When a framing error occurs
+there are two possibilities.  The first possibility is that tape noise
+corrupts the key sequence to the point that it is not recognized by the
+driver.  If that's all that happens, then the sector is simply skipped and
+a framing error is recorded.  The second possibility is that some part of
+the sector other than the key happens to look sufficiently like the key
+that the driver starts a sector read-out at the wrong location (this might
+be combined with the first case).  If this occurs, since data is being
+extracted out of the wrong part of the data stream, none of the blocks will
+decode properly in the Reed-Solomon decoder.  Each sector containing an
+uncorrectable block is discarded and an error code is reported to the
+system.  In both cases, some quantity of data is lost and the first sector
+to decode correctly after the error will appear to be out of sequence
+causing the driver to also record a buffer over-run.
+
+The third type of error is the buffer over-run.  This occurs when the
+computer is not able to process the data stream as fast as it is being
+transferring onto/off of the tape.  There are two cases:  an over-run
+during write and an over-run during read.  An over-run during writing is
+actually not destructive.  The buffer simply loops and duplicate (or
+triplicate, etc.) copies of all of the sectors in the buffer are written to
+the tape.  As long as this condition can be detected on playback and the
+duplicate copies skipped over then there is no harm done (although tens of
+kilobytes of tape have been wasted).  The driver detects and corrects this
+during playback by watching the sequence number of the sectors being
+decoded and skipping over any that are ``earlier'' than the expected
+sequence number.
+
+A read over-run is destructive.  In this case data is coming off the tape
+faster than the computer can process it and the tape gets a full buffer
+length ahead of the computer.  This results in at least one entire buffer
+of data (typically tens of kilobytes) being lost.  This kind of error is
+detected by seeing a sequence number which is ``later'' than the expected
+sequence number.
+
+Unlike data dropouts, both framing and over-run errors are not inherent
+problems with the data stream (although framing errors caused by extremely
+noisy sector keys will probably be accompanied by badly damaged data
+blocks).  A second pass at reading the problem pieces might get the data
+off the tape.
+
+In any case this driver design allows for a data recovery solution not
+offered by Danmere's own software:  off-line processing.  As discussed
+earlier, if the problem is processing speed then the tape data (either raw
+or as a \texttt{.tar} file) can be transfered to a disk file and processed
+at a leisurely pace.
+
+
+\section{Hardware}
+\label{notes}
+
+\subsection{Preamble}
+
+The following information was obtained by experimenting with a Backer 16
+card.  The manual describes it as a model ISA45202 (version 1.2.1).  The
+information should also apply to Backer 32 cards since Danmere's web site
+suggests that Backer 32s are identical to Backer 16s with the exception of
+a different analog section to improve the signal-to-noise ratio.  The names
+of the bits on the I/O port are those listed by MONITOR.EXE, an MS-DOS
+utility that came with the card.  The rest of the information was obtained
+by trial-and-error and might be incorrect/incomplete.
+
+
+\subsection{Bits on I/O Port}
+
+\begin{center}
+\begin{picture}(160,120)
+%\put(0,0){\framebox(160,120){}}
+
+\put( 0,108){\makebox(12,12){7}}
+\put(12,108){\makebox(12,12){6}}
+\put(24,108){\makebox(12,12){5}}
+\put(36,108){\makebox(12,12){4}}
+\put(48,108){\makebox(12,12){3}}
+\put(60,108){\makebox(12,12){2}}
+\put(72,108){\makebox(12,12){1}}
+\put(84,108){\makebox(12,12){0}}
+\multiput(0,96)(12,0){8}{\framebox(12,12){}}
+
+\put(90,90){\line(0,1){ 6}}\put(90,90){\line(1,0){ 6}}
+\put(78,78){\line(0,1){18}}\put(78,78){\line(1,0){18}}
+\put(66,66){\line(0,1){30}}\put(66,66){\line(1,0){30}}
+\put(54,54){\line(0,1){42}}\put(54,54){\line(1,0){42}}
+\put(42,42){\line(0,1){54}}\put(42,42){\line(1,0){54}}
+\put(30,30){\line(0,1){66}}\put(30,30){\line(1,0){66}}
+\put(18,18){\line(0,1){78}}\put(18,18){\line(1,0){78}}
+\put( 6, 6){\line(0,1){90}}\put( 6, 6){\line(1,0){90}}
+
+\put(98,90){\makebox(0,0)[l]{Data Rate}}
+\put(98,78){\makebox(0,0)[l]{DMA Request}}
+\put(98,66){\makebox(0,0)[l]{Data}}
+\put(98,54){\makebox(0,0)[l]{Sync}}
+\put(98,42){\makebox(0,0)[l]{Frame Busy}}
+\put(98,30){\makebox(0,0)[l]{Transmit}}
+\put(98,18){\makebox(0,0)[l]{Receive}}
+\put(98, 6){\makebox(0,0)[l]{Video Mode}}
+\end{picture}
+\end{center}
+
+\subsubsection{Data Rate}
+
+Setting this bit to 1 puts 10 bytes on each line of video while setting it
+to 0 puts 4 bytes on each line.
+
+
+\subsubsection{DMA Request}
+
+When writing to the port, the value of this bit starts and stops DMA
+transfers.  When reading from the port, the value of this bits indicates
+whether or not data is actually being transfered.
+
+Write a 1 to this bit to enable PERIPHERAL \(\longleftrightarrow\) RAM
+transfers. Write a 0 to this bit to stop PERIPHERAL \(\longleftrightarrow\)
+RAM transfers.  The card is apparently designed for use with the ``demand
+transfer'' mode of the DMA controller in which transfers are paused and
+resumed asynchronously by the peripheral card raising and lowering its DREQ
+line.  It is desireable for peripherals which are, by design, slower than
+the system bus to use this mode since it gives other devices access to the
+bus while the peripheral catches up to its internal buffer.
+
+When reading from the port this bit indicates the current status of the
+DREQ line with a 1 indicating an active DREQ and 0 indicating inactive
+DREQ.
+
+I have found that occasionally there is not enough time to read both the
+high and low bytes when this bit goes to 0 (while the card pauses between
+transfers).  The work-around (to be sure you don't over-run the current
+transfer point in the DMA buffer) is to assume the low byte is invalid and
+not access memory within 256 bytes of the reported DMA transfer location
+(my device driver is written to always stay 512 bytes away just to be
+sure).
+
+It is convenient to configure the DMA controller to autoinitialize the
+channel that's being used.  This allows the card to loop on its own and
+generate a nice continuous video signal without being baby-sat by software.
+
+Writing 0 to the DMA Request bit not only stops the transfer but causes the
+card to signal an EOP to the DMA controller which, if configured to
+autoinitialize, will reset its address and count registers to the their
+original values.
+
+
+\subsubsection{Data}
+
+I don't know what this does but I believe it mirrors the data as it is
+clocked into and out of the card.  Of course, there's no way you can read
+the port fast enough to make use of this.
+
+
+\subsubsection{Sync}
+
+This bit \(= 0\) during both horizontal and vertical sync intervals in the
+input signal.  It is (mostly) safe to read the DMA count and residue
+registers when this bit is 0.  By ``safe'' I mean that while this bit \(=
+1\) the card is actively transfering data so the residue/address read from
+the DMA controller is not guaranteed to correspond in any way at all to the
+true location of the current transfer.
+
+
+\subsubsection{Frame Busy}
+
+This bit seems to only be of use during memory \(\longrightarrow\) tape
+transfers.  Also, ``frame busy'' is a misnomer;  it would be better to call
+this bit ``field busy''.
+
+This bit \(= 0\) while the card is processing a field of video and goes to
+1 when it is pausing during the vertical retrace interval.  NOTE:  even if
+frame busy \(= 1\) it is still only safe to access the DMA controller while
+the Sync bit \(= 0\).  The card has a four byte internal buffer and it
+reads one buffer-length ahead of itself in memory.  That means that during
+memory \(\longrightarrow\) tape transfers, DMA activity continues a little
+after frame busy goes to 1.
+
+During tape \(\longrightarrow\) memory transfers this bit ``rolls''.  The
+phase of the 0-to-1 transitions drifts with respect to the vertical sync
+making it meaningless.  That is, unless there's some trick to get it to
+synchronize but I've tried many things including playing back a tape
+recorded using Danmere's own software in the hope that some part of the
+data stream was used by the card for this purpose but with no luck.
+
+
+\subsubsection{Transmit and Receive}
+
+Setting one of these bits to 1 configures the card for the respective
+transfer type.  Setting both to 0 disables transfers.  I don't know what
+happens if both are set to 1.
+
+
+\subsubsection{Video Mode}
+
+The meaning of this bit depends on whether the port is being read or
+written.
+\begin{center}
+\begin{tabular}[t]{rl}
+writing: & 1 \(\equiv\) NTSC, 0 \(\equiv\) PAL \\
+reading: & 1 \(\equiv\) PAL, 0 \(\equiv\) NTSC
+\end{tabular}
+\end{center}
+
+
+\subsection{Video mode information}
+
+\subsubsection{NTSC}
+
+In NTSC mode, for even fields data starts on line 10 and ends on line 262;
+in odd fields it also starts in line 10 and ends in line 262 but the card
+will transfer data corresponding to line 263 of the odd field.  Although
+inserted into the video signal, the extra line will not be recorded
+properly as it occurs during the 1/2 period line that is at the end of the
+odd field. (this has to do with the interlacing of the video image on the
+screen: delaying the even fields 1/2 of a line period with respect to odd
+fields shifts the phase of the horizontal scanning with respect to the
+vertical scanning of the television resulting in a vertical 1/2
+line-thickness shift of the lines on the picture tube thus correctly
+interlacing the image). Since this last line of the odd field corresponds
+to the 1/2 period horizontal scan there is a sync pulse in the middle of
+it which overwrites the bits in the middle of the line.
+
+The issue is complicated by the fact that during playback this extra line
+may not be reproduced at all --- recall that the video signal standard
+does not specify the actual number of lines in a frame but rather the
+ratios of the various scan frequencies.  During record this is not a
+problem:  the card is responsible for generating the video signal and
+generates a precise number of lines per frame.  It seems to me the only
+way around the playback ``sloppiness'' is to design a data format which
+allows identification of the start of a video field in software (my
+current device driver implementation uses this technique).
+
+There are 30 full frames per second (60 fields per second).  If one wants
+to insert human-readable graphics into the byte stream then the following
+applies.  The order in which data in the DMA buffer is arrange (visually)
+on the screen is as expected with the odd field coming first i.e. the byte
+display sequence is
+\begin{center}
+\begin{tabular}[t]{lcl}
+line 0   & (odd  field line 10) & --byte0--byte1--byte2--... \\
+line 254 & (even field line 10) & --byte0--byte1--byte2--... \\
+line 1   & (odd  field line 11) & --byte0--byte1--byte2--... \\
+line 255 & (even field line 11) & --byte0--byte1--byte2--... \\
+line 2   & (odd  field line 12) & --byte0--byte1--byte2--... \\
+etc. ... &&
+\end{tabular}
+\end{center}
+where lines are arranged in numerical order sequentially in memory and the
+bits of each byte are arranged msb to lsb left to right on the screen.  
+Bits that are 1 appear white, bits that are 0 appear black.  Most
+television sets do not \emph{exactly} interlace the video fields.  I don't
+know if this is by design or not but that means that line 10 of the even
+field lies slightly closer to line 10 of the odd field than it does to
+line 11 of the odd field (rather than appearing exactly in the middle).
+The consequence for human-readable graphics is that to make a nice stable
+image that doesn't flicker, one should make lines in the even field the
+same as the corresponding lines in the odd field.  This instead of the
+other two options:  using the even field to increase the vertical
+resolution or making, for example, line 10 of the even field the same as
+line 11 of the odd field (the worst case).
+
+\subsubsection{PAL}
+
+Since I do not have access to PAL video equipment I have not been able to
+do any testing of the behaviour of the card in this mode except to check
+its output with an oscilloscope.  I, therefore, have far less information.  
+In PAL mode, for odd fields active data starts on line 6 and ends on line
+310; for even fields data starts on line 319 and ends on line 622 but
+again the card transfers an extra line of data corresponding to line 623
+of the video signal --- a 1/2 period line.  That gives a total of 610
+lines of data transferred per frame with 609 of them containing useful
+data.  There are 25 full frames per second (50 fields per second) meaning
+PAL has a higher data rate than NTSC but presumably also requires stronger
+ECC to guarantee the same overall error rate since both kinds of VCRs use
+the same tapes and one generally can't get something for nothing.
+
+
+\subsection{Behaviour}
+
+The following are some tid-bits regarding the behaviour of the card.
+\begin{itemize}
+\item
+The Sync bit only indicates the status of the input signal, not the output
+signal.  Since the round-trip propogation delay through a VCR is quite low,
+however, one seems to be able to safetly use this bit as the sync indicator
+for the output signal as well.  So, the correct bit to use for
+synchronizing updates of the DMA offset is the DMA Request bit but by using
+the Sync bit instead one requires that a VCR be connected to the input and
+that it be generating a video signal which is a good way of checking the
+health of the data path.
+
+\item
+During playback, the card will (sometimes) skip over lines containing runs
+of 0's.  I do not yet know for sure if there is a pattern to this
+behaviour.  After extensive but non-systematic experimentation my current
+thinking on this is that the card must see some minimum number of state
+transitions per unit time in order for it to keep its bit clock
+phase-locked to the data and that this minimum rate is \(\approx\) several
+every three bytes.  I have found that ensuring that at least every third
+byte is non-zero seems to produce ``Backer-friendly'' data.
+
+\item
+The card requires bits on the control port to be set in a particular order
+when starting a transfer.  The sequence is a two-step process.  In the
+first step, all the desired bit settings are written to the control port
+with the exception of the Receive and Transmit bits.  Then, in the second
+write, the same bits are set but this time with the transfer direction
+included.  For example, to start a low density NTSC memory to tape transfer
+you would first write 10000010 = 0x82 followed by 10100010 = 0xA2 to the
+control port.
+
+\item
+The correct procedure for stopping a transfer is to simply write 0 to the
+control port but this should only be done at an inter-frame boundary or the
+next transfer might not start up correctly.
+
+\item
+When writing, the DMA channel must already be enabled when the transfer is
+started as the card will generate a video signal whether or not it's fed
+data by the DMA controller.  Any delay will mean that when data does start
+getting transfered, its alignment with respect to the video signal will not
+be known (although it should be possible to sync the data up again by
+carefully watching the Frame Busy bit and the DMA offset register).
+\end{itemize}
+
+
+%\subsection{Windows Format Notes}
+%
+%This section contains some of the notes I have compiled regarding the data
+%format used by Danmere's Windows software.
+%\begin{itemize}
+%\item
+%Unused lines are filled with 0x33.  The exeption is the human-readable file
+%number graphic at the bottom of each field which has single lines of 0's
+%separating it from the data above and 0x33's below.
+%
+%\item
+%Each field begins with 24 lines filled with 0xE2.  The function of this
+%block is not known and its presence does not seem to have any effect on the
+%card's behaviour (it does not, for example, fix the rolling of the Frame
+%Busy bit during playback).  It's probable that this serves the same role as
+%the sector leader used in my own format but I have found that only 8 lines
+%are required to satisfy that role.  At least on my equipment...  (reminder:
+%a VCR typically requires the first part of the video field to lock onto the
+%track so data cannot be reliably recorded in some number of lines at the
+%top of each video field).
+%\end{itemize}
+
+\end{document}

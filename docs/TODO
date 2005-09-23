@@ -1,0 +1,24 @@
+                              THINGS TO DO
+                             ==============
+
+Soon:
+-----
+
+External Backer support.
+
+Check the return values of copy_*_user() in backer_main.c.  If the return
+value is != 0 then generate -EFAULT.
+
+Check on use of __devinit vs __init.
+
+Convert to a Linux-source-style Makefile so that you do
+	cd /usr/src/linux && make SUBDIRS=/my/module/dir modules
+
+
+In the Distance:
+----------------
+Most of these are major things which I will not work on in the immediate
+future.  Some of these will never happen until someone offers to help but
+all of them are, in principle, possible.
+
+The ability to read Danmere's tape format.

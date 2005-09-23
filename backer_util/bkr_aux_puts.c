@@ -53,10 +53,6 @@ int bkr_aux_puts(const char *s, char *aux, struct bkrformat *format)
 	int  i, bit, line;
 	char  used[FHEIGHT];
 
-	/*
-	 * Clear buffer
-	 */
-
 	memset(aux, 0, format->aux_length);
 
 	/*

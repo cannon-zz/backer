@@ -1,5 +1,7 @@
 INCLUDEDIR = /usr/include
 
+INSMODFLAGS = dma=1
+
 CC = gcc
 CFLAGS = -D__KERNEL__ -DMODULE -O2 -Wall -Wstrict-prototypes -I$(INCLUDEDIR)
 LDFLAGS = -r
@@ -27,7 +29,7 @@ uninstall:
 	rm -f /lib/modules/$(VER)/misc/backer.o
 
 load:
-	insmod backer dma=1
+	insmod backer $(INSMODFLAGS)
 	cat /proc/devices
 
 unload:

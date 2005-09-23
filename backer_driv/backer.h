@@ -49,7 +49,7 @@
  */
 
 #define  BKR_NAME              "backer"
-#define  BKR_VERSION           "0.2"
+#define  BKR_VERSION           "0.3"
 #define  BKR_MAJOR             60           /* adjust this for your system */
 
 #define  DEFAULT_IOPORT        0x300        /* adjust this for your system */
@@ -90,7 +90,7 @@ struct bkrformat                            /* Format structure (read only) */
 	unsigned int  aux_offset;           /* bytes from start of sector */
 	unsigned int  aux_length;           /* bytes */
 	unsigned int  block_size;           /* bytes */
-	unsigned int  block_capacity;       /* bytes */
+	unsigned int  block_capacity;       /* bytes (meaningless in pass-through mode) */
 	unsigned int  block_parity;         /* bytes */
 	};
 
@@ -135,7 +135,7 @@ struct bkrconfig                            /* Config structure (read/write) */
  * Note KEY_LENGTH and the ecc lengths must be multiples of 2.
  */
 
-#define  TAPE_FORMAT           1            /* tape format version 1 */
+#define  TAPE_FORMAT           1            /* tape format version 1 (not yet used!) */
 #define  CORR_THRESHOLD(x)     ((x)*8/5)    /* maximum number of bits allowed to be bad (20%) */
 #define  BKR_FILLER            0x33         /* filler for unused space */
 #define  KEY_LENGTH            28           /* bytes (must be a multiple of 2) */
@@ -149,7 +149,7 @@ struct bkr_format
 	unsigned int  footer_length;
 	unsigned int  ecc_length;
 	};
-                      /* head aux foot ecc */
+                     /* head aux foot ecc */
 #define  BKR_FORMATS  {{ 32,  56, 28, 16 },       /* LOW  NTSC SP */   \
                        { 32,  56, 28, 20 },       /* LOW  NTSC EP */   \
                        { 32,  56, 28, 16 },       /* LOW  PAL  SP */   \
@@ -171,14 +171,6 @@ struct bkr_format
 #define  EOR_BLOCK             0x4000             /* is an EOR block */
 #define  DATA_BLOCK            0x8000             /* is a data block */
 
-struct bor_block_t
-	{
-	unsigned int  format;
-	unsigned int  header_length;
-	unsigned int  aux_length;
-	unsigned int  footer_length;
-	unsigned int  ecc_length;
-	};
 
 /*
  * Parameter checks.

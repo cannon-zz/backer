@@ -2,10 +2,9 @@
 # Set this to the directory containing the driver sources and
 # be sure to leave off the trailing slash
 #
+DRIVERDIR = ../backer-driv-0.3
 
-DRIVERDIR = ../driver
-
-CFLAGS = -O -Wall -Wstrict-prototypes -I$(DRIVERDIR)
+CFLAGS = -O2 -Wall -Wstrict-prototypes -I$(DRIVERDIR)
 
 all : bkrencode bkrlog bkrmode bkrtest
 

@@ -130,7 +130,7 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format);
  * erasure positions.  It must be large enough to hold n-k elements.
  */
 
-int reed_solomon_decode(dtype *block, int *erasure, int no_eras, struct rs_format_t *rs_format);
+int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format_t *rs_format);
 
 
 /*

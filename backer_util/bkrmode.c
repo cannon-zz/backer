@@ -38,6 +38,10 @@ int main(int argc, char *argv[])
 	int  devfile;
 	int  opt;
 
+	/*
+	 * Parse command line.
+	 */
+
 	newconfig.mode = -1;
 	newconfig.timeout = -1;
 
@@ -124,6 +128,10 @@ int main(int argc, char *argv[])
 			exit(-1);
 			}
 
+	/*
+	 * Open device and retrieve current configuration.
+	 */
+
 	if((devfile = open(fname, O_RDWR)) < 0)
 		{
 		printf("\nbkrmode: can't open %s\n\n", fname);
@@ -135,6 +143,11 @@ int main(int argc, char *argv[])
 		exit(-1);
 		}
 
+	/*
+	 * If no configuration options given on command line then display
+	 * current config and quit.
+	 */
+
 	if((newconfig.mode == -1) && (newconfig.timeout == -1))
 		{
 		printf("\nCurrent mode of %s:\n", fname);
@@ -142,6 +155,11 @@ int main(int argc, char *argv[])
 		printf("\n");
 		exit(0);
 		}
+
+	/*
+	 * Merge configuration options with current configuration to form
+	 * new configuration.
+	 */
 
 	if(BKR_VIDEOMODE(newconfig.mode) == BKR_VIDEOMODE(-1))
 		newconfig.mode &= ~BKR_VIDEOMODE(-1) | BKR_VIDEOMODE(oldconfig.mode);
@@ -153,6 +171,10 @@ int main(int argc, char *argv[])
 		newconfig.mode &= ~BKR_SPEED(-1) | BKR_SPEED(oldconfig.mode);
 	if(newconfig.timeout == -1)
 		newconfig.timeout = oldconfig.timeout;
+
+	/*
+	 * Set new configuation and quit.
+	 */
 
 	printf("\nSetting mode of %s to:\n", fname);
 	bkr_display_mode(newconfig.mode, newconfig.timeout);

@@ -53,6 +53,7 @@
 #define  TRUNC_CAPACITY  (*(block.buffer + block.size - 1))     /* capacity byte */
 
 #define  BLOCKS_PER_SECOND  (device.bytes_per_line*2*(BKR_VIDEOMODE(device.mode)==BKR_PAL?50:60))
+#define  SECTOR_KEY_OFFSET  (sector.header_length+(block.ecc_length+sizeof(header_t))*device.bytes_per_line)
 
 
 /*
@@ -622,8 +623,7 @@ unsigned int bkr_find_sector(unsigned long bailout)
 	unsigned int  i, j, bad_bits;
 	unsigned int  skipped = -1;
 
-	device.tail += sector.footer_offset + sector.header_length +
-	               (block.ecc_length+sizeof(header_t))*device.bytes_per_line - 1;
+	device.tail += sector.footer_offset + SECTOR_KEY_OFFSET - 1;
 	if(device.tail >= device.size)
 		device.tail -= device.size;
 	do
@@ -653,7 +653,7 @@ unsigned int bkr_find_sector(unsigned long bailout)
 		}
 	while((bad_bits > CORR_THRESHOLD(KEY_LENGTH)) && (jiffies < bailout));
 
-	device.tail -= sector.header_length + (block.ecc_length+sizeof(header_t))*device.bytes_per_line;
+	device.tail -= SECTOR_KEY_OFFSET;
 	if(device.tail >= device.size)
 		device.tail += device.size;
 

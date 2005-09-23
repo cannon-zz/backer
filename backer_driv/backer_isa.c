@@ -50,8 +50,6 @@ int   read(struct inode *, struct file *, char *, int);
 int   write(struct inode *, struct file *, const char *, int);
 int   ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 int   lseek(struct inode *, struct file *, off_t, int);
-int   set_semaphore_io(void);
-void  clear_semaphore_io(void);
 void  bkr_device_reset(void);
 void  update_device_offset(unsigned int *, unsigned long bailout);
 void  start_transfer(void);
@@ -67,9 +65,6 @@ unsigned int  ioport = 0;                       /* I/O port */
 unsigned int  dma    = 0;                       /* DMA channel */
 unsigned int  buffer = 0;                       /* allocated DMA buffer size */
 unsigned int  timeout = BKR_MAX_TIMEOUT+1;      /* length of time to wait on I/O events */
-
-unsigned char      semaphore_io = 0;		/* raised when i/o operation in progress */
-struct wait_queue  *queue_io = NULL;            /* queue to wait on while i/o op finishes */
 
 struct file_operations file_ops =
 	{
@@ -284,12 +279,8 @@ void close(struct inode *inode, struct file *filp)
 		return;
 
 	/*
-	 * Wait for all io operations to conclude.  Write an EOR mark
-	 * if needed then stop the DMA transfer.
+	 * Write an EOR mark if needed then stop the DMA transfer.
 	 */
-
-	while(semaphore_io)
-		interruptible_sleep_on(&queue_io);
 
 	if((device.direction == O_WRONLY) && (BKR_FORMAT(device.mode) == BKR_FMT))
 		bkr_write_eor(jiffies + timeout);
@@ -403,7 +394,7 @@ int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long
 		arg.bkrformat.aux_offset = sector.aux_offset;
 		arg.bkrformat.aux_length = sector.aux_length;
 		arg.bkrformat.block_size = block.size;
-		arg.bkrformat.block_capacity = block.end - block.start;
+		arg.bkrformat.block_capacity = block.size - block.ecc_length - sizeof(header_t);
 		arg.bkrformat.block_parity = block.ecc_length;
 		memcpy_tofs((void *) argument, &arg.bkrformat, sizeof(struct bkrformat));
 		return(0);
@@ -434,10 +425,6 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 
 	if((filp->f_flags & O_ACCMODE) != O_RDONLY)
 		return(-EPERM);
-	if((moved = verify_area(VERIFY_WRITE, buff, count)) < 0)
-		return(moved);
-	if((moved = set_semaphore_io()) < 0)
-		return(moved);
 
 	bailout = jiffies + timeout;
 	for(moved = 0; count; count -= chunk_size, buff += chunk_size)
@@ -454,14 +441,10 @@ int read(struct inode *inode, struct file *filp, char *buff, int count)
 			if(block.read(bailout) == EOR_BLOCK)
 				break;
 			if(jiffies >= bailout)
-				{
-				clear_semaphore_io();
 				return(moved ? moved : -ETIMEDOUT);
-				}
 			}
 		}
 
-	clear_semaphore_io();
 	return(moved);
 }
 
@@ -472,10 +455,6 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 
 	if((filp->f_flags & O_ACCMODE) != O_WRONLY)
 		return(-EPERM);
-	if((moved = verify_area(VERIFY_READ, buff, count)) < 0)
-		return(moved);
-	if((moved = set_semaphore_io()) < 0)
-		return(moved);
 
 	bailout = jiffies + timeout;
 	for(moved = 0; count; count -= chunk_size, buff += chunk_size)
@@ -491,14 +470,10 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 			{
 			block.write(bailout);
 			if(jiffies >= bailout)
-				{
-				clear_semaphore_io();
 				return(moved ? moved : -ETIMEDOUT);
-				}
 			}
 		}
 
-	clear_semaphore_io();
 	return(moved);
 }
 
@@ -514,35 +489,6 @@ int write(struct inode *inode, struct file *filp, const char *buff, int count)
 int lseek(struct inode *inode, struct file *filp, off_t offset, int whence)
 {
 	return(-ESPIPE);
-}
-
-
-/*
- * set_semaphore_io() clear_semaphore_io()
- *
- * Atomically check and set the I/O semaphore.  Or clear it.
- */
-
-int set_semaphore_io(void)
-{
-	unsigned long  flags;
-
-	save_flags(flags);
-	cli();
-	if(semaphore_io)
-		{
-		restore_flags(flags);
-		return(-EBUSY);
-		}
-	semaphore_io++;
-	restore_flags(flags);
-	return(0);
-}
-
-void clear_semaphore_io(void)
-{
-	semaphore_io--;
-	wake_up_interruptible(&queue_io);
 }
 
 
@@ -689,13 +635,15 @@ void start_transfer(void)
 
 void stop_transfer(void)
 {
-	outb(device.command, ioport);
 	device.command &= ~(BIT_TRANSMIT | BIT_RECEIVE);
 	outb(device.command, ioport);
 
 	device.direction = O_RDWR;
+
 	disable_dma(dma);
+
 	memset(device.buffer, 0, buffer);
+
 	free_dma(dma);
 }
 

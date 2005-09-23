@@ -130,13 +130,6 @@ static void gen_ldec(void)
  * For field generator polynomials, see Lin & Costello, Appendix A, and Lee
  * and Messerschmitt, pg. 453.  Field generator polynomials for symbol sizes
  * from 2 to 16 bits can be found in reed_solomon_init() below.
- *
- * NOTE:
- *      The element Alpha_exp[2^MM-1] = 0 always signifying that the
- * representation of alpha^infinity = 0 is (0,0,0,...,0).
- *      Similarily, the element Log_alpha[0] = 2^MM-1 always signifying
- * that the power of alpha which has the polynomial representation
- * (0,0,...,0) is infinity.
  */
 
 static gf  Alpha_exp[NN + 1];   /* exponent->polynomial conversion table */
@@ -173,7 +166,7 @@ static void generate_GF(int p)
  * Constructs the generator polynomial for the Reed-Solomon code of length NN
  * (=2^MM-1) with the number of parity symbols being given by rs_format->parity.
  *
- * The generator polynomial, g(x), has components taken from GF(2^MM) and is
+ * The generator polynomial, g(x), has coefficients taken from GF(2^MM) and is
  * given by the product
  *
  *  g(x) = (x - beta^J0) * (x - beta^(J0+1)) * ... * (x - beta^(J0+2t-1))
@@ -374,7 +367,7 @@ void reed_solomon_encode(dtype *block, struct rs_format_t *rs_format)
  * magnitudes.
  */
 
-int reed_solomon_decode(dtype *block, int *erasure, int no_eras, struct rs_format_t *rs_format)
+int reed_solomon_decode(dtype *block, gf *erasure, int no_eras, struct rs_format_t *rs_format)
 {
 	int  i, j, k;                   /* general purpose loop indecies */
 	int  deg_lambda, deg_omega;     /* degrees of lambda(x) and omega(x) */
@@ -513,8 +506,8 @@ int reed_solomon_decode(dtype *block, int *erasure, int no_eras, struct rs_forma
 	/*
 	 * Find roots of the error & erasure locator polynomial by Chien search
 	 * (i.e. trial and error).  At each iteration, i, the j-th component of
-	 * temp contains the j-th coefficient of lambda multiplied by
-	 * alpha^(i*j).  We get components of temp for the next iteration by
+	 * temp[] contains the j-th coefficient of lambda multiplied by
+	 * alpha^(i*j).  We get components of temp[] for the next iteration by
 	 * multiplying each by alpha^j.  Note that the 0-th coefficient of
 	 * lambda is always 1 so we can handle it explicitly.
 	 */
@@ -619,8 +612,7 @@ int reed_solomon_decode(dtype *block, int *erasure, int no_eras, struct rs_forma
 
 	finish:
 	if(erasure != NULL)
-		for(i = count; i >= 0; i--)
-			erasure[i] = loc[i];
+		memcpy(erasure, loc, count * sizeof(gf));
 	return(count);
 }
 

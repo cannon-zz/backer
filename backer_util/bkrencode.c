@@ -32,8 +32,6 @@
 #include "backer_fmt.h"
 #include "bkr_disp_mode.h"
 
-#define  BUFFER_SIZE  65000
-
 int main(int argc, char *argv[])
 {
 	int  tmp;
@@ -51,7 +49,7 @@ int main(int argc, char *argv[])
 	config.mode = (DEFAULT_MODE & ~BKR_FORMAT(-1)) | BKR_FMT;
 	config.timeout = DEFAULT_TIMEOUT;
 
-	if((device.buffer = (unsigned char *) malloc(BUFFER_SIZE)) == NULL)
+	if((device.buffer = (unsigned char *) malloc(DEFAULT_BUFFER_SIZE)) == NULL)
 		{
 		fputs("bkrencode: cannot allocate memory\n", stderr);
 		exit(-1);
@@ -172,7 +170,7 @@ int main(int argc, char *argv[])
 	fputs("bkrencode: tape format selected:\n", stderr);
 	bkr_display_mode(config.mode & ~BKR_FORMAT(-1), -1);
 
-	if(bkr_set_parms(config.mode, BUFFER_SIZE) < 0)
+	if(bkr_set_parms(config.mode, DEFAULT_BUFFER_SIZE) < 0)
 		{
 		fputs("bkrencode: cannot allocate memory\n", stderr);
 		exit(-1);

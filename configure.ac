@@ -3,6 +3,7 @@ AC_INIT([backer],[3.103],[kcannon@users.sf.net],[backer])
 AC_COPYRIGHT([Copyright (C) 2002 Kipp C. Cannon])
 AC_CONFIG_SRCDIR([drivers/backer.h])
 AC_CONFIG_AUX_DIR([gnuscripts])
+AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_FILES([                             \
 	Makefile                              \
 	backer.spec                           \
@@ -34,6 +35,7 @@ AC_ARG_WITH([backer-major],AC_HELP_STRING([--with-backer-major=number],[Backer d
 
 AC_SUBST([DEFAULT_DEV],[/dev/tape])
 AC_ARG_WITH([default-dev],AC_HELP_STRING([--with-default-dev=device],[Default device for utilities (default=/dev/tape)]),[DEFAULT_DEV=${withval}])
+AC_DEFINE([DEFAULT_DEV], [DEFAULT_DEV], [Name of default device file])
 
 # Output configure information
 AC_PROG_MAKE_SET

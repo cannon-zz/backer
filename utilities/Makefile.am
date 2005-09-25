@@ -3,13 +3,16 @@ SUBDIRS = DOCUMENTATION
 INCLUDES = -I../drivers -I../codecs
 
 bin_PROGRAMS = bkrcheck bkrencode
+#bin_PROGRAMS += bkrmonitor
 
 bkrcheck_SOURCES = bkrcheck.c bkr_disp_mode.c bkr_puts.c bkr_proc_io.c ../codecs/bkr_splp_randomize.c
+bkrcheck_CPPFLAGS = -DDEFAULT_DEVICE=\"@DEFAULT_DEV@\"
 
 bkrencode_SOURCES = bkrencode.c bkr_disp_mode.c bkr_proc_io.c bkr_stdio_dev.c ../drivers/bkr_stream.c ../drivers/bkr_ring_buffer.c ../codecs/bkr_frame.c ../codecs/bkr_gcr.c ../codecs/bkr_splp.c ../codecs/bkr_splp_randomize.c ../codecs/bkr_ecc2.c ../codecs/rs.c
-bkrencode_LDADD = pthread
+bkrencode_CPPFLAGS = -DDEFAULT_DEVICE=\"@DEFAULT_DEV@\"
+bkrencode_LDADD = -lpthread
 
-bkrmonitor_SOURCES = bkrmonitor.c bkr_proc_io.c
+#bkrmonitor_SOURCES = bkrmonitor.c bkr_proc_io.c
 
 benchmark : all
 	@echo "Testing 512MB..."

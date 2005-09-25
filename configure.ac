@@ -7,12 +7,19 @@ AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_FILES([                             \
 	Makefile                              \
 	backer.spec                           \
+	docs/Makefile                         \
+	drivers/DOCUMENTATION/Makefile        \
 	utilities/Makefile                    \
 	utilities/DOCUMENTATION/bkrcheck.8    \
 	utilities/DOCUMENTATION/bkrencode.8   \
 	utilities/DOCUMENTATION/bkrmonitor.8  \
 	utilities/DOCUMENTATION/Makefile      \
 ])
+
+# Documentation boilerplate
+AC_SUBST([pkgdocdir], [${docdir}/${PACKAGE_NAME}-${PACKAGE_VERSION}])
+LATEXRULES=$srcdir/docs/LaTeX.Rules
+AC_SUBST_FILE([LATEXRULES])
 
 # Check for programs
 AC_PROG_CC

@@ -1,1 +1,1 @@
-SUBDIRS = utilities
+SUBDIRS = docs utilities

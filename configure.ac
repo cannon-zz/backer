@@ -6,11 +6,11 @@ AC_CONFIG_AUX_DIR([gnuscripts])
 AC_CONFIG_FILES([                             \
 	Makefile                              \
 	backer.spec                           \
-	drivers/Makefile                      \
 	utilities/Makefile                    \
 	utilities/DOCUMENTATION/bkrcheck.8    \
 	utilities/DOCUMENTATION/bkrencode.8   \
 	utilities/DOCUMENTATION/bkrmonitor.8  \
+	utilities/DOCUMENTATION/Makefile      \
 ])
 
 # Check for programs

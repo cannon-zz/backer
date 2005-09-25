@@ -8,7 +8,6 @@ AC_CONFIG_FILES([                             \
 	Makefile                              \
 	backer.spec                           \
 	docs/Makefile                         \
-	drivers/DOCUMENTATION/Makefile        \
 	utilities/Makefile                    \
 	utilities/DOCUMENTATION/bkrcheck.8    \
 	utilities/DOCUMENTATION/bkrencode.8   \

@@ -4,15 +4,14 @@ AC_COPYRIGHT([Copyright (C) 2002 Kipp C. Cannon])
 AC_CONFIG_SRCDIR([drivers/backer.h])
 AC_CONFIG_AUX_DIR([gnuscripts])
 AM_INIT_AUTOMAKE([foreign])
-AC_CONFIG_FILES([                             \
-	Makefile                              \
-	backer.spec                           \
-	docs/Makefile                         \
-	utilities/Makefile                    \
-	utilities/DOCUMENTATION/bkrcheck.8    \
-	utilities/DOCUMENTATION/bkrencode.8   \
-	utilities/DOCUMENTATION/bkrmonitor.8  \
-	utilities/DOCUMENTATION/Makefile      \
+AC_CONFIG_FILES([ \
+	Makefile \
+	backer.spec \
+	docs/bkrcheck.8 \
+	docs/bkrencode.8 \
+	docs/bkrmonitor.8 \
+	docs/Makefile \
+	utilities/Makefile \
 ])
 
 # Documentation boilerplate
@@ -32,8 +31,9 @@ AX_KERNEL_VERSION
 AX_CHECK_KERNEL_SOURCE
 
 # Check for GTK 2
-AC_SUBST([GTK_VERSION],[no])
-AM_PATH_GTK_2_0([2.0.0],[GTK_VERSION=yes])
+AC_SUBST([HAVE_GTK=no])
+AM_PATH_GTK_2_0([2.0.0],[HAVE_GTK=yes])
+AM_CONDITIONAL([COND_GTK], [test "${HAVE_GTK}" == "yes"])
 
 # Set driver configuration
 AC_SUBST([BKR_MAJOR],[60])

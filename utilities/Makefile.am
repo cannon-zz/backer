@@ -1,5 +1,3 @@
-SUBDIRS = DOCUMENTATION
-
 INCLUDES = -I../drivers -I../codecs
 
 bin_PROGRAMS = bkrcheck bkrencode

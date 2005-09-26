@@ -16,6 +16,7 @@ AC_CONFIG_FILES([ \
 ])
 
 # Documentation boilerplate
+AC_SUBST([docdir], [${datadir}/doc])
 AC_SUBST([pkgdocdir], [${docdir}/${PACKAGE_NAME}-${PACKAGE_VERSION}])
 LATEXRULES=$srcdir/docs/LaTeX.Rules
 AC_SUBST_FILE([LATEXRULES])

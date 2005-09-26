@@ -21,8 +21,6 @@ struct _BkrVideoOut {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
-
-	gboolean silent;
 };
 
 struct _BkrVideoOutClass {

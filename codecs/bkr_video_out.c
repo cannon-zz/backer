@@ -45,20 +45,6 @@ static GstPadLinkReturn sink_link(GstPad *pad, const GstCaps *caps)
 
 
 /*
- * Source pad link function.  See
- *
- * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadLinkFunction
- */
-
-static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
-{
-	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
-
-	return GST_PAD_LINK_OK;
-}
-
-
-/*
  * Pad chain function.  See
  *
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
@@ -66,18 +52,11 @@ static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
 
 static void chain(GstPad *pad, GstData *in)
 {
-	BkrVideoOut *filter;
+	BkrVideoOut *filter = BKR_VIDEO_OUT(GST_OBJECT_PARENT(pad));
 	GstBuffer *buf = GST_BUFFER(in);
 
-	g_return_if_fail(GST_IS_PAD(pad));
 	g_return_if_fail(buf != NULL);
 
-	filter = BKR_VIDEO_OUT(GST_OBJECT_PARENT(pad));
-	g_return_if_fail(GST_IS_BKR_VIDEO_OUT(filter));
-
-	g_print("I'm plugged, therefore I'm in.\n");
-
-	/* just push out the incoming buffer without touching it */
 	gst_pad_push(filter->srcpad, GST_DATA(buf));
 }
 
@@ -131,12 +110,9 @@ static void instance_init(BkrVideoOut *filter)
 	filter->sinkpad = gst_pad_new_from_template(gst_element_class_get_pad_template(class, "sink"), "sink");
 	gst_pad_set_link_function(filter->sinkpad, sink_link);
 	gst_pad_set_chain_function(filter->sinkpad, chain);
-	gst_pad_set_getcaps_function(filter->sinkpad, gst_pad_proxy_getcaps);
 	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
 
 	filter->srcpad = gst_pad_new_from_template(gst_element_class_get_pad_template(class, "src"), "src");
-	gst_pad_set_link_function(filter->srcpad, src_link);
-	gst_pad_set_getcaps_function(filter->srcpad, gst_pad_proxy_getcaps);
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 }
 

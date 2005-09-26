@@ -93,13 +93,13 @@ static void base_init(BkrVideoOutClass *class)
 	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
 	static GstElementDetails plugin_details = {
 		"Backer Video Out",
-		"Codec/Decoder/Video/bkr_video_out",
+		"Codec/Decoder/Video",
 		"Simulates a Backer's byte-stream to video conversion",
 		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
 	};
 
-	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&src_factory));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sink_factory));
+	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&src_factory));
 	gst_element_class_set_details(element_class, &plugin_details);
 }
 
@@ -165,7 +165,7 @@ GType bkr_video_out_get_type(void)
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
-	return gst_element_register(plugin, "plugin", GST_RANK_NONE, BKR_VIDEO_OUT_TYPE);
+	return gst_element_register(plugin, "bkr_video_out", GST_RANK_NONE, BKR_VIDEO_OUT_TYPE);
 }
 
 
@@ -173,4 +173,4 @@ static gboolean plugin_init(GstPlugin *plugin)
  * This is the structure that gst-register looks for.
  */
 
-GST_PLUGIN_DEFINE(GST_VERSION_MAJOR, GST_VERSION_MINOR, "plugin", "Template plugin", plugin_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")
+GST_PLUGIN_DEFINE(GST_VERSION_MAJOR, GST_VERSION_MINOR, "bkr_video_out", "Backer Compatible Byte-stream to Video Converter", plugin_init, PACKAGE_VERSION, "GPL", PACKAGE_NAME, "http://linbacker.sf.net")

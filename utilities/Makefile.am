@@ -12,8 +12,9 @@ bkrencode_LDADD = -lpthread
 if COND_GTK
 bin_PROGRAMS += bkrmonitor
 bkrmonitor_SOURCES = bkrmonitor.c bkr_proc_io.c
-bkrmonitor_CFLAGS = @GTK_CFLAGS@
-bkrmonitor_LDFLAGS = @GTK_LIBS@
+bkrmonitor_CFLAGS = $(GTK_CFLAGS)
+bkrmonitor_LDADD = $(GTK_LIBS)
+bkrmonitor_LDFLAGS = $(GTK_LDFLAGS)
 endif
 
 benchmark : all

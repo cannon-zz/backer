@@ -7,6 +7,7 @@ AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_FILES([ \
 	Makefile \
 	backer.spec \
+	codecs/Makefile \
 	docs/bkrcheck.8 \
 	docs/bkrencode.8 \
 	docs/bkrmonitor.8 \
@@ -22,6 +23,7 @@ AC_SUBST_FILE([LATEXRULES])
 # Check for programs
 AC_PROG_CC
 AC_PROG_INSTALL
+AC_PROG_LIBTOOL
 PKG_PROG_PKG_CONFIG()
 
 # Check for kernel source

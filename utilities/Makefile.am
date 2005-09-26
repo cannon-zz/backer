@@ -1,7 +1,6 @@
 INCLUDES = -I../drivers -I../codecs
 
 bin_PROGRAMS = bkrcheck bkrencode
-#bin_PROGRAMS += bkrmonitor
 
 bkrcheck_SOURCES = bkrcheck.c bkr_disp_mode.c bkr_puts.c bkr_proc_io.c ../codecs/bkr_splp_randomize.c
 bkrcheck_CPPFLAGS = -DDEFAULT_DEVICE=\"@DEFAULT_DEV@\"
@@ -10,7 +9,12 @@ bkrencode_SOURCES = bkrencode.c bkr_disp_mode.c bkr_proc_io.c bkr_stdio_dev.c ..
 bkrencode_CPPFLAGS = -DDEFAULT_DEVICE=\"@DEFAULT_DEV@\"
 bkrencode_LDADD = -lpthread
 
-#bkrmonitor_SOURCES = bkrmonitor.c bkr_proc_io.c
+if COND_GTK
+bin_PROGRAMS += bkrmonitor
+bkrmonitor_SOURCES = bkrmonitor.c bkr_proc_io.c
+bkrmonitor_CFLAGS = @GTK_CFLAGS@
+bkrmonitor_LDFLAGS = @GTK_LIBS@
+endif
 
 benchmark : all
 	@echo "Testing 512MB..."

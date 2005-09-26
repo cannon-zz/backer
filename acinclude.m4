@@ -51,7 +51,7 @@ AC_SUBST([KERNEL_SOURCE], [${MODULES_DIR}/build])
 AC_ARG_WITH([kernel-source], AC_HELP_STRING([--with-kernel-source=dir], [path to Linux kernel source (default=<modulesdir>/build)]), [KERNEL_SOURCE=${withval}])
 
 AC_MSG_CHECKING([for kernel ${KERNEL_VERSION} source])
-if ${GREP} ${KERNEL_VERSION} ${KERNEL_SOURCE}/include/linux/version.h >/dev/null 2>/dev/null ; then
+if grep ${KERNEL_VERSION} ${KERNEL_SOURCE}/include/linux/version.h >/dev/null 2>/dev/null ; then
 	AC_MSG_RESULT([${KERNEL_SOURCE}])
 else
 	AC_MSG_RESULT([no])

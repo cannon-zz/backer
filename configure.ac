@@ -22,18 +22,24 @@ AC_SUBST_FILE([LATEXRULES])
 # Check for programs
 AC_PROG_CC
 AC_PROG_INSTALL
-AC_PATH_PROG([GREP],[grep])
-AC_PATH_PROG([GZIP],[gzip])
-AC_PATH_PROG([READLINK],[readlink])
+PKG_PROG_PKG_CONFIG()
 
 # Check for kernel source
 AX_KERNEL_VERSION
 AX_CHECK_KERNEL_SOURCE
 
-# Check for GTK 2
-AC_SUBST([HAVE_GTK=no])
+# Check for GTK+ 2
+AC_SUBST([HAVE_GTK], [no])
 AM_PATH_GTK_2_0([2.0.0],[HAVE_GTK=yes])
 AM_CONDITIONAL([COND_GTK], [test "${HAVE_GTK}" == "yes"])
+
+# Check for GStreamer 0.8
+AC_SUBST([GST_VERSION], [0.8])
+PKG_CHECK_MODULES([GST], [gstreamer-${GST_VERSION}], [HAVE_GST=yes], [HAVE_GST=no])
+AC_SUBST([GST_CFLAGS])
+AC_SUBST([GST_LIBS])
+AC_SUBST([plugindir], [${libdir}/gstreamer-${GST_VERSION}])
+
 
 # Set driver configuration
 AC_SUBST([BKR_MAJOR],[60])

@@ -41,6 +41,7 @@ PKG_CHECK_MODULES([GST], [gstreamer-${GST_VERSION}], [HAVE_GST=yes], [HAVE_GST=n
 AC_SUBST([GST_CFLAGS])
 AC_SUBST([GST_LIBS])
 AC_SUBST([plugindir], [${libdir}/gstreamer-${GST_VERSION}])
+AC_SUBST([GST_PLUGIN_LDFLAGS], ["-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*"])
 
 
 # Set driver configuration

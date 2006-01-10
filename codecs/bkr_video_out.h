@@ -5,6 +5,7 @@
 #define __BKR_VIDEO_OUT_H__
 
 #include <gst/gst.h>
+#include <backer.h>
 
 G_BEGIN_DECLS
 
@@ -26,7 +27,12 @@ struct _BkrVideoOut {
 
 	GstPad *sinkpad, *srcpad;
 
-	GstBuffer *buf;
+	enum bkr_vidmodes vidmode;
+	enum bkr_densities density;
+	gint width, height;
+	guint32 *(*pixel_func)(guint32 *, guint32);
+	gint field;
+	GstBuffer *outbuf;
 };
 
 GType bkr_video_out_get_type(void);

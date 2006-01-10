@@ -2,12 +2,14 @@
  */
 
 #include <gst/gst.h>
-#include "bkr_video_out.h"
+#include <backer.h>
+#include <bkr_video_out.h>
 
-#define WIDTH 352
-#define HEIGHT 253
 #define PIXELS_PER_BIT 4
-#define BYTES_PER_LINE 11
+#define BYTES_PER_PIXEL 4
+
+#define DEFAULT_VIDMODE BKR_NTSC
+#define DEFAULT_DENSITY BKR_HIGH
 
 
 /*
@@ -18,62 +20,49 @@
  * ============================================================================
  */
 
-static guint32 *draw_bit_nh(guint32 *pos, guint32 colour)
+static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 {
 	*pos++ = colour;
 	*pos++ = colour;
 	*pos++ = colour;
 	*pos++ = colour;
-	return(pos);
+	return pos;
 }
 
 
-static guint32 *draw_bit_ph(guint32 *pos, guint32 colour)
-{
-	pos = draw_bit_nh(pos, colour);
-	*pos++ = colour;
-	return(pos);
-}
-
-
-static guint32 *draw_bit_nl(guint32 *pos, guint32 colour)
+static guint32 *draw_bit_l(guint32 *pos, guint32 colour)
 {
 	pos = draw_bit_nh(draw_bit_nh(pos, colour), colour);
-	return(pos);
+	return pos;
 }
 
 
-static guint32 *draw_bit_pl(guint32 *pos, guint32 colour)
-{
-	pos = draw_bit_ph(draw_bit_ph(pos, colour), colour);
-	return(pos);
-}
-
-
-static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, unsigned char byte, guint32 colour)
+static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, guchar byte, guint32 colour)
 {
 	gint i;
 
 	for(i = 0x80; i; i >>= 1)
 		pos = pixel_func(pos, byte & i ? colour : 0);
 
-	return(pos);
+	return pos;
 }
 
 
-static void draw(GstBuffer *out, guchar *in, gint *in_count)
+static gint draw(guint32 *(*pixel_func)(guint32 *, guint32), GstBuffer *out, gint width, guchar *in, gint byte_count)
 {
 	guint32 *pixel = (guint32 *) (GST_BUFFER_DATA(out) + GST_BUFFER_SIZE(out));
 
-	while((GST_BUFFER_SIZE(out) < GST_BUFFER_MAXSIZE(out)) && (*in_count > 0)) {
-		if(GST_BUFFER_SIZE(out) % (4 * WIDTH) == 0) {
-			pixel = draw_byte(draw_bit_nh, pixel, 0x45, 0x00ffffff);
+	while((GST_BUFFER_SIZE(out) < GST_BUFFER_MAXSIZE(out)) && (byte_count > 0)) {
+		if(GST_BUFFER_SIZE(out) % (BYTES_PER_PIXEL * width) == 0) {
+			pixel = draw_byte(pixel_func, pixel, 0x45, 0x00ffffff);
 		} else {
-			pixel = draw_byte(draw_bit_nh, pixel, *in++, 0x00ffffff);
-			(*in_count)--;
+			pixel = draw_byte(pixel_func, pixel, *in++, 0x00ffffff);
+			byte_count--;
 		}
-		GST_BUFFER_SIZE(out) += 4 * PIXELS_PER_BIT * 8;
+		GST_BUFFER_SIZE(out) += BYTES_PER_PIXEL * PIXELS_PER_BIT * 8;
 	}
+
+	return byte_count;
 }
 
 
@@ -86,46 +75,30 @@ static void draw(GstBuffer *out, guchar *in, gint *in_count)
  * ============================================================================
  */
 
-static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE(
-	"sink",
-	GST_PAD_SINK,
-	GST_PAD_ALWAYS,
-	GST_STATIC_CAPS_ANY
-);
-
-static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE(
-	"src",
-	GST_PAD_SRC,
-	GST_PAD_ALWAYS,
-	GST_STATIC_CAPS(
-		"video/x-raw-rgb, "
-		"width = (int) 352, "	/* WIDTH */
-		"height = (int) 253, "	/* HEIGHT */
-		"framerate = (double) 60.0"
-	)
-);
-
-static GstElementClass *parent_class = NULL;
-
-
 /*
- * Sink pad link function.  See
- *
- * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadLinkFunction
+ * Source pad getcaps function.
  */
 
-static GstPadLinkReturn sink_link(GstPad *pad, const GstCaps *caps)
+static GstCaps *src_getcaps(GstPad *pad)
 {
 	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
+	GstCaps *caps = gst_caps_new_simple(
+		"video/x-raw-rgb",
+		"width", G_TYPE_INT, filter->width,
+		"height", G_TYPE_INT, filter->height,
+		"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
+		"bpp", G_TYPE_INT, 32,
+		"depth", G_TYPE_INT, 24,
+		"framerate", G_TYPE_DOUBLE, 60.0,
+		NULL
+	);
 
-	return GST_PAD_LINK_OK;
+	return caps;
 }
 
 
 /*
- * Source pad link function.  See
- *
- * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadLinkFunction
+ * Source pad link function.
  */
 
 static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
@@ -133,7 +106,6 @@ static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
 	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
 
 	/* FIXME:  wtf am I supposed to do? */
-
 	return GST_PAD_LINK_OK;
 }
 
@@ -153,18 +125,19 @@ static void chain(GstPad *pad, GstData *in)
 	g_return_if_fail(buf != NULL);
 
 	while(n) {
-		if(!filter->buf) {
-			filter->buf = gst_buffer_new_and_alloc(4 * WIDTH * HEIGHT);
-			g_return_if_fail(filter->buf != NULL);
-			GST_BUFFER_SIZE(filter->buf) = 0;
+		if(!filter->outbuf) {
+			filter->outbuf = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->width * filter->height);
+			g_return_if_fail(filter->outbuf != NULL);
+			GST_BUFFER_SIZE(filter->outbuf) = 0;
 		}
 
-		draw(filter->buf, GST_BUFFER_DATA(buf) + (GST_BUFFER_SIZE(buf) - n), &n);
+		n = draw(filter->pixel_func, filter->outbuf, filter->width, GST_BUFFER_DATA(buf) + (GST_BUFFER_SIZE(buf) - n), n);
 
-		if(GST_BUFFER_SIZE(filter->buf) >= GST_BUFFER_MAXSIZE(filter->buf)) {
-			gst_pad_push(filter->srcpad, GST_DATA(filter->buf));
+		if(GST_BUFFER_SIZE(filter->outbuf) >= GST_BUFFER_MAXSIZE(filter->outbuf)) {
+			gst_pad_push(filter->srcpad, GST_DATA(filter->outbuf));
+			filter->field ^= 1;
 			/* FIXME: do I have to unref it? */
-			filter->buf = NULL;
+			filter->outbuf = NULL;
 		}
 	}
 	gst_buffer_unref(in);
@@ -176,6 +149,8 @@ static void chain(GstPad *pad, GstData *in)
  *
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
  */
+
+static GstElementClass *parent_class = NULL;
 
 static void class_init(BkrVideoOutClass *class)
 {
@@ -201,8 +176,6 @@ static void base_init(BkrVideoOutClass *class)
 		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
 	};
 
-	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sink_factory));
-	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&src_factory));
 	gst_element_class_set_details(element_class, &plugin_details);
 }
 
@@ -217,16 +190,44 @@ static void instance_init(BkrVideoOut *filter)
 {
 	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
 
-	filter->sinkpad = gst_pad_new_from_template(gst_element_class_get_pad_template(class, "sink"), "sink");
-	gst_pad_set_link_function(filter->sinkpad, sink_link);
+	/* input, "sink", pad.  No link function because pad can accept
+	 * anything as input */
+	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
 	gst_pad_set_chain_function(filter->sinkpad, chain);
 	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
 
-	filter->srcpad = gst_pad_new_from_template(gst_element_class_get_pad_template(class, "src"), "src");
-	gst_pad_set_link_function(filter->srcpad, src_link);
+	/* output, "source", pad */
+	filter->srcpad = gst_pad_new("src", GST_PAD_SRC);
+	gst_pad_set_getcaps_function(filter->srcpad, src_getcaps);
+	/*gst_pad_set_link_function(filter->srcpad, src_link);*/
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
-	filter->buf = NULL;
+	/* internal state */
+	filter->vidmode = DEFAULT_VIDMODE;
+	filter->density = DEFAULT_DENSITY;
+
+	switch(filter->vidmode) {
+	case BKR_NTSC:
+		filter->height = 253;
+		break;
+
+	case BKR_PAL:
+		filter->height = 305;
+		break;
+	}
+	switch(filter->density) {
+	case BKR_HIGH:
+		filter->width = 4 * 8 * 11; /* pixels/bit * bits/byte * bytes/line */
+		filter->pixel_func = draw_bit_h;
+		break;
+
+	case BKR_LOW:
+		filter->width = 8 * 8 * 5; /* pixels/bit * bits/byte * bytes/line */
+		filter->pixel_func = draw_bit_l;
+		break;
+	}
+	filter->field = 1;	/* fields are counted from 1 */
+	filter->outbuf = NULL;
 }
 
 

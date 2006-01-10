@@ -1,5 +1,7 @@
 plugin_LTLIBRARIES = libtapefile.la
 
+INCLUDES = -I$(top_srcdir)/drivers
+
 libtapefile_la_SOURCES = bkr_video_out.c
 libtapefile_la_CFLAGS = $(GST_CFLAGS)
 libtapefile_la_LIBADD = $(GST_LIBS)

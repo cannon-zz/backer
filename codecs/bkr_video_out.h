@@ -31,8 +31,6 @@ struct _BkrVideoOut {
 	enum bkr_densities density;
 	gint width, height;
 	guint32 *(*pixel_func)(guint32 *, guint32);
-	gint field;
-	GstBuffer *outbuf;
 };
 
 GType bkr_video_out_get_type(void);

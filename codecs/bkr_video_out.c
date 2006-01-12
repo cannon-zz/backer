@@ -5,7 +5,6 @@
 #include <backer.h>
 #include <bkr_video_out.h>
 
-#define PIXELS_PER_BIT 4
 #define BYTES_PER_PIXEL 4
 
 #define DEFAULT_VIDMODE BKR_NTSC
@@ -32,8 +31,7 @@ static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 
 static guint32 *draw_bit_l(guint32 *pos, guint32 colour)
 {
-	pos = draw_bit_nh(draw_bit_nh(pos, colour), colour);
-	return pos;
+	return draw_bit_h(draw_bit_h(pos, colour), colour);
 }
 
 
@@ -48,21 +46,22 @@ static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *p
 }
 
 
-static gint draw(guint32 *(*pixel_func)(guint32 *, guint32), GstBuffer *out, gint width, guchar *in, gint byte_count)
+static guint32 *draw_line(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, const guchar *data, gint n, guint32 colour)
 {
-	guint32 *pixel = (guint32 *) (GST_BUFFER_DATA(out) + GST_BUFFER_SIZE(out));
+	pos = draw_byte(pixel_func, pos, 0x45, colour);
+	while(n--)
+		pos = draw_byte(pixel_func, pos, *data++, colour);
 
-	while((GST_BUFFER_SIZE(out) < GST_BUFFER_MAXSIZE(out)) && (byte_count > 0)) {
-		if(GST_BUFFER_SIZE(out) % (BYTES_PER_PIXEL * width) == 0) {
-			pixel = draw_byte(pixel_func, pixel, 0x45, 0x00ffffff);
-		} else {
-			pixel = draw_byte(pixel_func, pixel, *in++, 0x00ffffff);
-			byte_count--;
-		}
-		GST_BUFFER_SIZE(out) += BYTES_PER_PIXEL * PIXELS_PER_BIT * 8;
+	return pos;
+}
+
+
+static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *dest, gint bytes_per_line, gint lines, const guchar *data)
+{
+	while(lines--) {
+		dest = draw_line(pixel_func, dest, data, bytes_per_line, 0x00ffffff);
+		data += bytes_per_line;
 	}
-
-	return byte_count;
 }
 
 
@@ -74,6 +73,28 @@ static gint draw(guint32 *(*pixel_func)(guint32 *, guint32), GstBuffer *out, gin
  *
  * ============================================================================
  */
+
+/*
+ * Element properties
+ */
+
+enum property {
+	VIDEOMODE,
+	DENSITY
+};
+
+
+static void set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+{
+	BkrVideoOut *filter = BKR_VIDEO_OUT(object);
+}
+
+
+static void get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	BkrVideoOut *filter = BKR_VIDEO_OUT(object);
+}
+
 
 /*
  * Source pad getcaps function.
@@ -119,28 +140,40 @@ static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
 static void chain(GstPad *pad, GstData *in)
 {
 	BkrVideoOut *filter = BKR_VIDEO_OUT(GST_OBJECT_PARENT(pad));
-	GstBuffer *buf = GST_BUFFER(in);
-	gint n = GST_BUFFER_SIZE(buf);
+	GstBuffer *inbuf = GST_BUFFER(in);
+	GstBuffer *odd, *even;
+	gint lines;
+	gint oddlines = filter->height;
+	gint evenlines = filter->height - 10;	/* FIXME: 10 = bytes_per_line */
+	const guchar *odddata, *evendata;
 
-	g_return_if_fail(buf != NULL);
+	g_return_if_fail(inbuf != NULL);
 
-	while(n) {
-		if(!filter->outbuf) {
-			filter->outbuf = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->width * filter->height);
-			g_return_if_fail(filter->outbuf != NULL);
-			GST_BUFFER_SIZE(filter->outbuf) = 0;
-		}
+	/* compute number of lines to be drawn in each field */
+	lines = GST_BUFFER_SIZE(inbuf) / 10;	/* FIXME: 10 = bytes_per_line */
+	if(lines < oddlines) {
+		oddlines = lines;
+		evenlines = 0;
+	} else if(lines < oddlines + evenlines)
+		evenlines = lines - oddlines;
 
-		n = draw(filter->pixel_func, filter->outbuf, filter->width, GST_BUFFER_DATA(buf) + (GST_BUFFER_SIZE(buf) - n), n);
+	/* set pointers to source data */
+	odddata = GST_BUFFER_DATA(inbuf);
+	evendata = odddata + (oddlines * 10);	/* FIXME: 10 = bytes_per_line */
 
-		if(GST_BUFFER_SIZE(filter->outbuf) >= GST_BUFFER_MAXSIZE(filter->outbuf)) {
-			gst_pad_push(filter->srcpad, GST_DATA(filter->outbuf));
-			filter->field ^= 1;
-			/* FIXME: do I have to unref it? */
-			filter->outbuf = NULL;
-		}
-	}
+	/* allocate output buffers */
+	odd = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->width * filter->height);
+	even = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->width * filter->height);
+	g_return_if_fail((odd != NULL) && (even != NULL));
+
+	/* draw bytes in output buffers */
+	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(odd), 10, oddlines, odddata);	/* FIXME: 10 = bytes_per_line */
+	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(even), 10, evenlines, evendata);	/* FIXME: 10 = bytes_per_line */
 	gst_buffer_unref(in);
+
+	/* send buffers on their way */
+	gst_pad_push(filter->srcpad, GST_DATA(odd));
+	gst_pad_push(filter->srcpad, GST_DATA(even));
 }
 
 
@@ -154,7 +187,7 @@ static GstElementClass *parent_class = NULL;
 
 static void class_init(BkrVideoOutClass *class)
 {
-	GObjectClass *gobject_class = G_OBJECT_CLASS(class);
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
 	parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
@@ -226,8 +259,6 @@ static void instance_init(BkrVideoOut *filter)
 		filter->pixel_func = draw_bit_l;
 		break;
 	}
-	filter->field = 1;	/* fields are counted from 1 */
-	filter->outbuf = NULL;
 }
 
 

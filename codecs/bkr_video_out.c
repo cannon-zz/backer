@@ -20,32 +20,6 @@
  */
 
 /*
- * Format information.
- * 	width = pixels/bit * bits/byte * bytes/line
- */
-
-static struct bkr_video_format_info format(enum bkr_vidmode v, enum bkr_density d)
-{
-	switch(d) {
-	case BKR_LOW:
-		switch(v) {
-		case BKR_NTSC:
-			return (struct bkr_video_format_info) {4, 1012, 1, 8 * 8 * 5, 253};
-		case BKR_PAL:
-			return (struct bkr_video_format_info) {4, 1012, 0, 8 * 8 * 5, 305};
-		}
-	case BKR_HIGH:
-		switch(v) {
-		case BKR_NTSC:
-			return (struct bkr_video_format_info) {10, 2530, 1, 4 * 8 * 11, 253};
-		case BKR_PAL:
-			return (struct bkr_video_format_info) {10, 3050, 0, 4 * 8 * 11, 305};
-		}
-	}
-}
-
-
-/*
  * How to draw data.
  */
 
@@ -91,6 +65,32 @@ static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *dest
 	while(lines--) {
 		dest = draw_line(pixel_func, dest, data, bytes_per_line, 0x00ffffff);
 		data += bytes_per_line;
+	}
+}
+
+
+/*
+ * Format information.
+ * 	width = pixels/bit * bits/byte * bytes/line
+ */
+
+static struct bkr_video_format_info format(enum bkr_vidmode v, enum bkr_density d)
+{
+	switch(d) {
+	case BKR_LOW:
+		switch(v) {
+		case BKR_NTSC:
+			return (struct bkr_video_format_info) {4, 1012, 1, 8 * 8 * 5, 253, draw_bit_l};
+		case BKR_PAL:
+			return (struct bkr_video_format_info) {4, 1012, 0, 8 * 8 * 5, 305, draw_bit_l};
+		}
+	case BKR_HIGH:
+		switch(v) {
+		case BKR_NTSC:
+			return (struct bkr_video_format_info) {10, 2530, 1, 4 * 8 * 11, 253, draw_bit_h};
+		case BKR_PAL:
+			return (struct bkr_video_format_info) {10, 3050, 0, 4 * 8 * 11, 305, draw_bit_h};
+		}
 	}
 }
 
@@ -197,8 +197,8 @@ static void chain(GstPad *pad, GstData *in)
 	g_return_if_fail((odd != NULL) && (even != NULL));
 
 	/* draw bytes in output buffers */
-	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(odd), filter->format.bytes_per_line, oddlines, odddata);
-	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(even), filter->format.bytes_per_line, evenlines, evendata);
+	draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(odd), filter->format.bytes_per_line, oddlines, odddata);
+	draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(even), filter->format.bytes_per_line, evenlines, evendata);
 	gst_buffer_unref(in);
 
 	/* send buffers on their way */
@@ -268,17 +268,7 @@ static void instance_init(BkrVideoOut *filter)
 	/* internal state */
 	filter->vidmode = DEFAULT_VIDMODE;
 	filter->density = DEFAULT_DENSITY;
-
 	filter->format = format(filter->vidmode, filter->density);
-	switch(filter->density) {
-	case BKR_HIGH:
-		filter->pixel_func = draw_bit_h;
-		break;
-
-	case BKR_LOW:
-		filter->pixel_func = draw_bit_l;
-		break;
-	}
 }
 
 

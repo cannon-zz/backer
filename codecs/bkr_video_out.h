@@ -21,6 +21,7 @@ struct bkr_video_format_info {
 	gint interlace;
 	gint width;
 	gint height;
+	guint32 *(*pixel_func)(guint32 *, guint32);
 };
 
 #define BKR_VIDEO_OUT_TYPE			(bkr_video_out_get_type())
@@ -44,7 +45,6 @@ struct _BkrVideoOut {
 	enum bkr_vidmode vidmode;
 	enum bkr_density density;
 	struct bkr_video_format_info format;
-	guint32 *(*pixel_func)(guint32 *, guint32);
 };
 
 GType bkr_video_out_get_type(void);

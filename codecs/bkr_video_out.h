@@ -9,6 +9,20 @@
 
 G_BEGIN_DECLS
 
+/*
+ * Format information.
+ * 	height = lines in even field
+ * 	interlace = add extra line to odd field?
+ */
+
+struct bkr_video_format_info {
+	gint bytes_per_line;
+	gint field_size;
+	gint interlace;
+	gint width;
+	gint height;
+};
+
 #define BKR_VIDEO_OUT_TYPE			(bkr_video_out_get_type())
 #define BKR_VIDEO_OUT(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_VIDEO_OUT_TYPE, BkrVideoOut))
 #define BKR_VIDEO_OUT_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_VIDEO_OUT_TYPE, BkrVideoOut))
@@ -27,9 +41,9 @@ struct _BkrVideoOut {
 
 	GstPad *sinkpad, *srcpad;
 
-	enum bkr_vidmodes vidmode;
-	enum bkr_densities density;
-	gint width, height;
+	enum bkr_vidmode vidmode;
+	enum bkr_density density;
+	struct bkr_video_format_info format;
 	guint32 *(*pixel_func)(guint32 *, guint32);
 };
 

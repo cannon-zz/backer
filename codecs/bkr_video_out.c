@@ -19,6 +19,36 @@
  * ============================================================================
  */
 
+/*
+ * Format information.
+ * 	width = pixels/bit * bits/byte * bytes/line
+ */
+
+static struct bkr_video_format_info format(enum bkr_vidmode v, enum bkr_density d)
+{
+	switch(d) {
+	case BKR_LOW:
+		switch(v) {
+		case BKR_NTSC:
+			return (struct bkr_video_format_info) {4, 1012, 1, 8 * 8 * 5, 253};
+		case BKR_PAL:
+			return (struct bkr_video_format_info) {4, 1012, 0, 8 * 8 * 5, 305};
+		}
+	case BKR_HIGH:
+		switch(v) {
+		case BKR_NTSC:
+			return (struct bkr_video_format_info) {10, 2530, 1, 4 * 8 * 11, 253};
+		case BKR_PAL:
+			return (struct bkr_video_format_info) {10, 3050, 0, 4 * 8 * 11, 305};
+		}
+	}
+}
+
+
+/*
+ * How to draw data.
+ */
+
 static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 {
 	*pos++ = colour;
@@ -105,8 +135,8 @@ static GstCaps *src_getcaps(GstPad *pad)
 	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
 	GstCaps *caps = gst_caps_new_simple(
 		"video/x-raw-rgb",
-		"width", G_TYPE_INT, filter->width,
-		"height", G_TYPE_INT, filter->height,
+		"width", G_TYPE_INT, filter->format.width,
+		"height", G_TYPE_INT, filter->format.height,
 		"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
 		"bpp", G_TYPE_INT, 32,
 		"depth", G_TYPE_INT, 24,
@@ -143,14 +173,14 @@ static void chain(GstPad *pad, GstData *in)
 	GstBuffer *inbuf = GST_BUFFER(in);
 	GstBuffer *odd, *even;
 	gint lines;
-	gint oddlines = filter->height;
-	gint evenlines = filter->height - 10;	/* FIXME: 10 = bytes_per_line */
+	gint oddlines = filter->format.height + filter->format.interlace;
+	gint evenlines = filter->format.height;
 	const guchar *odddata, *evendata;
 
 	g_return_if_fail(inbuf != NULL);
 
 	/* compute number of lines to be drawn in each field */
-	lines = GST_BUFFER_SIZE(inbuf) / 10;	/* FIXME: 10 = bytes_per_line */
+	lines = GST_BUFFER_SIZE(inbuf) / filter->format.bytes_per_line;
 	if(lines < oddlines) {
 		oddlines = lines;
 		evenlines = 0;
@@ -159,16 +189,16 @@ static void chain(GstPad *pad, GstData *in)
 
 	/* set pointers to source data */
 	odddata = GST_BUFFER_DATA(inbuf);
-	evendata = odddata + (oddlines * 10);	/* FIXME: 10 = bytes_per_line */
+	evendata = odddata + (oddlines * filter->format.bytes_per_line);
 
 	/* allocate output buffers */
-	odd = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->width * filter->height);
-	even = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->width * filter->height);
+	odd = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->format.width * (filter->format.height + filter->format.interlace));
+	even = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->format.width * (filter->format.height + filter->format.interlace));
 	g_return_if_fail((odd != NULL) && (even != NULL));
 
 	/* draw bytes in output buffers */
-	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(odd), 10, oddlines, odddata);	/* FIXME: 10 = bytes_per_line */
-	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(even), 10, evenlines, evendata);	/* FIXME: 10 = bytes_per_line */
+	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(odd), filter->format.bytes_per_line, oddlines, odddata);
+	draw_field(filter->pixel_func, (guint32 *) GST_BUFFER_DATA(even), filter->format.bytes_per_line, evenlines, evendata);
 	gst_buffer_unref(in);
 
 	/* send buffers on their way */
@@ -239,23 +269,13 @@ static void instance_init(BkrVideoOut *filter)
 	filter->vidmode = DEFAULT_VIDMODE;
 	filter->density = DEFAULT_DENSITY;
 
-	switch(filter->vidmode) {
-	case BKR_NTSC:
-		filter->height = 253;
-		break;
-
-	case BKR_PAL:
-		filter->height = 305;
-		break;
-	}
+	filter->format = format(filter->vidmode, filter->density);
 	switch(filter->density) {
 	case BKR_HIGH:
-		filter->width = 4 * 8 * 11; /* pixels/bit * bits/byte * bytes/line */
 		filter->pixel_func = draw_bit_h;
 		break;
 
 	case BKR_LOW:
-		filter->width = 8 * 8 * 5; /* pixels/bit * bits/byte * bytes/line */
 		filter->pixel_func = draw_bit_l;
 		break;
 	}

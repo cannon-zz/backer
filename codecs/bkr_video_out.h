@@ -15,7 +15,7 @@ G_BEGIN_DECLS
  * 	interlace = add extra line to odd field?
  */
 
-struct bkr_video_format_info {
+struct bkr_video_out_format {
 	gint bytes_per_line;
 	gint interlace;
 	gint width;
@@ -43,7 +43,7 @@ struct _BkrVideoOut {
 
 	enum bkr_vidmode vidmode;
 	enum bkr_density density;
-	struct bkr_video_format_info format;
+	struct bkr_video_out_format format;
 };
 
 GType bkr_video_out_get_type(void);

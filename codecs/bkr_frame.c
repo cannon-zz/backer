@@ -1,39 +1,15 @@
 /*
- * Driver for Danmere's Backer 16/32 video tape backup cards.
- *
- *                             Formating Layer
- *
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifdef __KERNEL__
-#include <linux/errno.h>
-#include <linux/slab.h>
-static void *malloc(size_t size)  { return(kmalloc(size, GFP_KERNEL)); }
-static void free(void *ptr) { kfree(ptr); }
-#else
-#include <errno.h>
-#include <stdlib.h>
-#endif
+#include <string.h>
 
+#include <gst/gst.h>
 #include <backer.h>
 #include <bkr_frame.h>
-#include <bkr_ring_buffer.h>
-#include <bkr_stream.h>
+
+#define DEFAULT_VIDMODE BKR_NTSC
+#define DEFAULT_DENSITY BKR_HIGH
+#define DEFAULT_FORMAT  BKR_SP
 
 
 /*
@@ -44,8 +20,6 @@ static void free(void *ptr) { kfree(ptr); }
  * ========================================================================
  */
 
-#define  FRAME_BUFFER_SIZE      (1<<14) /* FIXME: should be 512 kB */
-#define  FRAME_TIMEOUT_MULT     1       /* device timeout multiplier */
 #define  BKR_LEADER             0xe2    /* leader is filled with this */
 #define  BKR_TRAILER            0x33    /* trailer is filled with this */
 #define  FRAME_THRESHOLD_A      21
@@ -76,6 +50,7 @@ static const unsigned char  sector_key[] = {
  * ========================================================================
  */
 
+#if 0
 /*
  * Counts the number of bytes in the frame that match the key sequence.
  */
@@ -165,221 +140,216 @@ static void bkr_frame_decode_field(struct bkr_stream_t *stream)
 	memcpy_to_ring_from_ring(stream->ring, source->ring, stream->fmt.active_size % stream->fmt.key_interval - 1);
 	ring_unlock(source->ring);
 }
+#endif
 
 
 /*
- * Moves one frame of encoded data from the codec ring to the source ring,
- * adding leader trailer and key bytes as required.
+ * Moves one field of data from the source buffer to the destination
+ * buffer, adding leader trailer and sector key bytes as required.
  */
 
-static void bkr_frame_encode_field(struct bkr_stream_t *stream, struct bkr_stream_t *source, const unsigned char *key, int field_number)
+static void encode_field(struct bkr_frame_format fmt, guchar *dst, const guchar *src, const guchar *key, gint field_number)
 {
 	int  i;
 
-	memset_ring(source->ring, BKR_LEADER, stream->fmt.leader);
+	memset(dst, BKR_LEADER, fmt.leader);
+	dst += fmt.leader;
 
-	for(i = 1; i < stream->fmt.key_length; i++) {
-		memset_ring(source->ring, *key++, 1);
-		memcpy_to_ring_from_ring(source->ring, stream->ring, stream->fmt.key_interval - 1);
+	for(i = 1; i < fmt.key_length; i++) {
+		*dst++ = *key++;
+		memcpy(dst, src, fmt.key_interval - 1);
+		dst += fmt.key_interval - 1;
+		src += fmt.key_interval - 1;
 	}
-	memset_ring(source->ring, *key++, 1);
-	memcpy_to_ring_from_ring(source->ring, stream->ring, stream->fmt.active_size % stream->fmt.key_interval - 1);
+	*dst++ = *key++;
+	memcpy(dst, src, fmt.active_size % fmt.key_interval - 1);
+	dst += fmt.active_size % fmt.key_interval - 1;
 
-	memset_ring(source->ring, BKR_TRAILER, stream->fmt.trailer + ((field_number & 1) ? stream->fmt.interlace : 0));
-}
-
-static int bkr_frame_encode(struct bkr_stream_t *stream, const unsigned char *key)
-{
-	struct bkr_stream_t  *source = stream->source;
-	int  result = source->ops.write(source);
-
-	if(result < source->capacity)
-		return(result < 0 ? result : -EAGAIN);
-
-	ring_lock(source->ring);
-	bkr_frame_encode_field(stream, source, key, 1);	/* Odd field */
-	bkr_frame_encode_field(stream, source, key, 2);	/* Even field */
-	ring_unlock(source->ring);
-
-	return(0);
+	memset(dst, BKR_TRAILER, fmt.trailer + ((field_number & 1) ? fmt.interlace : 0));
 }
 
 
 /*
- * Ensure the ring has been filled to a video frame bounday, and check if it
- * has drained.
+ * Format info.
  */
 
-static int flush(struct bkr_stream_t *stream)
+static struct bkr_frame_format format(enum bkr_vidmode v, enum bkr_density d, enum bkr_format f)
 {
-	return(bkr_stream_fill_to(stream, 2 * stream->capacity, BKR_FILLER) < 0 ? -EAGAIN : bytes_in_ring(stream->ring) ? bkr_source_write_status(stream) : 0);
+	switch(d) {
+	case BKR_LOW:
+		switch(v) {
+		case BKR_NTSC:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_frame_format) {1012, 4,  40, 32,  940,  44, 22};
+			case BKR_SP:
+				return (struct bkr_frame_format) {1012, 4,  32, 28,  952,  45, 22};
+			}
+		case BKR_PAL:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_frame_format) {1220, 0,  48, 36, 1136,  40, 29};
+			case BKR_SP:
+				return (struct bkr_frame_format) {1220, 0,  40, 36, 1144,  49, 24};
+			}
+		}
+	case BKR_HIGH:
+		switch(v) {
+		case BKR_NTSC:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_frame_format) {2530, 10, 100, 70, 2360,  84, 29};
+			case BKR_SP:
+				return (struct bkr_frame_format) {2530, 10,  80, 70, 2380, 125, 20};
+			}
+		case BKR_PAL:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_frame_format) {3050, 0, 120, 90, 2840,  91, 32};
+			case BKR_SP:
+				return (struct bkr_frame_format) {3050, 0, 100, 90, 2860, 136, 22};
+			}
+		}
+	}
+}
+
+
+
+/*
+ * ============================================================================
+ *
+ *                           GStreamer Support Code
+ *
+ * ============================================================================
+ */
+
+/*
+ * Source pad link function.
+ */
+
+static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
+{
+	BkrFrame *filter = BKR_FRAME(gst_pad_get_parent(pad));
+
+	/* FIXME:  wtf am I supposed to do? */
+	return GST_PAD_LINK_OK;
 }
 
 
 /*
- * ========================================================================
+ * Pad chain function.  See
  *
- *                        I/O Activity Callbacks
- *
- * ========================================================================
+ * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
-static void read_callback(struct bkr_stream_t *stream)
+static void chain(GstPad *pad, GstData *in)
 {
-	struct ring  *ring = stream->ring;
-	int  need_callback;
+	BkrFrame *filter = BKR_FRAME(GST_OBJECT_PARENT(pad));
+	GstBuffer *inbuf = GST_BUFFER(in);
+	GstBuffer *outbuf = gst_buffer_new_and_alloc(2 * filter->format.field_size + filter->format.interlace);
+	guchar *oddsrc, *evensrc;
+	guchar *odddst, *evendst;
 
-	ring_lock(ring);
-	while(bkr_frame_find_field(stream, sector_key) > 0) {
-		if(_space_in_ring(ring) < stream->capacity)
-			break;
-		bkr_frame_decode_field(stream);
+	g_return_if_fail((inbuf != NULL) && (outbuf != NULL));
+
+	oddsrc = GST_BUFFER_DATA(inbuf);
+	evensrc = oddsrc + filter->format.active_size;
+
+	odddst = GST_BUFFER_DATA(outbuf);
+	evendst = odddst + filter->format.field_size + filter->format.interlace;
+
+	if(GST_BUFFER_SIZE(inbuf) >= 2 * filter->format.active_size) {
+		encode_field(filter->format, odddst, oddsrc, sector_key, 1);	/* Odd field */
+		encode_field(filter->format, evendst, evensrc, sector_key, 2);	/* Even field */
 	}
-	need_callback = _bytes_in_ring(ring);
-	ring_unlock(ring);
+	gst_buffer_unref(in);
 
-	if(need_callback)
-		bkr_stream_do_callback(stream);
-}
-
-
-static void write_callback(struct bkr_stream_t *stream)
-{
-	struct ring  *ring = stream->ring;
-	int  need_callback;
-
-	ring_lock(ring);
-	while(_bytes_in_ring(ring) >= 2*stream->capacity)
-		if(bkr_frame_encode(stream, sector_key) < 0)
-			break;
-	need_callback = _space_in_ring(ring);
-	ring_unlock(ring);
-
-	if(need_callback)
-		bkr_stream_do_callback(stream);
+	gst_pad_push(filter->srcpad, GST_DATA(outbuf));
 }
 
 
 /*
- * ========================================================================
+ * Class init function.  See
  *
- *                              Stream API
- *
- * ========================================================================
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
  */
 
-static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
+static GstElementClass *parent_class = NULL;
+
+static void class_init(BkrFrameClass *class)
 {
-	struct bkr_stream_t  *source = stream->source;
-	int  result;
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
-	if(direction == BKR_READING)
-		bkr_stream_set_callback(source, (void (*)(void *)) read_callback, stream);
-	else
-		bkr_stream_set_callback(source, (void (*)(void *)) write_callback, stream);
-
-	result = source->ops.start(source, direction);
-	if(result >= 0)
-		stream->direction = direction;
-
-	return(result);
+	parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
 
 
-static int release(struct bkr_stream_t *stream)
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+static void base_init(BkrFrameClass *class)
 {
-	int  result;
-
-	if(stream->direction == BKR_WRITING) {
-		result = flush(stream);
-		if(result < 0)
-			return(result);
-	}
-	stream->direction = BKR_STOPPED;
-
-	result = stream->source->ops.release(stream->source);
-	if(result < 0)
-		return(result);
-
-	ring_free(stream->ring);
-	free(stream->ring);
-	free(stream->private);
-	free(stream);
-	return(0);
-}
-
-
-static struct bkr_stream_t *new(struct bkr_stream_t *, int, const bkr_format_info_t *);
-
-static const struct bkr_stream_ops_t  stream_ops = {
-	.new = new,
-	.start = start,
-	.release = release,
-	.read = bkr_simple_stream_read,
-	.write = bkr_simple_stream_write,
-};
-
-static struct bkr_stream_t *new(struct bkr_stream_t *source, int mode, const bkr_format_info_t *fmt)
-{
-	int  field_capacity = fmt->active_size - fmt->key_length;
-	struct bkr_stream_t  *stream;
-	bkr_frame_private_t  *private;
-
-	if(!source)
-		goto no_source;
-
-	stream = malloc(sizeof(*stream));
-	private = malloc(sizeof(*private));
-	if(!stream || !private)
-		goto no_stream;
-	stream->ring = malloc(sizeof(*stream->ring));
-	if(!stream->ring)
-		goto no_stream;
-
-	if(!ring_alloc(stream->ring, FRAME_BUFFER_SIZE - FRAME_BUFFER_SIZE % (2*field_capacity)))
-		goto no_ring_buffer;
-
-	stream->fmt = *fmt;
-	stream->source = source;
-	bkr_stream_set_callback(stream, NULL, NULL);
-	stream->mode = mode;
-	stream->direction = BKR_STOPPED;
-	stream->ops = stream_ops;
-	stream->capacity = field_capacity;
-	stream->timeout = FRAME_TIMEOUT_MULT * source->timeout;
-	stream->private = private;
-
-	*private = (bkr_frame_private_t) {
-		.frame_warnings = 0,
-		.worst_key = stream->fmt.key_length,
-		.best_nonkey = 0,
-		.last_field_offset = -1,
-		.smallest_field = ~0,
-		.largest_field = 0,
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	static GstElementDetails plugin_details = {
+		"Backer Frame",
+		"Filter",
+		"Backer framing codec",
+		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
 	};
-	
-	return(stream);
 
-no_ring_buffer:
-	free(stream->ring);
-no_stream:
-	free(stream);
-	free(private);
-	source->ops.release(source);
-no_source:
-	return(NULL);
+	gst_element_class_set_details(element_class, &plugin_details);
 }
 
 
 /*
- * ========================================================================
+ * Instance init function.  See
  *
- *                         CODEC Initialization
- *
- * ========================================================================
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
  */
 
-const struct bkr_stream_ops_t *bkr_frame_codec_init(void)
+static void instance_init(BkrFrame *filter)
 {
-	return(&stream_ops);
+	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
+
+	/* input, "sink", pad.  No link function because pad can accept
+	 * anything as input */
+	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
+	gst_pad_set_chain_function(filter->sinkpad, chain);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
+
+	/* output, "source", pad.  No link function because pad sends a
+	 * typeless byte stream */
+	filter->srcpad = gst_pad_new("src", GST_PAD_SRC);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
+
+	/* internal state */
+	filter->vidmode = DEFAULT_VIDMODE;
+	filter->density = DEFAULT_DENSITY;
+	filter->fmt = DEFAULT_FORMAT;
+	filter->format = format(filter->vidmode, filter->density, filter->fmt);
+}
+
+
+/*
+ * bkr_frame_get_type().
+ */
+
+GType bkr_frame_get_type(void)
+{
+	static GType type = 0;
+
+	if (!type) {
+		static const GTypeInfo info = {
+			.class_size = sizeof(BkrFrameClass),
+			.class_init = (GClassInitFunc) class_init,
+			.base_init = (GBaseInitFunc) base_init,
+			.instance_size = sizeof(BkrFrame),
+			.instance_init = (GInstanceInitFunc) instance_init,
+		};
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrFrame", &info, 0);
+	}
+	return type;
 }

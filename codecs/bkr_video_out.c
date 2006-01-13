@@ -74,22 +74,22 @@ static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *dest
  * 	width = pixels/bit * bits/byte * bytes/line
  */
 
-static struct bkr_video_format_info format(enum bkr_vidmode v, enum bkr_density d)
+static struct bkr_video_out_format format(enum bkr_vidmode v, enum bkr_density d)
 {
 	switch(d) {
 	case BKR_LOW:
 		switch(v) {
 		case BKR_NTSC:
-			return (struct bkr_video_format_info) {4, 1, 8 * 8 * 5, 253, draw_bit_l};
+			return (struct bkr_video_out_format) {4, 1, 8 * 8 * 5, 253, draw_bit_l};
 		case BKR_PAL:
-			return (struct bkr_video_format_info) {4, 0, 8 * 8 * 5, 305, draw_bit_l};
+			return (struct bkr_video_out_format) {4, 0, 8 * 8 * 5, 305, draw_bit_l};
 		}
 	case BKR_HIGH:
 		switch(v) {
 		case BKR_NTSC:
-			return (struct bkr_video_format_info) {10, 1, 4 * 8 * 11, 253, draw_bit_h};
+			return (struct bkr_video_out_format) {10, 1, 4 * 8 * 11, 253, draw_bit_h};
 		case BKR_PAL:
-			return (struct bkr_video_format_info) {10, 0, 4 * 8 * 11, 305, draw_bit_h};
+			return (struct bkr_video_out_format) {10, 0, 4 * 8 * 11, 305, draw_bit_h};
 		}
 	}
 }
@@ -234,7 +234,7 @@ static void base_init(BkrVideoOutClass *class)
 	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
 	static GstElementDetails plugin_details = {
 		"Backer Video Out",
-		"Codec/Encoder/Video",
+		"Codec/Decoder/Video",
 		"Simulates a Backer's byte-stream to video conversion",
 		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
 	};
@@ -273,7 +273,7 @@ static void instance_init(BkrVideoOut *filter)
 
 
 /*
- * Entry point.
+ * bkr_video_out_get_type()
  */
 
 GType bkr_video_out_get_type(void)
@@ -292,16 +292,3 @@ GType bkr_video_out_get_type(void)
 	}
 	return type;
 }
-
-
-static gboolean plugin_init(GstPlugin *plugin)
-{
-	return gst_element_register(plugin, "bkr_video_out", GST_RANK_NONE, BKR_VIDEO_OUT_TYPE);
-}
-
-
-/*
- * This is the structure that gst-register looks for.
- */
-
-GST_PLUGIN_DEFINE(GST_VERSION_MAJOR, GST_VERSION_MINOR, "bkr_video_out", "Backer Compatible Byte-stream to Video Converter", plugin_init, PACKAGE_VERSION, "GPL", PACKAGE_NAME, "http://linbacker.sf.net")

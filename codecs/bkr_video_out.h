@@ -17,7 +17,6 @@ G_BEGIN_DECLS
 
 struct bkr_video_format_info {
 	gint bytes_per_line;
-	gint field_size;
 	gint interlace;
 	gint width;
 	gint height;

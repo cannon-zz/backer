@@ -5,7 +5,7 @@
 #include <backer.h>
 #include <bkr_video_out.h>
 
-#define BYTES_PER_PIXEL 4
+#define VIDEO_BPP 32
 
 #define DEFAULT_VIDMODE BKR_NTSC
 #define DEFAULT_DENSITY BKR_HIGH
@@ -80,16 +80,16 @@ static struct bkr_video_format_info format(enum bkr_vidmode v, enum bkr_density 
 	case BKR_LOW:
 		switch(v) {
 		case BKR_NTSC:
-			return (struct bkr_video_format_info) {4, 1012, 1, 8 * 8 * 5, 253, draw_bit_l};
+			return (struct bkr_video_format_info) {4, 1, 8 * 8 * 5, 253, draw_bit_l};
 		case BKR_PAL:
-			return (struct bkr_video_format_info) {4, 1012, 0, 8 * 8 * 5, 305, draw_bit_l};
+			return (struct bkr_video_format_info) {4, 0, 8 * 8 * 5, 305, draw_bit_l};
 		}
 	case BKR_HIGH:
 		switch(v) {
 		case BKR_NTSC:
-			return (struct bkr_video_format_info) {10, 2530, 1, 4 * 8 * 11, 253, draw_bit_h};
+			return (struct bkr_video_format_info) {10, 1, 4 * 8 * 11, 253, draw_bit_h};
 		case BKR_PAL:
-			return (struct bkr_video_format_info) {10, 3050, 0, 4 * 8 * 11, 305, draw_bit_h};
+			return (struct bkr_video_format_info) {10, 0, 4 * 8 * 11, 305, draw_bit_h};
 		}
 	}
 }
@@ -138,9 +138,9 @@ static GstCaps *src_getcaps(GstPad *pad)
 		"width", G_TYPE_INT, filter->format.width,
 		"height", G_TYPE_INT, filter->format.height,
 		"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
-		"bpp", G_TYPE_INT, 32,
+		"bpp", G_TYPE_INT, VIDEO_BPP,
 		"depth", G_TYPE_INT, 24,
-		"framerate", G_TYPE_DOUBLE, 60.0,
+		"framerate", G_TYPE_DOUBLE, (double) 60.0,
 		NULL
 	);
 
@@ -192,8 +192,8 @@ static void chain(GstPad *pad, GstData *in)
 	evendata = odddata + (oddlines * filter->format.bytes_per_line);
 
 	/* allocate output buffers */
-	odd = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->format.width * (filter->format.height + filter->format.interlace));
-	even = gst_buffer_new_and_alloc(BYTES_PER_PIXEL * filter->format.width * (filter->format.height + filter->format.interlace));
+	odd = gst_buffer_new_and_alloc((VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
+	even = gst_buffer_new_and_alloc((VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
 	g_return_if_fail((odd != NULL) && (even != NULL));
 
 	/* draw bytes in output buffers */

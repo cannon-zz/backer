@@ -17,7 +17,8 @@ static gboolean plugin_init(GstPlugin *plugin)
 		gchar *name;
 		GType (*type)(void);
 	} *element, elements[] = {
-		{"bkr_frame", bkr_frame_get_type},
+		{"bkr_framedec", bkr_framedec_get_type},
+		{"bkr_frameenc", bkr_frameenc_get_type},
 		{"bkr_video_out", bkr_video_out_get_type},
 		{NULL, 0},
 	};

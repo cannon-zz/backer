@@ -50,19 +50,17 @@ static const unsigned char  sector_key[] = {
  * ========================================================================
  */
 
-#if 0
 /*
  * Counts the number of bytes in the frame that match the key sequence.
  */
 
-static unsigned int bkr_frame_correlate(struct ring ring, int key_interval, int key_length, const unsigned char *key)
+static guint correlate(const guchar *data, gint key_interval, gint key_length, const guchar *key)
 {
-	int  i;
-	unsigned int  count = 0;
+	guint count = 0;
 
-	for(i = key_length; i > 0; i--) {
-		count += ring.buffer[ring.tail] == *(key++);
-		ring_offset_inc(&ring, ring.tail, key_interval);
+	while(key_length--) {
+		count += *data == *(key++);
+		data += key_interval;
 	}
 
 	return(count);
@@ -70,14 +68,14 @@ static unsigned int bkr_frame_correlate(struct ring ring, int key_interval, int 
 
 
 /*
- * Uses bkr_frame_correlate() to scan the data stream until a sector key
- * sequence is found.  On success, the buffer tail is left pointing to the
- * first byte following the sector leader and the return value is
- * non-negative; otherwise the return value is non-positive (0 == EOF on
- * stream source).
+ * Uses correlate() to scan the data stream until a sector key sequence is
+ * found.  On success, the buffer tail is left pointing to the first byte
+ * following the sector leader and the return value is non-negative;
+ * otherwise the return value is non-positive (0 == EOF on stream source).
  */
 
-static int bkr_frame_find_field(struct bkr_stream_t *stream, const unsigned char *key)
+#if 0
+static int find_field(struct bkr_stream_t *stream, const unsigned char *key)
 {
 	struct bkr_stream_t  *source = stream->source;
 	bkr_frame_private_t  *private = stream->private;
@@ -92,7 +90,7 @@ static int bkr_frame_find_field(struct bkr_stream_t *stream, const unsigned char
 			return(-EAGAIN);
 
 		ring_lock(source->ring);
-		result = bkr_frame_correlate(*source->ring, stream->fmt.key_interval, stream->fmt.key_length, key);
+		result = correlate(*source->ring, stream->fmt.key_interval, stream->fmt.key_length, key);
 		if(result >= threshold) {
 			ring_unlock(source->ring);
 			break;
@@ -119,28 +117,27 @@ static int bkr_frame_find_field(struct bkr_stream_t *stream, const unsigned char
 
 	return(1);
 }
+#endif
 
 
 /*
- * Strips the sector data out of a video field in the source ring buffer
- * and places it in the stream ring buffer.
+ * Strips the sector data from a video field in the source buffer and
+ * places it in the destination buffer.
  */
 
-static void bkr_frame_decode_field(struct bkr_stream_t *stream)
+static void decode_field(struct bkr_frame_format fmt, guchar *dst, const guchar *src)
 {
-	struct bkr_stream_t  *source = stream->source;
 	int  i;
 
-	ring_lock(source->ring);
-	for(i = 1; i < stream->fmt.key_length; i++) {
-		_ring_drain(source->ring, 1);
-		memcpy_to_ring_from_ring(stream->ring, source->ring, stream->fmt.key_interval - 1);
+	for(i = 1; i < fmt.key_length; i++) {
+		src++;
+		memcpy(dst, src, fmt.key_interval - 1);
+		dst += fmt.key_interval - 1;
+		src += fmt.key_interval - 1;
 	}
-	_ring_drain(source->ring, 1);
-	memcpy_to_ring_from_ring(stream->ring, source->ring, stream->fmt.active_size % stream->fmt.key_interval - 1);
-	ring_unlock(source->ring);
+	src++;
+	memcpy(dst, src, fmt.active_size % fmt.key_interval - 1);
 }
-#endif
 
 
 /*
@@ -150,7 +147,7 @@ static void bkr_frame_decode_field(struct bkr_stream_t *stream)
 
 static void encode_field(struct bkr_frame_format fmt, guchar *dst, const guchar *src, const guchar *key, gint field_number)
 {
-	int  i;
+	gint i;
 
 	memset(dst, BKR_LEADER, fmt.leader);
 	dst += fmt.leader;
@@ -214,37 +211,23 @@ static struct bkr_frame_format format(enum bkr_vidmode v, enum bkr_density d, en
 }
 
 
-
 /*
  * ============================================================================
  *
- *                           GStreamer Support Code
+ *                       GStreamer Encoder Support Code
  *
  * ============================================================================
  */
 
 /*
- * Source pad link function.
- */
-
-static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
-{
-	BkrFrame *filter = BKR_FRAME(gst_pad_get_parent(pad));
-
-	/* FIXME:  wtf am I supposed to do? */
-	return GST_PAD_LINK_OK;
-}
-
-
-/*
- * Pad chain function.  See
+ * Chain function.  See
  *
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
-static void chain(GstPad *pad, GstData *in)
+static void enc_chain(GstPad *pad, GstData *in)
 {
-	BkrFrame *filter = BKR_FRAME(GST_OBJECT_PARENT(pad));
+	BkrFrameEnc *filter = BKR_FRAMEENC(GST_OBJECT_PARENT(pad));
 	GstBuffer *inbuf = GST_BUFFER(in);
 	GstBuffer *outbuf = gst_buffer_new_and_alloc(2 * filter->format.field_size + filter->format.interlace);
 	guchar *oddsrc, *evensrc;
@@ -274,13 +257,13 @@ static void chain(GstPad *pad, GstData *in)
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
  */
 
-static GstElementClass *parent_class = NULL;
+static GstElementClass *enc_parent_class = NULL;
 
-static void class_init(BkrFrameClass *class)
+static void enc_class_init(BkrFrameEncClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
-	parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
+	enc_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
 
 
@@ -290,13 +273,13 @@ static void class_init(BkrFrameClass *class)
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
  */
 
-static void base_init(BkrFrameClass *class)
+static void enc_base_init(BkrFrameEncClass *class)
 {
 	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
 	static GstElementDetails plugin_details = {
-		"Backer Frame",
+		"Backer Frame Encoder",
 		"Filter",
-		"Backer framing codec",
+		"Backer frame synchronization encoder",
 		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
 	};
 
@@ -310,14 +293,14 @@ static void base_init(BkrFrameClass *class)
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
  */
 
-static void instance_init(BkrFrame *filter)
+static void enc_instance_init(BkrFrameEnc *filter)
 {
 	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
 
 	/* input, "sink", pad.  No link function because pad can accept
 	 * anything as input */
 	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
-	gst_pad_set_chain_function(filter->sinkpad, chain);
+	gst_pad_set_chain_function(filter->sinkpad, enc_chain);
 	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
 
 	/* output, "source", pad.  No link function because pad sends a
@@ -334,22 +317,132 @@ static void instance_init(BkrFrame *filter)
 
 
 /*
- * bkr_frame_get_type().
+ * bkr_frameenc_get_type().
  */
 
-GType bkr_frame_get_type(void)
+GType bkr_frameenc_get_type(void)
 {
 	static GType type = 0;
 
 	if (!type) {
 		static const GTypeInfo info = {
-			.class_size = sizeof(BkrFrameClass),
-			.class_init = (GClassInitFunc) class_init,
-			.base_init = (GBaseInitFunc) base_init,
-			.instance_size = sizeof(BkrFrame),
-			.instance_init = (GInstanceInitFunc) instance_init,
+			.class_size = sizeof(BkrFrameEncClass),
+			.class_init = (GClassInitFunc) enc_class_init,
+			.base_init = (GBaseInitFunc) enc_base_init,
+			.instance_size = sizeof(BkrFrameEnc),
+			.instance_init = (GInstanceInitFunc) enc_instance_init,
 		};
-		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrFrame", &info, 0);
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrFrameEnc", &info, 0);
 	}
 	return type;
 }
+
+
+/*
+ * ============================================================================
+ *
+ *                       GStreamer Decoder Support Code
+ *
+ * ============================================================================
+ */
+
+/*
+ * Chain function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
+ */
+
+static void dec_chain(GstPad *pad, GstData *in)
+{
+	BkrFrameDec *filter = BKR_FRAMEDEC(GST_OBJECT_PARENT(pad));
+
+	gst_buffer_unref(in);
+}
+
+
+/*
+ * Class init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
+ */
+
+static GstElementClass *dec_parent_class = NULL;
+
+static void dec_class_init(BkrFrameDecClass *class)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	dec_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
+}
+
+
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+static void dec_base_init(BkrFrameDecClass *class)
+{
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	static GstElementDetails plugin_details = {
+		"Backer Frame Decoder",
+		"Filter",
+		"Backer frame synchronization decoder",
+		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
+	};
+
+	gst_element_class_set_details(element_class, &plugin_details);
+}
+
+
+/*
+ * Instance init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
+ */
+
+static void dec_instance_init(BkrFrameDec *filter)
+{
+	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
+
+	/* input, "sink", pad.  No link function because pad can accept
+	 * anything as input */
+	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
+	gst_pad_set_chain_function(filter->sinkpad, dec_chain);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
+
+	/* output, "source", pad.  No link function because pad sends a
+	 * typeless byte stream */
+	filter->srcpad = gst_pad_new("src", GST_PAD_SRC);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
+
+	/* internal state */
+	filter->vidmode = DEFAULT_VIDMODE;
+	filter->density = DEFAULT_DENSITY;
+	filter->fmt = DEFAULT_FORMAT;
+	filter->format = format(filter->vidmode, filter->density, filter->fmt);
+}
+
+
+/*
+ * bkr_framedec_get_type().
+ */
+
+GType bkr_framedec_get_type(void)
+{
+	static GType type = 0;
+
+	if (!type) {
+		static const GTypeInfo info = {
+			.class_size = sizeof(BkrFrameDecClass),
+			.class_init = (GClassInitFunc) dec_class_init,
+			.base_init = (GBaseInitFunc) dec_base_init,
+			.instance_size = sizeof(BkrFrameDec),
+			.instance_init = (GInstanceInitFunc) dec_instance_init,
+		};
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrFrameDec", &info, 0);
+	}
+	return type;
+}
+

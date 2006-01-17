@@ -242,7 +242,7 @@ static void enc_chain(GstPad *pad, GstData *in)
 {
 	BkrFrameEnc *filter = BKR_FRAMEENC(GST_OBJECT_PARENT(pad));
 	GstBuffer *inbuf = GST_BUFFER(in);
-	GstBuffer *outbuf = gst_buffer_new_and_alloc(filter->format.field_size + (filter->odd_field ? filter->format.interlace : 0));
+	GstBuffer *outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.field_size + (filter->odd_field ? filter->format.interlace : 0));
 
 	g_return_if_fail((inbuf != NULL) && (outbuf != NULL));
 
@@ -366,7 +366,7 @@ static void dec_chain(GstPad *pad, GstData *in)
 	gst_adapter_push(filter->adapter, GST_BUFFER(in));
 
 	while(data = find_field(filter->format, filter->adapter, sector_key)) {
-		outbuf = gst_buffer_new_and_alloc(filter->format.active_size - filter->format.key_length);
+		outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.active_size - filter->format.key_length);
 		decode_field(filter->format, GST_BUFFER_DATA(outbuf), data);
 		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
 		gst_adapter_flush(filter->adapter, filter->format.active_size);

@@ -1,9 +1,29 @@
 /*
+ * Driver for Danmere's Backer 16/32 video tape backup cards.
+ *
+ *                             Formating Layer
+ *
+ * Copyright (C) 2000,2001,2002  Kipp C. Cannon
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include <string.h>
 
 #include <gst/gst.h>
+#include <gst/bytestream/adapter.h>
 #include <backer.h>
 #include <bkr_frame.h>
 
@@ -34,7 +54,7 @@
  * ========================================================================
  */
 
-static const guint8  sector_key[] = {
+static const guint8 sector_key[] = {
 	0xd4, 0x7c, 0xb1, 0x93, 0x66, 0x65, 0x6a, 0xb5,
 	0x63, 0xe4, 0x56, 0x59, 0x6c, 0xbe, 0xc5, 0xca,
 	0xf4, 0x9c, 0xa3, 0xac, 0x6d, 0xb3, 0xd2, 0x7e,
@@ -75,9 +95,9 @@ static guint correlate(const guint8 *data, gint key_interval, gint key_length, c
 
 static const guint8 *find_field(struct bkr_frame_format fmt, GstAdapter *adapter, const guint8 *key)
 {
-	gint  threshold = fmt.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
+	gint threshold = fmt.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
 	const guint8 *data;
-	gint  corr;
+	gint corr;
 
 	while(1) {
 		if(!(data = gst_adapter_peek(adapter, fmt.active_size)))
@@ -87,26 +107,26 @@ static const guint8 *find_field(struct bkr_frame_format fmt, GstAdapter *adapter
 		if(corr >= threshold)
 			break;
 #if 0
-		if(corr > private->best_nonkey)
-			private->best_nonkey = corr;
+		if(corr > filter->best_nonkey)
+			filter->best_nonkey = corr;
 #endif
 		gst_adapter_flush(adapter, 1);
 	}
 
 #if 0
-	if(corr < private->worst_key)
-		private->worst_key = corr;
+	if(corr < filter->worst_key)
+		filter->worst_key = corr;
 
-	if(private->last_field_offset >= 0) {
-		corr = ring_offset_sub(source->ring, source->ring->tail, private->last_field_offset);
-		if(corr < private->smallest_field)
-			private->smallest_field = corr;
-		else if(corr > private->largest_field)
-			private->largest_field = corr;
+	if(filter->last_field_offset >= 0) {
+		corr = ring_offset_sub(source->ring, source->ring->tail, filter->last_field_offset);
+		if(corr < filter->smallest_field)
+			filter->smallest_field = corr;
+		else if(corr > filter->largest_field)
+			filter->largest_field = corr;
 		if(corr*4 > stream->source->capacity*3)
-			private->frame_warnings++;
+			filter->frame_warnings++;
 	}
-	private->last_field_offset = source->ring->tail;
+	filter->last_field_offset = source->ring->tail;
 #endif
 
 	return(data);
@@ -120,7 +140,7 @@ static const guint8 *find_field(struct bkr_frame_format fmt, GstAdapter *adapter
 
 static void decode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 *src)
 {
-	int  i;
+	int i;
 
 	for(i = 1; i < fmt.key_length; i++) {
 		src++;
@@ -417,6 +437,15 @@ static void dec_instance_init(BkrFrameDec *filter)
 	filter->fmt = DEFAULT_FORMAT;
 	filter->format = format(filter->vidmode, filter->density, filter->fmt);
 	filter->adapter = gst_adapter_new();
+
+#if 0
+	filter->worst_key = filter->format.key_length;
+	filter->best_nonkey = 0;
+	filter->frame_warnings = 0;
+	filter->last_field_offset = -1;
+	filter->smallest_field = INT_MAX;
+	filter->largest_field = 0;
+#endif
 }
 
 

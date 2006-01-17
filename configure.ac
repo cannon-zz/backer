@@ -39,10 +39,15 @@ AM_CONDITIONAL([COND_GTK], [test "${HAVE_GTK}" == "yes"])
 # Check for GStreamer 0.8
 AC_SUBST([GST_VERSION], [0.8])
 PKG_CHECK_MODULES([GST], [gstreamer-${GST_VERSION}], [HAVE_GST=yes], [HAVE_GST=no])
+# FIXME: figure out to get pkg-config to give us the flags for
+# libgstbytestream.so
+GST_BYTESTREAM_LIBS="-lgstbytestream"
+GST_BYTESTREAM_LDFLAGS="-L/usr/lib/gstreamer-${GST_VERSION} -Wl,--rpath -Wl,/usr/lib/gstreamer-${GST_VERSION}"
+GST_LIBS="${GST_LIBS} ${GST_BYTESTREAM_LIBS}"
 AC_SUBST([GST_CFLAGS])
 AC_SUBST([GST_LIBS])
 AC_SUBST([plugindir], [${libdir}/gstreamer-${GST_VERSION}])
-AC_SUBST([GST_PLUGIN_LDFLAGS], ["-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*"])
+AC_SUBST([GST_LDFLAGS], ["-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).* ${GST_BYTESTREAM_LDFLAGS}"])
 
 
 # Set driver configuration

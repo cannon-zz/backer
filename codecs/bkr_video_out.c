@@ -136,7 +136,7 @@ static GstCaps *src_getcaps(GstPad *pad)
 	GstCaps *caps = gst_caps_new_simple(
 		"video/x-raw-rgb",
 		"width", G_TYPE_INT, filter->format.width,
-		"height", G_TYPE_INT, filter->format.height,
+		"height", G_TYPE_INT, filter->format.height + filter->format.interlace,
 		"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
 		"bpp", G_TYPE_INT, VIDEO_BPP,
 		"depth", G_TYPE_INT, 24,
@@ -181,7 +181,7 @@ static void chain(GstPad *pad, GstData *in)
 	if(outlines > inlines)
 		outlines = inlines;
 
-	outbuf = gst_buffer_new_and_alloc((VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
+	outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, (VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
 	g_return_if_fail(outbuf != NULL);
 
 	draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(outbuf), filter->format.bytes_per_line, outlines, GST_BUFFER_DATA(inbuf));

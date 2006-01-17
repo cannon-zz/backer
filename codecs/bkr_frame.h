@@ -5,6 +5,7 @@
 #define __BKR_FRAME_H__
 
 #include <gst/gst.h>
+#include <gst/bytestream/adapter.h>
 #include <backer.h>
 
 G_BEGIN_DECLS
@@ -50,6 +51,7 @@ struct _BkrFrameEnc {
 	enum bkr_vidmode vidmode;
 	enum bkr_density density;
 	enum bkr_format fmt;
+	gint odd_field;
 	struct bkr_frame_format format;
 };
 
@@ -77,6 +79,7 @@ struct _BkrFrameDec {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
+	GstAdapter *adapter;
 
 	enum bkr_vidmode vidmode;
 	enum bkr_density density;

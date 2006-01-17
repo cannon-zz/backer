@@ -43,6 +43,7 @@ struct _BkrVideoOut {
 
 	enum bkr_vidmode vidmode;
 	enum bkr_density density;
+	gint odd_field;
 	struct bkr_video_out_format format;
 };
 

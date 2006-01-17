@@ -34,7 +34,7 @@
  * ========================================================================
  */
 
-static const unsigned char  sector_key[] = {
+static const guint8  sector_key[] = {
 	0xd4, 0x7c, 0xb1, 0x93, 0x66, 0x65, 0x6a, 0xb5,
 	0x63, 0xe4, 0x56, 0x59, 0x6c, 0xbe, 0xc5, 0xca,
 	0xf4, 0x9c, 0xa3, 0xac, 0x6d, 0xb3, 0xd2, 0x7e,
@@ -54,7 +54,7 @@ static const unsigned char  sector_key[] = {
  * Counts the number of bytes in the frame that match the key sequence.
  */
 
-static guint correlate(const guchar *data, gint key_interval, gint key_length, const guchar *key)
+static guint correlate(const guint8 *data, gint key_interval, gint key_length, const guint8 *key)
 {
 	guint count = 0;
 
@@ -68,56 +68,49 @@ static guint correlate(const guchar *data, gint key_interval, gint key_length, c
 
 
 /*
- * Uses correlate() to scan the data stream until a sector key sequence is
- * found.  On success, the buffer tail is left pointing to the first byte
- * following the sector leader and the return value is non-negative;
- * otherwise the return value is non-positive (0 == EOF on stream source).
+ * Uses correlate() to scan a buffer until a sector key sequence is found.
+ * On success, the return value is a pointer to the first byte following
+ * the sector leader; otherwise the return value is NULL.
  */
 
-#if 0
-static int find_field(struct bkr_stream_t *stream, const unsigned char *key)
+static const guint8 *find_field(struct bkr_frame_format fmt, GstAdapter *adapter, const guint8 *key)
 {
-	struct bkr_stream_t  *source = stream->source;
-	bkr_frame_private_t  *private = stream->private;
-	int  threshold = stream->fmt.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
-	int  result;
+	gint  threshold = fmt.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
+	const guint8 *data;
+	gint  corr;
 
 	while(1) {
-		result = source->ops.read(source);
-		if(result <= 0)
-			return(result);
-		if(result < stream->fmt.active_size)
-			return(-EAGAIN);
+		if(!(data = gst_adapter_peek(adapter, fmt.active_size)))
+			return NULL;
 
-		ring_lock(source->ring);
-		result = correlate(*source->ring, stream->fmt.key_interval, stream->fmt.key_length, key);
-		if(result >= threshold) {
-			ring_unlock(source->ring);
+		corr = correlate(data, fmt.key_interval, fmt.key_length, key);
+		if(corr >= threshold)
 			break;
-		}
-		if(result > private->best_nonkey)
-			private->best_nonkey = result;
-		_ring_drain(source->ring, 1);
-		ring_unlock(source->ring);
+#if 0
+		if(corr > private->best_nonkey)
+			private->best_nonkey = corr;
+#endif
+		gst_adapter_flush(adapter, 1);
 	}
 
-	if(result < private->worst_key)
-		private->worst_key = result;
+#if 0
+	if(corr < private->worst_key)
+		private->worst_key = corr;
 
 	if(private->last_field_offset >= 0) {
-		result = ring_offset_sub(source->ring, source->ring->tail, private->last_field_offset);
-		if(result < private->smallest_field)
-			private->smallest_field = result;
-		else if(result > private->largest_field)
-			private->largest_field = result;
-		if(result*4 > stream->source->capacity*3)
+		corr = ring_offset_sub(source->ring, source->ring->tail, private->last_field_offset);
+		if(corr < private->smallest_field)
+			private->smallest_field = corr;
+		else if(corr > private->largest_field)
+			private->largest_field = corr;
+		if(corr*4 > stream->source->capacity*3)
 			private->frame_warnings++;
 	}
 	private->last_field_offset = source->ring->tail;
-
-	return(1);
-}
 #endif
+
+	return(data);
+}
 
 
 /*
@@ -125,7 +118,7 @@ static int find_field(struct bkr_stream_t *stream, const unsigned char *key)
  * places it in the destination buffer.
  */
 
-static void decode_field(struct bkr_frame_format fmt, guchar *dst, const guchar *src)
+static void decode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 *src)
 {
 	int  i;
 
@@ -145,7 +138,7 @@ static void decode_field(struct bkr_frame_format fmt, guchar *dst, const guchar 
  * buffer, adding leader trailer and sector key bytes as required.
  */
 
-static void encode_field(struct bkr_frame_format fmt, guchar *dst, const guchar *src, const guchar *key, gint field_number)
+static void encode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 *src, const guint8 *key, gint field_number)
 {
 	gint i;
 
@@ -229,25 +222,16 @@ static void enc_chain(GstPad *pad, GstData *in)
 {
 	BkrFrameEnc *filter = BKR_FRAMEENC(GST_OBJECT_PARENT(pad));
 	GstBuffer *inbuf = GST_BUFFER(in);
-	GstBuffer *outbuf = gst_buffer_new_and_alloc(2 * filter->format.field_size + filter->format.interlace);
-	guchar *oddsrc, *evensrc;
-	guchar *odddst, *evendst;
+	GstBuffer *outbuf = gst_buffer_new_and_alloc(filter->format.field_size + (filter->odd_field ? filter->format.interlace : 0));
 
 	g_return_if_fail((inbuf != NULL) && (outbuf != NULL));
 
-	oddsrc = GST_BUFFER_DATA(inbuf);
-	evensrc = oddsrc + filter->format.active_size;
-
-	odddst = GST_BUFFER_DATA(outbuf);
-	evendst = odddst + filter->format.field_size + filter->format.interlace;
-
-	if(GST_BUFFER_SIZE(inbuf) >= 2 * filter->format.active_size) {
-		encode_field(filter->format, odddst, oddsrc, sector_key, 1);	/* Odd field */
-		encode_field(filter->format, evendst, evensrc, sector_key, 2);	/* Even field */
-	}
+	if(GST_BUFFER_SIZE(inbuf) >= filter->format.active_size - filter->format.key_length)
+		encode_field(filter->format, GST_BUFFER_DATA(outbuf), GST_BUFFER_DATA(inbuf), sector_key, filter->odd_field);
 	gst_buffer_unref(in);
 
 	gst_pad_push(filter->srcpad, GST_DATA(outbuf));
+	filter->odd_field ^= 1;
 }
 
 
@@ -312,6 +296,7 @@ static void enc_instance_init(BkrFrameEnc *filter)
 	filter->vidmode = DEFAULT_VIDMODE;
 	filter->density = DEFAULT_DENSITY;
 	filter->fmt = DEFAULT_FORMAT;
+	filter->odd_field = 1;	/* first video field is odd */
 	filter->format = format(filter->vidmode, filter->density, filter->fmt);
 }
 
@@ -355,8 +340,17 @@ GType bkr_frameenc_get_type(void)
 static void dec_chain(GstPad *pad, GstData *in)
 {
 	BkrFrameDec *filter = BKR_FRAMEDEC(GST_OBJECT_PARENT(pad));
+	GstBuffer *outbuf;
+	const guint8 *data;
 
-	gst_buffer_unref(in);
+	gst_adapter_push(filter->adapter, GST_BUFFER(in));
+
+	while(data = find_field(filter->format, filter->adapter, sector_key)) {
+		outbuf = gst_buffer_new_and_alloc(filter->format.active_size - filter->format.key_length);
+		decode_field(filter->format, GST_BUFFER_DATA(outbuf), data);
+		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
+		gst_adapter_flush(filter->adapter, filter->format.active_size);
+	}
 }
 
 
@@ -422,6 +416,7 @@ static void dec_instance_init(BkrFrameDec *filter)
 	filter->density = DEFAULT_DENSITY;
 	filter->fmt = DEFAULT_FORMAT;
 	filter->format = format(filter->vidmode, filter->density, filter->fmt);
+	filter->adapter = gst_adapter_new();
 }
 
 

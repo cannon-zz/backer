@@ -248,7 +248,7 @@ static void enc_chain(GstPad *pad, GstData *in)
 
 	if(GST_BUFFER_SIZE(inbuf) >= filter->format.active_size - filter->format.key_length)
 		encode_field(filter->format, GST_BUFFER_DATA(outbuf), GST_BUFFER_DATA(inbuf), sector_key, filter->odd_field);
-	gst_buffer_unref(in);
+	gst_data_unref(in);
 
 	gst_pad_push(filter->srcpad, GST_DATA(outbuf));
 	filter->odd_field ^= 1;

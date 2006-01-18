@@ -185,7 +185,7 @@ static void chain(GstPad *pad, GstData *in)
 	g_return_if_fail(outbuf != NULL);
 
 	draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(outbuf), filter->format.bytes_per_line, outlines, GST_BUFFER_DATA(inbuf));
-	gst_buffer_unref(in);
+	gst_data_unref(in);
 
 	gst_pad_push(filter->srcpad, GST_DATA(outbuf));
 	filter->odd_field ^= 1;

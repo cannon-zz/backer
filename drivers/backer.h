@@ -225,30 +225,22 @@ typedef struct {
 	unsigned int  field_size;       /* bytes in an even video field */
 	unsigned int  interlace;        /* difference between odd/even fields */
 	unsigned int  frame_size;       /* bytes in a full video frame */
-	unsigned int  leader;           /* see diagram above */
-	unsigned int  trailer;          /* see diagram above */
-	unsigned int  active_size;      /* see diagram above */
-	unsigned int  key_interval;     /* key byte spacing */
-	unsigned int  key_length;       /* number of key bytes */
 	unsigned int  modulation_pad;   /* modulation overhead */
-	unsigned int  interleave;       /* block interleave */
-	unsigned int  parity_size;      /* see diagram above */
-	unsigned int  data_size;        /* see diagram above */
 } bkr_format_info_t;
 
 #define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t [])                        \
-{ {  4, 1012,  4, 2028,  40, 32,  940,  44, 22, 102, 12,  96,  720 },     /* nle */ \
-  {  4, 1012,  4, 2028,   0,  0, 2028,   0,  0,   0,  1,   0, 2028 },     /* nlr */ \
-  {  4, 1012,  4, 2028,  32, 28,  952,  45, 22,   0, 10, 100,  830 },     /* nls */ \
-  {  4, 1220,  0, 2440,  48, 36, 1136,  40, 29, 123, 12,  96,  888 },     /* ple */ \
-  {  4, 1220,  0, 2440,   0,  0, 2440,   0,  0,   0,  1,   0, 2440 },     /* plr */ \
-  {  4, 1220,  0, 2440,  40, 36, 1144,  49, 24,   0, 14, 140,  980 },     /* pls */ \
-  { 10, 2530, 10, 5070, 100, 70, 2360,  84, 29, 259, 28, 224, 1848 },     /* nhe */ \
-  { 10, 2530, 10, 5070,   0,  0, 5070,   0,  0,   0,  1,   0, 5070 },     /* nhr */ \
-  { 10, 2530, 10, 5070,  80, 70, 2380, 125, 20,   0, 20, 200, 2160 },     /* nhs */ \
-  { 10, 3050,  0, 6100, 120, 90, 2840,  91, 32, 312, 26, 208, 2288 },     /* phe */ \
-  { 10, 3050,  0, 6100,   0,  0, 6100,   0,  0,   0,  1,   0, 6100 },     /* phr */ \
-  { 10, 3050,  0, 6100, 100, 90, 2860, 136, 22,   0, 22, 220, 2618 } }    /* phs */
+{ {  4, 1012,  4, 2028, 102 },     /* nle */ \
+  {  4, 1012,  4, 2028,   0 },     /* nlr */ \
+  {  4, 1012,  4, 2028,   0 },     /* nls */ \
+  {  4, 1220,  0, 2440, 123 },     /* ple */ \
+  {  4, 1220,  0, 2440,   0 },     /* plr */ \
+  {  4, 1220,  0, 2440,   0 },     /* pls */ \
+  { 10, 2530, 10, 5070, 259 },     /* nhe */ \
+  { 10, 2530, 10, 5070,   0 },     /* nhr */ \
+  { 10, 2530, 10, 5070,   0 },     /* nhs */ \
+  { 10, 3050,  0, 6100, 312 },     /* phe */ \
+  { 10, 3050,  0, 6100,   0 },     /* phr */ \
+  { 10, 3050,  0, 6100,   0 } }    /* phs */
 
 #define BKR_NUM_FORMATS (sizeof(BKR_FORMAT_INFO_INITIALIZER)/sizeof(bkr_format_info_t))
 #define BKR_NUM_FORMAT_PARMS (sizeof(bkr_format_info_t)/sizeof(unsigned int))
@@ -269,7 +261,7 @@ enum {
 
 
 /*
- * bkr_sectors_per_second()
+ * bkr_fields_per_second()
  *
  * The number of sectors generated each second computed from the given
  * mode.

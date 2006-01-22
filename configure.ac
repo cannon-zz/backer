@@ -12,6 +12,7 @@ AC_CONFIG_FILES([ \
 	docs/bkrencode.8 \
 	docs/bkrmonitor.8 \
 	docs/Makefile \
+	drivers/Makefile \
 	utilities/Makefile \
 ])
 

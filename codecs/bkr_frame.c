@@ -238,17 +238,35 @@ static struct bkr_frame_format format(enum bkr_vidmode v, enum bkr_density d, en
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
-static void enc_chain(GstPad *pad, GstData *in)
+static void enc_chain(GstPad *pad, GstData *data)
 {
 	BkrFrameEnc *filter = BKR_FRAMEENC(GST_OBJECT_PARENT(pad));
-	GstBuffer *inbuf = GST_BUFFER(in);
+	GstBuffer *inbuf = GST_BUFFER(data);
 	GstBuffer *outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.field_size + (filter->odd_field ? filter->format.interlace : 0));
 
 	g_return_if_fail((inbuf != NULL) && (outbuf != NULL));
 
+	if(GST_IS_EVENT(data)) {
+		GstEvent *event = GST_EVENT(data);
+		switch(GST_EVENT_TYPE(event)) {
+		case GST_EVENT_EOS:
+			/* FIXME: add an extra field if needed to finish the
+			 * current frame */
+			break;
+#if 0
+		case GST_EVENT_NEWSEGMENT:
+			break;
+#endif
+		default:
+			break;
+		}
+		gst_pad_event_default(pad, event);
+		return;
+	}
+
 	if(GST_BUFFER_SIZE(inbuf) >= filter->format.active_size - filter->format.key_length)
 		encode_field(filter->format, GST_BUFFER_DATA(outbuf), GST_BUFFER_DATA(inbuf), sector_key, filter->odd_field);
-	gst_data_unref(in);
+	gst_data_unref(data);
 
 	gst_pad_push(filter->srcpad, GST_DATA(outbuf));
 	filter->odd_field ^= 1;

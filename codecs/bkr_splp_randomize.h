@@ -18,11 +18,11 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _BKR_SECTOR_RANDOMIZE_H
-#define _BKR_SECTOR_RANDOMIZE_H
+#ifndef __BKR_SECTOR_RANDOMIZE_H__
+#define __BKR_SECTOR_RANDOMIZE_H__
 
-#include <bkr_bytes.h>
+#include <gst/gst.h>
 
-void bkr_splp_sector_randomize(void *, int, u_int32_t);
+void bkr_splp_sector_randomize(void *, gint, guint32);
 
-#endif /* _BKR_SECTOR_RANDOMIZE_h */
+#endif /* __BKR_SECTOR_RANDOMIZE_H__ */

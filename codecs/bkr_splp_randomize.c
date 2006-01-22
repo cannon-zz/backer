@@ -21,8 +21,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <bkr_splp_randomize.h>
+#include <gst/gst.h>
 #include <bkr_bytes.h>
+#include <bkr_splp_randomize.h>
 
 
 /*
@@ -35,11 +36,11 @@
  * Programing.
  */
 
-void bkr_splp_sector_randomize(void *buff, int count, u_int32_t seed)
+void bkr_splp_sector_randomize(void *buff, gint count, guint32 seed)
 {
-	u_int32_t  *location = buff;
-	int  index;
-	u_int32_t  history[4];
+	guint32 *location = buff;
+	gint index;
+	guint32 history[4];
 
 	if(count <= 0)
 		return;

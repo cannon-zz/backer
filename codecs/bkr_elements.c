@@ -4,7 +4,9 @@
 #include <gst/gst.h>
 
 #include <bkr_frame.h>
+#include <bkr_splp.h>
 #include <bkr_video_out.h>
+#include <rs.h>
 
 
 /*
@@ -19,10 +21,16 @@ static gboolean plugin_init(GstPlugin *plugin)
 	} *element, elements[] = {
 		{"bkr_framedec", bkr_framedec_get_type},
 		{"bkr_frameenc", bkr_frameenc_get_type},
+		{"bkr_splpdec", bkr_splpdec_get_type},
+		{"bkr_splpenc", bkr_splpenc_get_type},
 		{"bkr_video_out", bkr_video_out_get_type},
 		{NULL, 0},
 	};
 
+	/* initialize Reed-Solomon coder/decoder */
+	galois_field_init(GF00256);
+
+	/* tell gstreamer about the elements */
 	for(element = elements; element->name; element++)
 		if(!gst_element_register(plugin, element->name, GST_RANK_NONE, element->type()))
 			return FALSE;

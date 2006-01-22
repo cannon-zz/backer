@@ -18,83 +18,103 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _BKR_SPLP_H
-#define _BKR_SPLP_H
+#ifndef __BKR_SPLP_H__
+#define __BKR_SPLP_H__
 
-#include <bkr_stream.h>
-#include <bkr_ring_buffer.h>
+#include <gst/gst.h>
+#include <backer.h>
 #include <rs.h>
 
+G_BEGIN_DECLS
 
 /*
- * ========================================================================
- *
- *                              PARAMETERS
- *
- * ========================================================================
+ * Format information.
+ *	capacity = data_size - sizeof(header)
  */
 
-#define  BOR_LENGTH                5       /* second(s) */
-#define  EOR_LENGTH                1       /* second(s) */
-#define  BKR_SIZEOF_SECTOR_HEADER  4       /* bytes */
-
-
-/*
- * ========================================================================
- *
- *                                 TYPES
- *
- * ========================================================================
- */
+struct bkr_splp_format {
+	gint data_size;
+	gint parity_size;
+	gint capacity;
+	gint interleave;
+};
 
 
 /*
- * Stream state structure.
+ * Encoder
  */
 
-typedef struct {
-	int  bytes_corrected;  /* total bad bytes corrected */
-	int  worst_block;      /* in worst Reed-Solomon block */
-	int  recent_block;     /* in worst recent R-S block */
-	int  bad_sectors;      /* total uncorrectable sectors */
-	int  lost_runs;        /* runs of lost sectors */
-	int  duplicate_runs;   /* runs of duplicated sectors */
-} bkr_errors_t;
+#define BKR_SPLPENC_TYPE		(bkr_splpenc_get_type())
+#define BKR_SPLPENC(obj)		(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_SPLPENC_TYPE, BkrSPLPEnc))
+#define BKR_SPLPENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST((klass), BKR_SPLPENC_TYPE, BkrSPLPEnc))
+#define GST_IS_BKR_SPLPENC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_SPLPENC_TYPE))
+#define GST_IS_BKR_SPLPENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_SPLPENC_TYPE))
 
-#define  BKR_ERRORS_INITIALIZER  ((bkr_errors_t) {	\
-	.bytes_corrected = 0,	\
-	.worst_block = 0,	\
-	.recent_block = 0,	\
-	.bad_sectors = 0,	\
-	.lost_runs = 0,		\
-	.duplicate_runs = 0,	\
-})
+typedef struct _BkrSPLPEncClass BkrSPLPEncClass;
+typedef struct _BkrSPLPEnc BkrSPLPEnc;
 
-typedef struct {
-	int  sector_number;             /* sector (video field) number */
-	int  decoded_number;            /* sector number read from tape */
-	rs_format_t  rs_format;         /* Reed-Solomon format information */
-	size_t  decode_head;            /* top end of current sector */
-	int  not_underrunning;          /* 0 == prev. sector was a duplicate */
-	int  header_is_good;            /* 0 == header is corrupted */
-	bkr_errors_t  errors;           /* error counts */
-} bkr_splp_private_t;
+struct _BkrSPLPEncClass {
+	GstElementClass parent_class;
+};
+
+struct _BkrSPLPEnc {
+	GstElement element;
+
+	GstPad *sinkpad, *srcpad;
+
+	enum bkr_vidmode vidmode;
+	enum bkr_density density;
+	enum bkr_format fmt;
+	struct bkr_splp_format format;
+	rs_format_t rs_format;
+
+	gint sector_number;
+};
+
+GType bkr_splpenc_get_type(void);
 
 
 /*
- * ========================================================================
- *
- *                               FUNCTIONS
- *
- * ========================================================================
+ * Decoder
  */
 
-const struct bkr_stream_ops_t *bkr_splp_codec_init(void);
+#define BKR_SPLPDEC_TYPE		(bkr_splpdec_get_type())
+#define BKR_SPLPDEC(obj)		(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_SPLPDEC_TYPE, BkrSPLPDec))
+#define BKR_SPLPDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST((klass), BKR_SPLPDEC_TYPE, BkrSPLPDec))
+#define GST_IS_BKR_SPLPDEC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_SPLPDEC_TYPE))
+#define GST_IS_BKR_SPLPDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_SPLPDEC_TYPE))
 
+typedef struct _BkrSPLPDecClass BkrSPLPDecClass;
+typedef struct _BkrSPLPDec BkrSPLPDec;
 
-static int bkr_sector_capacity(bkr_format_info_t fmt)
-{
-	return(fmt.data_size - BKR_SIZEOF_SECTOR_HEADER);
-}
+struct _BkrSPLPDecClass {
+	GstElementClass parent_class;
+};
 
-#endif /* _BKR_SPLP_H */
+struct _BkrSPLPDec {
+	GstElement element;
+
+	GstPad *sinkpad, *srcpad;
+
+	enum bkr_vidmode vidmode;
+	enum bkr_density density;
+	enum bkr_format fmt;
+	struct bkr_splp_format format;
+	rs_format_t rs_format;
+
+	gint header_is_good;
+	gint bytes_corrected;
+	gint worst_block;
+	gint recent_block;
+	gint bad_sectors;
+	gint lost_runs;
+	gint duplicate_runs;
+	gint decoded_number;
+	gint not_underrunning;
+	gint sector_number;
+};
+
+GType bkr_splpdec_get_type(void);
+
+G_END_DECLS
+#endif				/* __BKR_SPLP_H__ */

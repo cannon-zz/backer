@@ -28,8 +28,6 @@
 
 #include <backer.h>
 #include <bkr_stream.h>
-#include <bkr_frame.h>
-#include <bkr_splp.h>
 
 
 /*
@@ -64,8 +62,6 @@ struct bkr_unit_t {
 	bkr_format_info_t format_tbl[BKR_NUM_FORMATS];  /* format parms */
 	struct bkr_sysctl_table_t  sysctl;     /* sysctl interface table */
 	int  last_error;                /* Pending error code if != 0 */
-	bkr_frame_private_t  *frame_private;  /* framing codec data */
-	bkr_splp_private_t  *splp_private;  /* SP/LP codec data */
 };                                      /* unit information */
 
 

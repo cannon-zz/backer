@@ -40,11 +40,7 @@
 #include <asm/uaccess.h>
 
 #include <backer.h>
-#include <bkr_ecc2.h>
-#include <bkr_frame.h>
-#include <bkr_gcr.h>
 #include <bkr_ring_buffer.h>
-#include <bkr_splp.h>
 #include <bkr_stream.h>
 #include <bkr_unit.h>
 
@@ -102,11 +98,6 @@ static int ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 LIST_HEAD(bkr_unit_list);               /* list of installed units */
 struct semaphore  bkr_unit_list_lock;   /* unit list locking semaphore */
-
-static const struct bkr_stream_ops_t  *bkr_frame_ops;
-static const struct bkr_stream_ops_t  *bkr_gcr_ops;
-static const struct bkr_stream_ops_t  *bkr_splp_ops;
-static const struct bkr_stream_ops_t  *bkr_ecc2_ops;
 
 /*
  * File operations array.  Order MUST match bkr_direction_t.
@@ -167,10 +158,6 @@ static int __init bkr_init(void)
 		return(result);
 	}
 
-	bkr_frame_ops = bkr_frame_codec_init();
-	bkr_gcr_ops = bkr_gcr_codec_init();
-	bkr_splp_ops = bkr_splp_codec_init();
-	bkr_ecc2_ops = bkr_ecc2_codec_init();
 	init_MUTEX(&bkr_unit_list_lock);
 	request_module("backer_lowlevel");
 	return(0);
@@ -199,19 +186,10 @@ static int bkr_do_status(ctl_table *table, int write, struct file *filp, void __
 	char  message[MAX_PROC_MSG_LENGTH], *pos = message;
 	struct bkr_unit_t  *unit = table->data;
 	struct bkr_stream_t  *stream = unit->stream;
-	bkr_frame_private_t  frame_private = {};
-	bkr_splp_private_t  splp_private = {};
 
 	if(filp->f_pos || !stream) {
 		*len = 0;
 		return(0);
-	}
-
-	if(unit->frame_private)
-		frame_private = *unit->frame_private;
-	if(unit->splp_private) {
-		splp_private = *unit->splp_private;
-		unit->splp_private->errors.recent_block = 0;
 	}
 
 	pos += sprintf(pos, "Current State   : ");
@@ -230,33 +208,9 @@ static int bkr_do_status(ctl_table *table, int write, struct file *filp, void __
 	}
 	pos += sprintf(pos, "\n"
 	                    "Current Mode    : %u\n"
-	                    "I/O Buffer      : %u / %u\n"
-	                    "Sector Number   : %+010d\n"
-	                    "Bad Sectors     : %u\n"
-	                    "Bad Sector Runs : %u\n"
-	                    "Byte Errors     : %u\n"
-	                    "In Worst Block  : %u / %u\n"
-	                    "Recently        : %u\n"
-	                    "Framing Errors  : %u\n"
-	                    "Underflows      : %u\n"
-	                    "Worst Key       : %u / "STRINGIFY(BKR_MAX_KEY_WEIGHT)"\n"
-	                    "Closest Non-Key : %u\n"
-	                    "Smallest Field  : %u\n"
-	                    "Largest Field   : %u\n",
+	                    "I/O Buffer      : %u / %u\n",
 	                    stream->mode,
-		            bkr_stream_bytes(stream), bkr_stream_size(stream),
-	                    splp_private.sector_number,
-	                    splp_private.errors.bad_sectors,
-	                    splp_private.errors.lost_runs,
-	                    splp_private.errors.bytes_corrected,
-	                    splp_private.errors.worst_block, splp_private.rs_format.parity,
-	                    splp_private.errors.recent_block,
-	                    frame_private.frame_warnings,
-	                    splp_private.errors.duplicate_runs,
-	                    frame_private.worst_key,
-	                    frame_private.best_nonkey,
-	                    frame_private.smallest_field,
-	                    frame_private.largest_field);
+		            bkr_stream_bytes(stream), bkr_stream_size(stream));
 
 	if(pos - message < *len)
 		*len = pos - message;
@@ -369,8 +323,6 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *devstream)
 	init_waitqueue_head(&unit->queue);
 	memcpy(unit->format_tbl, BKR_FORMAT_INFO_INITIALIZER, sizeof(BKR_FORMAT_INFO_INITIALIZER));
 	unit->devstream = devstream;
-	unit->frame_private = NULL;
-	unit->splp_private = NULL;
 	unit->stream = NULL;
 	bkr_unit_sysctl_init(unit);
 	unit->sysctl.header = register_sysctl_table(unit->sysctl.dev_dir, 0);
@@ -426,18 +378,10 @@ static int open(struct inode *inode, struct file *filp)
 {
 	/* FIXME: put minor numbers in the same order as the format table */
 	int minor_to_mode[BKR_NUM_FORMATS] =
-		{ BKR_NTSC | BKR_HIGH | BKR_EP,
-		  BKR_NTSC | BKR_HIGH | BKR_RAW,
-		  BKR_NTSC | BKR_HIGH | BKR_SP,
-		  BKR_NTSC | BKR_LOW  | BKR_EP,
-		  BKR_NTSC | BKR_LOW  | BKR_RAW,
-		  BKR_NTSC | BKR_LOW  | BKR_SP,
-		  BKR_PAL  | BKR_HIGH | BKR_EP,
-		  BKR_PAL  | BKR_HIGH | BKR_RAW,
-		  BKR_PAL  | BKR_HIGH | BKR_SP,
-		  BKR_PAL  | BKR_LOW  | BKR_EP,
-		  BKR_PAL  | BKR_LOW  | BKR_RAW,
-		  BKR_PAL  | BKR_LOW  | BKR_SP };
+		{ BKR_NTSC | BKR_HIGH,
+		  BKR_NTSC | BKR_LOW,
+		  BKR_PAL  | BKR_HIGH,
+		  BKR_PAL  | BKR_LOW};
 	struct bkr_unit_t  *unit = NULL;
 	int  number = iminor(inode) / BKR_NUM_FORMATS;
 	int  mode = minor_to_mode[iminor(inode) % BKR_NUM_FORMATS];
@@ -468,22 +412,6 @@ static int open(struct inode *inode, struct file *filp)
 	if(!unit->stream) {
 		bkr_unit_release(unit);
 		return(-EBUSY);
-	}
-
-	/* Construct the CODEC pipeline */
-	if(BKR_CODEC(mode) != BKR_RAW) {
-		unit->stream = bkr_frame_ops->new(unit->stream, mode, &format);
-		unit->frame_private = unit->stream ? unit->stream->private : NULL;
-		if(BKR_CODEC(mode) == BKR_EP)
-			unit->stream = bkr_gcr_ops->new(unit->stream, mode, &format);
-		unit->stream = bkr_splp_ops->new(unit->stream, mode, &format);
-		unit->splp_private = unit->stream ? unit->stream->private : NULL;
-		if(BKR_CODEC(mode) == BKR_EP)
-			unit->stream = bkr_ecc2_ops->new(unit->stream, mode, &format);
-		if(!unit->stream) {
-			bkr_unit_release(unit);
-			return(-ENOMEM);
-		}
 	}
 
 	unit->last_error = 0;
@@ -522,8 +450,6 @@ static int release(struct inode *inode, struct file *filp)
 #endif
 	}
 
-	unit->frame_private = NULL;
-	unit->splp_private = NULL;
 	unit->stream = NULL;
 	bkr_unit_release(unit);
 
@@ -575,7 +501,6 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 {
 	struct bkr_unit_t  *unit = filp->private_data;
 	struct bkr_stream_t  *stream = unit->stream;
-	bkr_splp_private_t  *splp_private = unit->splp_private;
 	void  *p = (void *) argument;
 	union {
 		struct mtop  mtop;
@@ -606,16 +531,11 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 #endif
 			.mt_dsreg = stream->mode,
 			.mt_gstat = GMT_ONLINE(-1L),
-			.mt_erreg = splp_private->errors.bytes_corrected,
+			.mt_erreg = 0,
 			.mt_fileno = 0,
-			.mt_blkno = splp_private->sector_number
+			.mt_blkno = 0
 		};
 		copy_to_user(p, &arg.mtget, sizeof(arg.mtget));
-		return(0);
-
-		case MTIOCPOS:
-		arg.mtpos.mt_blkno = splp_private->sector_number;
-		copy_to_user(p, &arg.mtpos, sizeof(arg.mtpos));
 		return(0);
 
 		default:

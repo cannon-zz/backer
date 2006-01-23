@@ -5,6 +5,7 @@
 #define __BKR_VIDEO_OUT_H__
 
 #include <gst/gst.h>
+#include <gst/bytestream/adapter.h>
 #include <backer.h>
 
 G_BEGIN_DECLS
@@ -40,6 +41,7 @@ struct _BkrVideoOut {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
+	GstAdapter *adapter;
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;

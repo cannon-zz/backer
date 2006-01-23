@@ -2,6 +2,7 @@
  */
 
 #include <gst/gst.h>
+#include <gst/bytestream/adapter.h>
 #include <backer.h>
 #include <bkr_elements.h>
 #include <bkr_video_out.h>
@@ -158,7 +159,6 @@ static GstCaps *src_getcaps(GstPad *pad)
 		"video/x-raw-rgb",
 		"width", G_TYPE_INT, filter->format.width,
 		"height", G_TYPE_INT, filter->format.height + filter->format.interlace,
-		"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
 		"bpp", G_TYPE_INT, VIDEO_BPP,
 		"depth", G_TYPE_INT, 24,
 		"framerate", G_TYPE_DOUBLE, (double) 60.0,
@@ -188,30 +188,56 @@ static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
-static void chain(GstPad *pad, GstData *in)
+static void chain(GstPad *pad, GstData *data)
 {
 	BkrVideoOut *filter = BKR_VIDEO_OUT(GST_OBJECT_PARENT(pad));
-	GstBuffer *inbuf = GST_BUFFER(in);
+	const guint8 *inbuf;
 	GstBuffer *outbuf;
-	gint inlines;
-	gint outlines = filter->format.height + (filter->odd_field ? filter->format.interlace : 0);
+	gint lines;
 
-	g_return_if_fail(inbuf != NULL);
 	/* check that element properties are set */
 	g_return_if_fail(filter->format.pixel_func != NULL);
 
-	inlines = GST_BUFFER_SIZE(inbuf) / filter->format.bytes_per_line;
-	if(outlines > inlines)
-		outlines = inlines;
+	/* add input data to adapter */
+	gst_adapter_push(filter->adapter, GST_BUFFER(data));
 
-	outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, (VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
-	g_return_if_fail(outbuf != NULL);
+	/* try to extract one video field's worth */
+	while(1) {
+		lines = filter->format.height + (filter->odd_field ? filter->format.interlace : 0);
+		inbuf = gst_adapter_peek(filter->adapter, lines * filter->format.bytes_per_line);
+		if(!inbuf)
+			return;
 
-	draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(outbuf), filter->format.bytes_per_line, outlines, GST_BUFFER_DATA(inbuf));
-	gst_data_unref(in);
+		/* draw video image */
+		outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, (VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
+		g_return_if_fail(outbuf != NULL);
 
-	gst_pad_push(filter->srcpad, GST_DATA(outbuf));
-	filter->odd_field ^= 1;
+		draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(outbuf), filter->format.bytes_per_line, lines, inbuf);
+
+		/* send picture */
+		gst_adapter_flush(filter->adapter, lines * filter->format.bytes_per_line);
+		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
+		filter->odd_field ^= 1;
+	}
+}
+
+
+/*
+ * Parent class.
+ */
+
+static GstElementClass *parent_class = NULL;
+
+
+/*
+ * Instance finalize function.  See ???
+ */
+
+static void finalize(GObject *object)
+{
+	g_object_unref(BKR_VIDEO_OUT(object)->adapter);
+
+	G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
 
@@ -221,8 +247,6 @@ static void chain(GstPad *pad, GstData *in)
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
  */
 
-static GstElementClass *parent_class = NULL;
-
 static void class_init(BkrVideoOutClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
@@ -231,6 +255,8 @@ static void class_init(BkrVideoOutClass *class)
 	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
 	object_class->set_property = set_property;
 	object_class->get_property = get_property;
+
+	object_class->finalize = finalize;
 
 	parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
@@ -279,6 +305,7 @@ static void instance_init(BkrVideoOut *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
+	filter->adapter = gst_adapter_new();
 	filter->odd_field = 1;
 	filter->format = format(filter->videomode, filter->bitdensity);
 }

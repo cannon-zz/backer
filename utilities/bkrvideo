@@ -1,0 +1,39 @@
+#!/bin/bash
+
+function usage() {
+	echo "Usage: bkrvideo.sh [-V{n|p}] [-D{h|l}] < input"
+}
+
+VIDEOMODE=1
+DENSITY=8
+
+while getopts "V:D:" OPT ; do
+	case "${OPT}" in
+	V)
+		case "${OPTARG}" in
+		n)
+			VIDEOMODE=1 ;;
+		p)
+			VIDEOMODE=2 ;;
+		*)
+			usage
+			exit 1 ;;
+		esac ;;
+	D)
+		case "${OPTARG}" in
+		l)
+			DENSITY=4 ;;
+		h)
+			DENSITY=8 ;;
+		*)
+			usage
+			exit 1 ;;
+		esac ;;
+	*)
+		usage
+		exit 1 ;;
+	esac
+done
+
+
+gst-launch-0.8 fdsrc ! bkr_video_out videomode=${VIDEOMODE} density=${DENSITY} ! ximagesink

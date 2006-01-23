@@ -70,15 +70,6 @@ struct _BkrFrameEnc {
 	enum bkr_format fmt;
 	gint odd_field;
 	struct bkr_frame_format format;
-
-#if 0
-	gint worst_key;
-	gint best_nonkey;
-	gint frame_warnings;
-	gint last_field_offset;
-	guint smallest_field;
-	gint largest_field;
-#endif
 };
 
 GType bkr_frameenc_get_type(void);
@@ -111,6 +102,13 @@ struct _BkrFrameDec {
 	enum bkr_density density;
 	enum bkr_format fmt;
 	struct bkr_frame_format format;
+
+	gint worst_key;
+	gint best_nonkey;
+	gint frame_warnings;
+	gint last_field_offset;
+	guint smallest_field;
+	gint largest_field;
 };
 
 GType bkr_framedec_get_type(void);

@@ -93,30 +93,28 @@ static guint correlate(const guint8 *data, gint key_interval, gint key_length, c
  * the sector leader; otherwise the return value is NULL.
  */
 
-static const guint8 *find_field(struct bkr_frame_format fmt, GstAdapter *adapter, const guint8 *key)
+static const guint8 *find_field(BkrFrameDec *filter, const guint8 *key)
 {
-	gint threshold = fmt.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
+	gint threshold = filter->format.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
 	const guint8 *data;
 	gint corr;
 
 	while(1) {
-		if(!(data = gst_adapter_peek(adapter, fmt.active_size)))
+		if(!(data = gst_adapter_peek(filter->adapter, filter->format.active_size)))
 			return NULL;
 
-		corr = correlate(data, fmt.key_interval, fmt.key_length, key);
+		corr = correlate(data, filter->format.key_interval, filter->format.key_length, key);
 		if(corr >= threshold)
 			break;
-#if 0
 		if(corr > filter->best_nonkey)
 			filter->best_nonkey = corr;
-#endif
-		gst_adapter_flush(adapter, 1);
+		gst_adapter_flush(filter->adapter, 1);
 	}
 
-#if 0
 	if(corr < filter->worst_key)
 		filter->worst_key = corr;
 
+#if 0
 	if(filter->last_field_offset >= 0) {
 		corr = ring_offset_sub(source->ring, source->ring->tail, filter->last_field_offset);
 		if(corr < filter->smallest_field)
@@ -370,6 +368,13 @@ GType bkr_frameenc_get_type(void)
  */
 
 /*
+ * Parent class.
+ */
+
+static GstElementClass *dec_parent_class = NULL;
+
+
+/*
  * Chain function.  See
  *
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
@@ -383,7 +388,7 @@ static void dec_chain(GstPad *pad, GstData *in)
 
 	gst_adapter_push(filter->adapter, GST_BUFFER(in));
 
-	while(data = find_field(filter->format, filter->adapter, sector_key)) {
+	while(data = find_field(filter, sector_key)) {
 		outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.active_size - filter->format.key_length);
 		decode_field(filter->format, GST_BUFFER_DATA(outbuf), data);
 		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
@@ -393,16 +398,28 @@ static void dec_chain(GstPad *pad, GstData *in)
 
 
 /*
+ * Instance finalize function.  See ???
+ */
+
+static void dec_finalize(GObject *object)
+{
+	g_object_unref(BKR_FRAMEDEC(object)->adapter);
+
+	G_OBJECT_CLASS(dec_parent_class)->finalize(object);
+}
+
+
+/*
  * Class init function.  See
  *
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
  */
 
-static GstElementClass *dec_parent_class = NULL;
-
 static void dec_class_init(BkrFrameDecClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	object_class->finalize = dec_finalize;
 
 	dec_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
@@ -456,14 +473,12 @@ static void dec_instance_init(BkrFrameDec *filter)
 	filter->format = format(filter->vidmode, filter->density, filter->fmt);
 	filter->adapter = gst_adapter_new();
 
-#if 0
 	filter->worst_key = filter->format.key_length;
 	filter->best_nonkey = 0;
 	filter->frame_warnings = 0;
 	filter->last_field_offset = -1;
 	filter->smallest_field = INT_MAX;
 	filter->largest_field = 0;
-#endif
 }
 
 

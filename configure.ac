@@ -28,6 +28,9 @@ AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 PKG_PROG_PKG_CONFIG()
 
+# Set some useful CFLAGS
+CFLAGS="${CFLAGS} -Wstrict-prototypes"
+
 # Check for kernel source
 AX_KERNEL_VERSION
 AX_CHECK_KERNEL_SOURCE

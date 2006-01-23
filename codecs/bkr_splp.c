@@ -24,14 +24,11 @@
 
 #include <gst/gst.h>
 #include <backer.h>
+#include <bkr_elements.h>
 #include <bkr_bytes.h>
 #include <bkr_splp.h>
 #include <bkr_splp_randomize.h>
 #include <rs.h>
-
-#define DEFAULT_VIDMODE BKR_NTSC
-#define DEFAULT_DENSITY BKR_HIGH
-#define DEFAULT_FORMAT  BKR_SP
 
 
 /*
@@ -58,7 +55,7 @@
  * Format info.
  */
 
-static struct bkr_splp_format format(enum bkr_vidmode v, enum bkr_density d, enum bkr_format f)
+static struct bkr_splp_format format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
 	switch(d) {
 	case BKR_LOW:
@@ -389,7 +386,7 @@ static void write_empty_sectors(BkrSPLPEnc *filter, gint n)
 
 static void write_eor(BkrSPLPEnc *filter)
 {
-	write_empty_sectors(filter, bkr_fields_per_second(filter->vidmode) * EOR_LENGTH);
+	write_empty_sectors(filter, bkr_fields_per_second(filter->videomode) * EOR_LENGTH);
 }
 
 
@@ -573,16 +570,16 @@ static void enc_instance_init(BkrSPLPEnc *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
-	filter->vidmode = DEFAULT_VIDMODE;
-	filter->density = DEFAULT_DENSITY;
-	filter->fmt = DEFAULT_FORMAT;
-	filter->format = format(filter->vidmode, filter->density, filter->fmt);
+	filter->videomode = DEFAULT_VIDEOMODE;
+	filter->bitdensity = DEFAULT_BITDENSITY;
+	filter->fmt = DEFAULT_SECTORFORMAT;
+	filter->format = format(filter->videomode, filter->bitdensity, filter->fmt);
 
 	if(reed_solomon_codec_new((filter->format.data_size + filter->format.parity_size) / filter->format.interleave, filter->format.data_size / filter->format.interleave, filter->format.interleave, &filter->rs_format) < 0) {
 		/* FIXME */
 	}
 
-	filter->sector_number = -bkr_fields_per_second(filter->vidmode) * BOR_LENGTH;
+	filter->sector_number = -bkr_fields_per_second(filter->videomode) * BOR_LENGTH;
 }
 
 
@@ -711,10 +708,10 @@ static void dec_instance_init(BkrSPLPDec *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
-	filter->vidmode = DEFAULT_VIDMODE;
-	filter->density = DEFAULT_DENSITY;
-	filter->fmt = DEFAULT_FORMAT;
-	filter->format = format(filter->vidmode, filter->density, filter->fmt);
+	filter->videomode = DEFAULT_VIDEOMODE;
+	filter->bitdensity = DEFAULT_BITDENSITY;
+	filter->fmt = DEFAULT_SECTORFORMAT;
+	filter->format = format(filter->videomode, filter->bitdensity, filter->fmt);
 	reset_errors(filter);
 
 	if(reed_solomon_codec_new((filter->format.data_size + filter->format.parity_size) / filter->format.interleave, filter->format.data_size / filter->format.interleave, filter->format.interleave, &filter->rs_format) < 0) {

@@ -25,11 +25,8 @@
 #include <gst/gst.h>
 #include <gst/bytestream/adapter.h>
 #include <backer.h>
+#include <bkr_elements.h>
 #include <bkr_frame.h>
-
-#define DEFAULT_VIDMODE BKR_NTSC
-#define DEFAULT_DENSITY BKR_HIGH
-#define DEFAULT_FORMAT  BKR_SP
 
 
 /*
@@ -178,10 +175,25 @@ static void encode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 
 
 
 /*
+ * Statistics
+ */
+
+static void reset_statistics(BkrFrameDec *filter)
+{
+	filter->worst_key = filter->format.key_length;
+	filter->best_nonkey = 0;
+	filter->frame_warnings = 0;
+	filter->last_field_offset = -1;
+	filter->smallest_field = INT_MAX;
+	filter->largest_field = 0;
+}
+
+
+/*
  * Format info.
  */
 
-static struct bkr_frame_format format(enum bkr_vidmode v, enum bkr_density d, enum bkr_format f)
+static struct bkr_frame_format format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
 	switch(d) {
 	case BKR_LOW:
@@ -219,6 +231,8 @@ static struct bkr_frame_format format(enum bkr_vidmode v, enum bkr_density d, en
 			}
 		}
 	}
+
+	return (struct bkr_frame_format) {0,};
 }
 
 
@@ -229,6 +243,59 @@ static struct bkr_frame_format format(enum bkr_vidmode v, enum bkr_density d, en
  *
  * ============================================================================
  */
+
+/*
+ * Properties
+ */
+
+enum property {
+	ARG_VIDEOMODE = 1,
+	ARG_BITDENSITY,
+	ARG_SECTORFORMAT
+};
+
+
+static void enc_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
+{
+	BkrFrameEnc *filter = BKR_FRAMEENC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		filter->videomode = g_value_get_enum(value);
+		break;
+
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
+		break;
+
+	case ARG_SECTORFORMAT:
+		filter->sectorformat = g_value_get_enum(value);
+		break;
+	}
+
+	filter->format = format(filter->videomode, filter->bitdensity, filter->sectorformat);
+}
+
+
+static void enc_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrFrameEnc *filter = BKR_FRAMEENC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		g_value_set_enum(value, filter->videomode);
+		break;
+
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
+		break;
+
+	case ARG_SECTORFORMAT:
+		g_value_set_enum(value, filter->sectorformat);
+		break;
+	}
+}
+
 
 /*
  * Chain function.  See
@@ -243,6 +310,9 @@ static void enc_chain(GstPad *pad, GstData *data)
 	GstBuffer *outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.field_size + (filter->odd_field ? filter->format.interlace : 0));
 
 	g_return_if_fail((inbuf != NULL) && (outbuf != NULL));
+
+	/* check that element properties are set */
+	g_return_if_fail(filter->format.field_size != 0);
 
 	if(GST_IS_EVENT(data)) {
 		GstEvent *event = GST_EVENT(data);
@@ -282,6 +352,12 @@ static GstElementClass *enc_parent_class = NULL;
 static void enc_class_init(BkrFrameEncClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("format", "Format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	object_class->set_property = enc_set_property;
+	object_class->get_property = enc_get_property;
 
 	enc_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
@@ -329,11 +405,7 @@ static void enc_instance_init(BkrFrameEnc *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
-	filter->vidmode = DEFAULT_VIDMODE;
-	filter->density = DEFAULT_DENSITY;
-	filter->fmt = DEFAULT_FORMAT;
 	filter->odd_field = 1;	/* first video field is odd */
-	filter->format = format(filter->vidmode, filter->density, filter->fmt);
 }
 
 
@@ -368,6 +440,52 @@ GType bkr_frameenc_get_type(void)
  */
 
 /*
+ * Properties
+ */
+
+static void dec_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
+{
+	BkrFrameDec *filter = BKR_FRAMEDEC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		filter->videomode = g_value_get_enum(value);
+		break;
+
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
+		break;
+
+	case ARG_SECTORFORMAT:
+		filter->sectorformat = g_value_get_enum(value);
+		break;
+	}
+
+	filter->format = format(filter->videomode, filter->bitdensity, filter->sectorformat);
+	reset_statistics(filter);
+}
+
+
+static void dec_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrFrameDec *filter = BKR_FRAMEDEC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		g_value_set_enum(value, filter->videomode);
+		break;
+
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
+		break;
+
+	case ARG_SECTORFORMAT:
+		g_value_set_enum(value, filter->sectorformat);
+		break;
+	}
+}
+
+/*
  * Parent class.
  */
 
@@ -385,6 +503,9 @@ static void dec_chain(GstPad *pad, GstData *in)
 	BkrFrameDec *filter = BKR_FRAMEDEC(GST_OBJECT_PARENT(pad));
 	GstBuffer *outbuf;
 	const guint8 *data;
+
+	/* check that element properties are set */
+	g_return_if_fail(filter->format.field_size != 0);
 
 	gst_adapter_push(filter->adapter, GST_BUFFER(in));
 
@@ -418,6 +539,12 @@ static void dec_finalize(GObject *object)
 static void dec_class_init(BkrFrameDecClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("format", "Format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	object_class->set_property = dec_set_property;
+	object_class->get_property = dec_get_property;
 
 	object_class->finalize = dec_finalize;
 
@@ -467,18 +594,8 @@ static void dec_instance_init(BkrFrameDec *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
-	filter->vidmode = DEFAULT_VIDMODE;
-	filter->density = DEFAULT_DENSITY;
-	filter->fmt = DEFAULT_FORMAT;
-	filter->format = format(filter->vidmode, filter->density, filter->fmt);
 	filter->adapter = gst_adapter_new();
-
-	filter->worst_key = filter->format.key_length;
-	filter->best_nonkey = 0;
-	filter->frame_warnings = 0;
-	filter->last_field_offset = -1;
-	filter->smallest_field = INT_MAX;
-	filter->largest_field = 0;
+	reset_statistics(filter);
 }
 
 

@@ -72,10 +72,8 @@ static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *dest
  * 	width = pixels/bit * bits/byte * bytes/line
  */
 
-static struct bkr_video_out_format format(enum bkr_vidmode v, enum bkr_density d)
+static struct bkr_video_out_format format(enum bkr_videomode v, enum bkr_bitdensity d)
 {
-	struct bkr_video_out_format zero = {0,};
-
 	switch(d) {
 	case BKR_LOW:
 		switch(v) {
@@ -83,8 +81,6 @@ static struct bkr_video_out_format format(enum bkr_vidmode v, enum bkr_density d
 			return (struct bkr_video_out_format) {4, 1, 8 * 8 * 5, 253, draw_bit_l};
 		case BKR_PAL:
 			return (struct bkr_video_out_format) {4, 0, 8 * 8 * 5, 305, draw_bit_l};
-		default:
-			return zero;
 		}
 	case BKR_HIGH:
 		switch(v) {
@@ -92,12 +88,10 @@ static struct bkr_video_out_format format(enum bkr_vidmode v, enum bkr_density d
 			return (struct bkr_video_out_format) {10, 1, 4 * 8 * 11, 253, draw_bit_h};
 		case BKR_PAL:
 			return (struct bkr_video_out_format) {10, 0, 4 * 8 * 11, 305, draw_bit_h};
-		default:
-			return zero;
 		}
-	default:
-		return zero;
 	}
+
+	return (struct bkr_video_out_format) {0,};
 }
 
 
@@ -115,27 +109,25 @@ static struct bkr_video_out_format format(enum bkr_vidmode v, enum bkr_density d
 
 enum property {
 	ARG_VIDEOMODE = 1,
-	ARG_DENSITY
+	ARG_BITDENSITY
 };
 
 
-#include <stdio.h>
 static void set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
 {
 	BkrVideoOut *filter = BKR_VIDEO_OUT(object);
 
 	switch(id) {
 	case ARG_VIDEOMODE:
-		filter->vidmode = g_value_get_enum(value);
+		filter->videomode = g_value_get_enum(value);
 		break;
 
-	case ARG_DENSITY:
-		filter->density = g_value_get_enum(value);
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
 		break;
 	}
 
-	fprintf(stderr, "%d %d\n", filter->vidmode, filter->density);
-	filter->format = format(filter->vidmode, filter->density);
+	filter->format = format(filter->videomode, filter->bitdensity);
 }
 
 
@@ -145,11 +137,11 @@ static void get_property(GObject *object, enum property id, GValue *value, GPara
 
 	switch(id) {
 	case ARG_VIDEOMODE:
-		g_value_set_enum(value, filter->vidmode);
+		g_value_set_enum(value, filter->videomode);
 		break;
 
-	case ARG_DENSITY:
-		g_value_set_enum(value, filter->density);
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
 		break;
 	}
 }
@@ -205,6 +197,7 @@ static void chain(GstPad *pad, GstData *in)
 	gint outlines = filter->format.height + (filter->odd_field ? filter->format.interlace : 0);
 
 	g_return_if_fail(inbuf != NULL);
+	/* check that element properties are set */
 	g_return_if_fail(filter->format.pixel_func != NULL);
 
 	inlines = GST_BUFFER_SIZE(inbuf) / filter->format.bytes_per_line;
@@ -234,8 +227,8 @@ static void class_init(BkrVideoOutClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
-	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDMODE, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_DENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_DENSITY, DEFAULT_DENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
 	object_class->set_property = set_property;
 	object_class->get_property = get_property;
 
@@ -287,7 +280,7 @@ static void instance_init(BkrVideoOut *filter)
 
 	/* internal state */
 	filter->odd_field = 1;
-	filter->format = format(filter->vidmode, filter->density);
+	filter->format = format(filter->videomode, filter->bitdensity);
 }
 
 

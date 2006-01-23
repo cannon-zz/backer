@@ -65,9 +65,9 @@ struct _BkrFrameEnc {
 
 	GstPad *sinkpad, *srcpad;
 
-	enum bkr_vidmode vidmode;
-	enum bkr_density density;
-	enum bkr_format fmt;
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+	enum bkr_sectorformat sectorformat;
 	gint odd_field;
 	struct bkr_frame_format format;
 };
@@ -98,9 +98,9 @@ struct _BkrFrameDec {
 	GstPad *sinkpad, *srcpad;
 	GstAdapter *adapter;
 
-	enum bkr_vidmode vidmode;
-	enum bkr_density density;
-	enum bkr_format fmt;
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+	enum bkr_sectorformat sectorformat;
 	struct bkr_frame_format format;
 
 	gint worst_key;
@@ -114,4 +114,4 @@ struct _BkrFrameDec {
 GType bkr_framedec_get_type(void);
 
 G_END_DECLS
-#endif				/* __BKR_FRAME_H__ */
+#endif	/* __BKR_FRAME_H__ */

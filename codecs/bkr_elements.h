@@ -28,13 +28,16 @@
 G_BEGIN_DECLS
 
 #define BKR_TYPE_VIDEOMODE	(bkr_videomode_get_type())
-#define BKR_TYPE_DENSITY	(bkr_density_get_type())
+#define BKR_TYPE_BITDENSITY	(bkr_bitdensity_get_type())
+#define BKR_TYPE_SECTORFORMAT	(bkr_sectorformat_get_type())
 
 GType bkr_videomode_get_type(void);
-GType bkr_density_get_type(void);
+GType bkr_bitdensity_get_type(void);
+GType bkr_sectorformat_get_type(void);
 
-#define DEFAULT_VIDMODE BKR_NTSC
-#define DEFAULT_DENSITY BKR_HIGH
+#define DEFAULT_VIDEOMODE	BKR_NTSC
+#define DEFAULT_BITDENSITY	BKR_HIGH
+#define DEFAULT_SECTORFORMAT	BKR_SP
 
 G_END_DECLS
 #endif	/* __BKR_ELEMENTS_H__ */

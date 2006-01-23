@@ -41,8 +41,8 @@ struct _BkrVideoOut {
 
 	GstPad *sinkpad, *srcpad;
 
-	enum bkr_vidmode vidmode;
-	enum bkr_density density;
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
 	gint odd_field;
 	struct bkr_video_out_format format;
 };

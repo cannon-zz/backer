@@ -56,7 +56,7 @@ GType bkr_videomode_get_type(void)
 }
 
 
-GType bkr_density_get_type(void)
+GType bkr_bitdensity_get_type(void)
 {
 	static GType type = 0;
 
@@ -68,6 +68,24 @@ GType bkr_density_get_type(void)
 		};
 
 		type = g_enum_register_static("BKR_DENSITY", values);
+	}
+
+	return type;
+}
+
+
+GType bkr_sectorformat_get_type(void)
+{
+	static GType type = 0;
+
+	if(!type) {
+		static GEnumValue values[] = {
+			{ BKR_SP, "SP/LP", "SP/LP sector format" },
+			{ BKR_EP, "EP", "EP sector format" },
+			{ 0, NULL, NULL }
+		};
+
+		type = g_enum_register_static("BKR_SECTORFORMAT", values);
 	}
 
 	return type;

@@ -173,15 +173,15 @@
 #define  BKR_VIDEOMODE(x)      ((x) & BKR_VIDEOMODE_MASK)
 #define  BKR_DENSITY(x)        ((x) & BKR_DENSITY_MASK)
 #define  BKR_CODEC(x)          ((x) & BKR_CODEC_MASK)
-enum bkr_vidmode {
+enum bkr_videomode {
 	BKR_NTSC = 0x0001,     /* NTSC video mode */
 	BKR_PAL = 0x0002       /* PAL video mode */
 };
-enum bkr_density {
+enum bkr_bitdensity {
 	BKR_LOW = 0x0004,      /* Low density */
 	BKR_HIGH = 0x0008      /* High density */
 };
-enum bkr_format {
+enum bkr_sectorformat {
 	BKR_RAW = 0x0000,      /* read/write raw data */
 	BKR_SP = 0x0010,       /* read/write SP/LP format */
 	BKR_EP = 0x0020        /* read/write EP format */

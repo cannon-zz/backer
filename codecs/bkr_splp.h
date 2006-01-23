@@ -62,9 +62,9 @@ struct _BkrSPLPEnc {
 
 	GstPad *sinkpad, *srcpad;
 
-	enum bkr_vidmode vidmode;
-	enum bkr_density density;
-	enum bkr_format fmt;
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+	enum bkr_sectorformat fmt;
 	struct bkr_splp_format format;
 	rs_format_t rs_format;
 
@@ -96,9 +96,9 @@ struct _BkrSPLPDec {
 
 	GstPad *sinkpad, *srcpad;
 
-	enum bkr_vidmode vidmode;
-	enum bkr_density density;
-	enum bkr_format fmt;
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+	enum bkr_sectorformat fmt;
 	struct bkr_splp_format format;
 	rs_format_t rs_format;
 

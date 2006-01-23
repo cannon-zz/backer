@@ -7,4 +7,4 @@ libtapefile_la_CFLAGS = $(GST_CFLAGS)
 libtapefile_la_LIBADD = $(GST_LIBS)
 libtapefile_la_LDFLAGS = $(GST_LDFLAGS)
 
-noinst_HEADERS = bkr_frame.h bkr_splp.h bkr_splp_randomize.h bkr_video_out.h rs.h
+noinst_HEADERS = bkr_elements.h bkr_frame.h bkr_splp.h bkr_splp_randomize.h bkr_video_out.h rs.h

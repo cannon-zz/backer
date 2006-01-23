@@ -319,10 +319,14 @@ static void generator_polynomial_init(gf *g, gf *log_beta, int num_parity)
  * generators are added be sure to edit the range check for MM.
  */
 
-int reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave, rs_format_t *format)
+rs_format_t *reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave)
 {
-	if((n > NN) || (k > n) || (interleave < 1))
-		return(-1);
+	rs_format_t *format = malloc(sizeof(*format));
+
+	if((n > NN) || (k > n) || (interleave < 1) || !format) {
+		free(format);
+		return(NULL);
+	}
 
 	format->n = n;
 	format->k = k;
@@ -339,12 +343,12 @@ int reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave, rs_fo
 
 	if(!format->g || !format->erasure || !format->log_beta) {
 		reed_solomon_codec_free(format);
-		return(-1);
+		return(NULL);
 	}
 
 	generator_polynomial_init(format->g, format->log_beta, format->parity);
 
-	return(0);
+	return(format);
 }
 
 
@@ -354,10 +358,12 @@ int reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave, rs_fo
 
 void reed_solomon_codec_free(rs_format_t *format)
 {
-	free(format->g);
-	free(format->erasure);
-	free(format->log_beta);
-	*format = (rs_format_t) { 0, 0, 0, 1, 0, NULL, NULL, NULL };
+	if(format) {
+		free(format->g);
+		free(format->erasure);
+		free(format->log_beta);
+	}
+	free(format);
 }
 
 

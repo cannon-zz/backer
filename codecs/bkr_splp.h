@@ -64,9 +64,9 @@ struct _BkrSPLPEnc {
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
-	enum bkr_sectorformat fmt;
+	enum bkr_sectorformat sectorformat;
 	struct bkr_splp_format format;
-	rs_format_t rs_format;
+	rs_format_t *rs_format;
 
 	gint sector_number;
 };
@@ -98,9 +98,9 @@ struct _BkrSPLPDec {
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
-	enum bkr_sectorformat fmt;
+	enum bkr_sectorformat sectorformat;
 	struct bkr_splp_format format;
-	rs_format_t rs_format;
+	rs_format_t *rs_format;
 
 	gint header_is_good;
 	gint bytes_corrected;

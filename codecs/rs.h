@@ -163,7 +163,7 @@ void galois_field_init(int p);
  *      Pointer to the format structure to initialize.
  */
 
-int reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave, rs_format_t *format);
+rs_format_t *reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave);
 
 
 /*

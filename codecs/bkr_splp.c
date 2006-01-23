@@ -93,6 +93,8 @@ static struct bkr_splp_format format(enum bkr_videomode v, enum bkr_bitdensity d
 			}
 		}
 	}
+
+	return (struct bkr_splp_format) {0,};
 }
 
 
@@ -209,7 +211,7 @@ static gint correct_sector(BkrSPLPDec *filter, guint8 *data)
 
 	filter->header_is_good = 1;
 	for(block = 0; block < filter->format.interleave; block++) {
-		bytes_corrected = reed_solomon_decode(parity + block, data + block, 0, filter->rs_format);
+		bytes_corrected = reed_solomon_decode(parity + block, data + block, 0, *filter->rs_format);
 		/* block is uncorrectable? */
 		if(bytes_corrected < 0) {
 			result = -ENODATA;
@@ -229,7 +231,7 @@ static gint correct_sector(BkrSPLPDec *filter, guint8 *data)
 }
 
 
-static void reset_errors(BkrSPLPDec *filter)
+static void reset_statistics(BkrSPLPDec *filter)
 {
 	filter->bytes_corrected = 0;
 	filter->worst_block = 0;
@@ -267,7 +269,7 @@ static GstBuffer* decode_sector(BkrSPLPDec *filter, GstBuffer *buffer)
 	 */
 
 	if(header.number < 0) {
-		reset_errors(filter);
+		reset_statistics(filter);
 		return NULL;
 	}
 
@@ -356,7 +358,7 @@ static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
 	 */
 
 	for(block = 0; block < filter->format.interleave; block++)
-		reed_solomon_encode(data + filter->format.data_size + block, data + block, filter->rs_format);
+		reed_solomon_encode(data + filter->format.data_size + block, data + block, *filter->rs_format);
 	GST_BUFFER_SIZE(buffer) += filter->format.parity_size;
 
 	/*
@@ -399,6 +401,69 @@ static void write_eor(BkrSPLPEnc *filter)
  */
 
 /*
+ * Properties
+ */
+
+enum property {
+	ARG_VIDEOMODE = 1,
+	ARG_BITDENSITY,
+	ARG_SECTORFORMAT
+};
+
+
+static void enc_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
+{
+	BkrSPLPEnc *filter = BKR_SPLPENC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		filter->videomode = g_value_get_enum(value);
+		break;
+
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
+		break;
+
+	case ARG_SECTORFORMAT:
+		filter->sectorformat = g_value_get_enum(value);
+		break;
+	}
+
+	filter->format = format(filter->videomode, filter->bitdensity, filter->sectorformat);
+	filter->sector_number = -bkr_fields_per_second(filter->videomode) * BOR_LENGTH;
+
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+	if(filter->format.interleave) {
+		filter->rs_format = reed_solomon_codec_new((filter->format.data_size + filter->format.parity_size) / filter->format.interleave, filter->format.data_size / filter->format.interleave, filter->format.interleave);
+		if(!filter->rs_format) {
+			/* FIXME */
+		}
+	}
+}
+
+
+static void enc_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrSPLPEnc *filter = BKR_SPLPENC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		g_value_set_enum(value, filter->videomode);
+		break;
+
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
+		break;
+
+	case ARG_SECTORFORMAT:
+		g_value_set_enum(value, filter->sectorformat);
+		break;
+	}
+}
+
+
+/*
  * Parent class.
  */
 
@@ -415,6 +480,9 @@ static void enc_chain(GstPad *pad, GstData *data)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(GST_OBJECT_PARENT(pad));
 	GstBuffer *buffer = GST_BUFFER(data);
+
+	/* check that element has been initialized */
+	g_return_if_fail(filter->format.interleave != 0);
 
 	/*
 	 * Generate the BOR mark if this is the start of the record.
@@ -505,7 +573,9 @@ GstBuffer *enc_bufferalloc(GstPad *pad, guint64 offset, guint size)
 
 static void enc_finalize(GObject *object)
 {
-	reed_solomon_codec_free(&BKR_SPLPENC(object)->rs_format);
+	BkrSPLPEnc *filter = BKR_SPLPENC(object);
+
+	reed_solomon_codec_free(filter->rs_format);
 
 	G_OBJECT_CLASS(enc_parent_class)->finalize(object);
 }
@@ -520,6 +590,12 @@ static void enc_finalize(GObject *object)
 static void enc_class_init(BkrSPLPEncClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("format", "Format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	object_class->set_property = enc_set_property;
+	object_class->get_property = enc_get_property;
 
 	object_class->finalize = enc_finalize;
 
@@ -570,16 +646,8 @@ static void enc_instance_init(BkrSPLPEnc *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
-	filter->videomode = DEFAULT_VIDEOMODE;
-	filter->bitdensity = DEFAULT_BITDENSITY;
-	filter->fmt = DEFAULT_SECTORFORMAT;
-	filter->format = format(filter->videomode, filter->bitdensity, filter->fmt);
-
-	if(reed_solomon_codec_new((filter->format.data_size + filter->format.parity_size) / filter->format.interleave, filter->format.data_size / filter->format.interleave, filter->format.interleave, &filter->rs_format) < 0) {
-		/* FIXME */
-	}
-
-	filter->sector_number = -bkr_fields_per_second(filter->videomode) * BOR_LENGTH;
+	filter->rs_format = NULL;
+	filter->sector_number = 0;
 }
 
 
@@ -614,6 +682,62 @@ GType bkr_splpenc_get_type(void)
  */
 
 /*
+ * Properties
+ */
+
+static void dec_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
+{
+	BkrSPLPDec *filter = BKR_SPLPDEC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		filter->videomode = g_value_get_enum(value);
+		break;
+
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
+		break;
+
+	case ARG_SECTORFORMAT:
+		filter->sectorformat = g_value_get_enum(value);
+		break;
+	}
+
+	filter->format = format(filter->videomode, filter->bitdensity, filter->sectorformat);
+	reset_statistics(filter);
+
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+	if(filter->format.interleave) {
+		filter->rs_format = reed_solomon_codec_new((filter->format.data_size + filter->format.parity_size) / filter->format.interleave, filter->format.data_size / filter->format.interleave, filter->format.interleave);
+		if(!filter->rs_format) {
+			/* FIXME */
+		}
+	}
+}
+
+
+static void dec_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrSPLPDec *filter = BKR_SPLPDEC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		g_value_set_enum(value, filter->videomode);
+		break;
+
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
+		break;
+
+	case ARG_SECTORFORMAT:
+		g_value_set_enum(value, filter->sectorformat);
+		break;
+	}
+}
+
+
+/*
  * Parent class.
  */
 
@@ -630,6 +754,9 @@ static void dec_chain(GstPad *pad, GstData *in)
 	BkrSPLPDec *filter = BKR_SPLPDEC(GST_OBJECT_PARENT(pad));
 	GstBuffer *outbuf;
 
+	/* check that element has been initialized */
+	g_return_if_fail(filter->format.interleave != 0);
+
 	outbuf = decode_sector(filter, GST_BUFFER(in));
 	if(outbuf)
 		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
@@ -644,7 +771,9 @@ static void dec_chain(GstPad *pad, GstData *in)
 
 static void dec_finalize(GObject *object)
 {
-	reed_solomon_codec_free(&BKR_SPLPDEC(object)->rs_format);
+	BkrSPLPDec *filter = BKR_SPLPDEC(object);
+
+	reed_solomon_codec_free(filter->rs_format);
 
 	G_OBJECT_CLASS(dec_parent_class)->finalize(object);
 }
@@ -659,6 +788,12 @@ static void dec_finalize(GObject *object)
 static void dec_class_init(BkrSPLPDecClass *class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("format", "Format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	object_class->set_property = dec_set_property;
+	object_class->get_property = dec_get_property;
 
 	object_class->finalize = dec_finalize;
 
@@ -708,16 +843,7 @@ static void dec_instance_init(BkrSPLPDec *filter)
 	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
 	/* internal state */
-	filter->videomode = DEFAULT_VIDEOMODE;
-	filter->bitdensity = DEFAULT_BITDENSITY;
-	filter->fmt = DEFAULT_SECTORFORMAT;
-	filter->format = format(filter->videomode, filter->bitdensity, filter->fmt);
-	reset_errors(filter);
-
-	if(reed_solomon_codec_new((filter->format.data_size + filter->format.parity_size) / filter->format.interleave, filter->format.data_size / filter->format.interleave, filter->format.interleave, &filter->rs_format) < 0) {
-		/* FIXME */
-	}
-
+	filter->rs_format = NULL;
 	filter->sector_number = -1;	/* first sector we want is 0 */
 }
 

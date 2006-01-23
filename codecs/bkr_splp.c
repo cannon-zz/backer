@@ -464,13 +464,6 @@ static void enc_get_property(GObject *object, enum property id, GValue *value, G
 
 
 /*
- * Parent class.
- */
-
-static GstElementClass *enc_parent_class = NULL;
-
-
-/*
  * Chain function.  See
  *
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
@@ -565,6 +558,13 @@ GstBuffer *enc_bufferalloc(GstPad *pad, guint64 offset, guint size)
 
 	return buf;
 }
+
+
+/*
+ * Parent class.
+ */
+
+static GstElementClass *enc_parent_class = NULL;
 
 
 /*
@@ -738,12 +738,6 @@ static void dec_get_property(GObject *object, enum property id, GValue *value, G
 
 
 /*
- * Parent class.
- */
-
-static GstElementClass *dec_parent_class = NULL;
-
-/*
  * Chain function.  See
  *
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
@@ -763,6 +757,13 @@ static void dec_chain(GstPad *pad, GstData *in)
 	else
 		gst_data_unref(in);
 }
+
+
+/*
+ * Parent class.
+ */
+
+static GstElementClass *dec_parent_class = NULL;
 
 
 /*

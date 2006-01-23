@@ -485,12 +485,6 @@ static void dec_get_property(GObject *object, enum property id, GValue *value, G
 	}
 }
 
-/*
- * Parent class.
- */
-
-static GstElementClass *dec_parent_class = NULL;
-
 
 /*
  * Chain function.  See
@@ -516,6 +510,13 @@ static void dec_chain(GstPad *pad, GstData *in)
 		gst_adapter_flush(filter->adapter, filter->format.active_size);
 	}
 }
+
+
+/*
+ * Parent class.
+ */
+
+static GstElementClass *dec_parent_class = NULL;
 
 
 /*

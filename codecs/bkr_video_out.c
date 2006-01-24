@@ -252,7 +252,7 @@ static void class_init(BkrVideoOutClass *class)
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
 	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
 	object_class->set_property = set_property;
 	object_class->get_property = get_property;
 

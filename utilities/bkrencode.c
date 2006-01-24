@@ -35,16 +35,13 @@
 
 #define  PROGRAM_NAME    "bkrencode"
 
-#define  __STRINGIFY(x)  #x
-#define  STRINGIFY(x)    __STRINGIFY(x)
-
 
 /*
- *==============================================================================
+ * ============================================================================
  *
  *                                 Parameters
  *
- *==============================================================================
+ * ============================================================================
  */
 
 enum direction {
@@ -54,11 +51,11 @@ enum direction {
 
 
 /*
- *==============================================================================
+ * ============================================================================
  *
  *             SIGINT handler for cleanly terminating a recording
  *
- *==============================================================================
+ * ============================================================================
  */
 
 static unsigned int  got_sigint = 0;
@@ -72,11 +69,11 @@ static void sigint_handler(int num)
 
 
 /*
- *==============================================================================
+ * ============================================================================
  *
  *                                Command Line
  *
- *==============================================================================
+ * ============================================================================
  */
 
 struct options {
@@ -252,16 +249,20 @@ static struct options parse_command_line(int *argc, char **argv[])
 		/* verbosity interferes with status parsing */
 		options.verbose = 0;
 
+	/* remove parsed arguments */
+	*argc -= optind;
+	*argv += optind;
+
 	return options;
 }
 
 
 /*
- *==============================================================================
+ * ============================================================================
  *
  *                           Pipeline Construction
  *
- *==============================================================================
+ * ============================================================================
  */
 
 static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
@@ -279,12 +280,12 @@ static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
 
 	g_object_set(G_OBJECT(frame), "videomode", v, NULL);
-	g_object_set(G_OBJECT(frame), "density", d, NULL);
-	g_object_set(G_OBJECT(frame), "format", f, NULL);
+	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
+	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
 
 	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
-	g_object_set(G_OBJECT(splp), "density", d, NULL);
-	g_object_set(G_OBJECT(splp), "format", f, NULL);
+	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
+	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
 
 	g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);
 
@@ -311,12 +312,12 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
 
 	g_object_set(G_OBJECT(frame), "videomode", v, NULL);
-	g_object_set(G_OBJECT(frame), "density", d, NULL);
-	g_object_set(G_OBJECT(frame), "format", f, NULL);
+	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
+	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
 
 	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
-	g_object_set(G_OBJECT(splp), "density", d, NULL);
-	g_object_set(G_OBJECT(splp), "format", f, NULL);
+	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
+	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
 
 	/*g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);*/
 
@@ -329,11 +330,11 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 
 
 /*
- *==============================================================================
+ * ============================================================================
  *
  *                                Entry Point
  *
- *==============================================================================
+ * ============================================================================
  */
 
 int main(int argc, char *argv[])
@@ -346,7 +347,6 @@ int main(int argc, char *argv[])
 	 */
 
 	gst_init(&argc, &argv);
-
 	options = parse_command_line(&argc, &argv);
 
 	if(options.direction == ENCODING)
@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
 	 */
 
 	gst_element_set_state(pipeline, GST_STATE_PLAYING);
-	while(gst_bin_iterate(GST_BIN(pipeline)));
+	while(gst_bin_iterate(GST_BIN(pipeline)) && !got_sigint);
 	if((options.direction == ENCODING) && (feof(stdin) || got_sigint)) {
 		/* FIXME: send EOS event to top of stream */
 	}

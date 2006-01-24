@@ -1,20 +1,42 @@
 #!/bin/bash
 
+#
+# enum values taken from backer.h
+#
+
+BKR_NTSC=1
+BKR_PAL=2
+BKR_LOW=4
+BKR_HIGH=8
+
+
+#
+# defaults
+#
+
+DEFAULT_VIDEOMODE=${BKR_NTSC}
+DEFAULT_DENSITY=${BKR_HIGH}
+
+
+#
+# parse command line
+#
+
 function usage() {
-	echo "Usage: bkrvideo.sh [-V{n|p}] [-D{h|l}] < input"
+	echo "Usage: bkrvideo [-V{n|p}] [-D{h|l}] < input"
 }
 
-VIDEOMODE=1
-DENSITY=8
+VIDEOMODE=${DEFAULT_VIDEOMODE}
+DENSITY=${DEFAULT_DENSITY}
 
 while getopts "V:D:" OPT ; do
 	case "${OPT}" in
 	V)
 		case "${OPTARG}" in
 		n)
-			VIDEOMODE=1 ;;
+			VIDEOMODE=${BKR_NTSC} ;;
 		p)
-			VIDEOMODE=2 ;;
+			VIDEOMODE=${BKR_PAL} ;;
 		*)
 			usage
 			exit 1 ;;
@@ -22,9 +44,9 @@ while getopts "V:D:" OPT ; do
 	D)
 		case "${OPTARG}" in
 		l)
-			DENSITY=4 ;;
+			DENSITY=${BKR_LOW} ;;
 		h)
-			DENSITY=8 ;;
+			DENSITY=${BKR_HIGH} ;;
 		*)
 			usage
 			exit 1 ;;
@@ -36,4 +58,8 @@ while getopts "V:D:" OPT ; do
 done
 
 
-gst-launch-0.8 fdsrc ! bkr_video_out videomode=${VIDEOMODE} density=${DENSITY} ! ximagesink
+#
+# construct and run pipeline
+#
+
+gst-launch-0.8 fdsrc ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${DENSITY} ! ximagesink

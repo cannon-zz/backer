@@ -354,8 +354,8 @@ static void enc_class_init(BkrFrameEncClass *class)
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
 	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("format", "Format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("sectorformat", "Sector format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
 	object_class->set_property = enc_set_property;
 	object_class->get_property = enc_get_property;
 
@@ -542,8 +542,8 @@ static void dec_class_init(BkrFrameDecClass *class)
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
 	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("density", "Density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("format", "Format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("sectorformat", "Sector format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
 	object_class->set_property = dec_set_property;
 	object_class->get_property = dec_get_property;
 

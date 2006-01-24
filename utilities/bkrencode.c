@@ -124,8 +124,7 @@ static void usage(void)
 	"	-s       Skip bad sectors\n" \
 	"	-t       Compute time only (do not encode or decode data)\n" \
 	"	-u       Unencode tape data (default is to encode)\n" \
-	"	-v       Be verbose\n", stderr
-	);
+	"	-v       Be verbose\n", stderr);
 }
 
 
@@ -241,7 +240,7 @@ static struct options parse_command_line(int *argc, char **argv[])
 		exit(1);
 
 	default:
-		/* FIXME: pring bug warning */
+		/* FIXME: print bug warning */
 		break;
 	} while(c != -1);
 

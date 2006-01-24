@@ -1,1 +1,1 @@
-SUBDIRS = docs drivers codecs
+SUBDIRS = docs drivers codecs utilities

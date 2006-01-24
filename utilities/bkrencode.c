@@ -20,34 +20,37 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
+#include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-#include <sys/mtio.h>
+
+#include <gst/gst.h>
 
 #include <backer.h>
-#include <bkr_disp_mode.h>
 #include <bkr_frame.h>
-#include <bkr_proc_io.h>
-#include <bkr_stdio_dev.h>
-#include <bkr_stream.h>
 #include <bkr_splp.h>
-#include <bkr_gcr.h>
-#include <bkr_ecc2.h>
 
 #define  PROGRAM_NAME    "bkrencode"
 
 #define  __STRINGIFY(x)  #x
 #define  STRINGIFY(x)    __STRINGIFY(x)
 
-static bkr_format_info_t format_tbl[] = BKR_FORMAT_INFO_INITIALIZER;
+
+/*
+ *==============================================================================
+ *
+ *                                 Parameters
+ *
+ *==============================================================================
+ */
+
+enum direction {
+	ENCODING,
+	DECODING
+};
 
 
 /*
@@ -71,318 +74,45 @@ static void sigint_handler(int num)
 /*
  *==============================================================================
  *
- *                       I/O Activity signalling stuff.
+ *                                Command Line
  *
  *==============================================================================
  */
 
-static pthread_mutex_t  io_activity_lock;
-static pthread_cond_t  io_activity;
+struct options {
+	int verbose;
+	int time_only;
+	int ignore_bad;
+	int dump_status;
+	int dump_status_async;
+	enum direction direction;
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+	enum bkr_sectorformat sectorformat;
+};
 
-static void callback(void *data)
+
+static struct options default_options(void)
 {
-	pthread_mutex_lock(&io_activity_lock);
-	pthread_cond_signal(&io_activity);
-	pthread_mutex_unlock(&io_activity_lock);
+	struct options defaults = {
+		.verbose = 0,
+		.time_only = 0,
+		.ignore_bad = 0,
+		.dump_status = 0,
+		.dump_status_async = 1,
+		.direction = ENCODING,
+		.videomode = BKR_NTSC,
+		.bitdensity = BKR_HIGH,
+		.sectorformat = BKR_SP
+	};
+
+	return defaults;
 }
 
 
-/*
- *==============================================================================
- *
- *                               Status Output
- *
- *==============================================================================
- */
-
-static void do_status(struct bkr_stream_t *stream, bkr_frame_private_t *frame_private, bkr_splp_private_t *splp_private)
+static void usage(void)
 {
-	struct bkr_proc_status_t  status;
-
-	memcpy(status.state, "WRITING", sizeof("WRITING"));
-	status.mode = stream->mode;
-	status.sector_number = splp_private->sector_number;
-	status.total_errors = splp_private->errors.bytes_corrected;
-	status.worst_block = splp_private->errors.worst_block;
-	status.parity = splp_private->rs_format.parity;
-	status.recent_block = splp_private->errors.recent_block;
-	status.bad_sectors = splp_private->errors.bad_sectors;
-	status.bad_sector_runs = splp_private->errors.lost_runs;
-	status.frame_errors = frame_private->frame_warnings;
-	status.underrun_errors = splp_private->errors.duplicate_runs;
-	status.worst_key = frame_private->worst_key;
-	status.max_key_weight = stream->fmt.key_length;
-	status.best_nonkey = frame_private->best_nonkey;
-	status.smallest_field = frame_private->smallest_field;
-	status.largest_field = frame_private->largest_field;
-	status.bytes_in_buffer = bkr_stream_bytes(stream);
-	status.buffer_size = bkr_stream_size(stream);
-
-	bkr_proc_write_status(stderr, &status);
-	splp_private->errors.recent_block = 0;
-}
-
-
-/*
- *==============================================================================
- *
- *                                Decode Loop
- *
- *==============================================================================
- */
-
-static void decode(struct bkr_stream_t *stream, int dump_status, int ignore_bad, int time_only, int verbose)
-{
-	bkr_splp_private_t  *private = stream->private;
-	int  result;
-	unsigned long  data_length = 0;
-	char  msg[100];
-
-	while(1) {
-		errno = 0;
-
-		pthread_mutex_lock(&io_activity_lock);
-		result = stream->ops.read(stream);
-		if(result == -EAGAIN) {
-			pthread_cond_wait(&io_activity, &io_activity_lock);
-			pthread_mutex_unlock(&io_activity_lock);
-			continue;
-		}
-		pthread_mutex_unlock(&io_activity_lock);
-
-		if(result > 0) {
-			data_length += result;
-			ring_lock(stream->ring);
-			if(time_only)
-				_ring_drain(stream->ring, result);
-			else if(fwrite_ring(stream->ring, result, 1, STDOUT_FILENO) < 1) {
-				ring_unlock(stream->ring);
-				perror(PROGRAM_NAME ": stdout");
-				break;
-			}
-			ring_unlock(stream->ring);
-			continue;
-		}
-
-		/* EOF */
-		if(result == 0)
-			break;
-
-		/* error */
-		sprintf(msg, PROGRAM_NAME ": stdin: decode failure at sector %+08d", private->sector_number);
-		if(result != -EAGAIN) {
-			errno = -result;
-			perror(msg);
-			exit(1);
-		}
-		if(verbose || !ignore_bad)
-			fprintf(stderr, "%s\n", msg);
-		if(!ignore_bad)
-			exit(1);
-	}
-
-	if(time_only)
-		fprintf(stdout, PROGRAM_NAME ": decoded recording length: %lu bytes\n", data_length);
-}
-
-
-/*
- *==============================================================================
- *
- *                                Encode Loop
- *
- *==============================================================================
- */
-
-static void encode(struct bkr_stream_t *stream, bkr_frame_private_t *frame_private, bkr_splp_private_t *splp_private, int dump_status, int time_only)
-{
-	unsigned long  sector_count = 0;
-	int  result;
-	int  sps;
-
-	while(!got_sigint) {
-		errno = 0;
-
-		pthread_mutex_lock(&io_activity_lock);
-		result = stream->ops.write(stream);
-		if(result == -EAGAIN) {
-			pthread_cond_wait(&io_activity, &io_activity_lock);
-			pthread_mutex_unlock(&io_activity_lock);
-			continue;
-		}
-		pthread_mutex_unlock(&io_activity_lock);
-
-		if(result < 0) {
-			if(errno)
-				perror(PROGRAM_NAME": stdout");
-			break;
-		}
-
-		ring_lock(stream->ring);
-		result = fread_ring(stream->ring, result, 1, STDIN_FILENO);
-		ring_unlock(stream->ring);
-		if(result < 1) {
-			if(errno)
-				perror(PROGRAM_NAME": stdin");
-			break;
-		}
-		if(dump_status)
-			do_status(stream, frame_private, splp_private);
-		if(time_only) {
-			_ring_fill(stream->ring, 0); /* FIXME: must advance to next sector */
-			_ring_drain(stream->ring, _bytes_in_ring(stream->ring));
-			sector_count++;
-		}
-	}
-
-	if(time_only) {
-		sps = bkr_fields_per_second(stream->mode);
-		sector_count += (BOR_LENGTH + EOR_LENGTH) * sps;
-		fprintf(stdout, "%luh", sector_count / 3600 / sps);
-		sector_count %= 3600 * sps;
-		fprintf(stdout, " %lum", sector_count / 60 / sps);
-		sector_count %= 60 * sps;
-		fprintf(stdout, " %.1fs\n", (float) sector_count / sps);
-	}
-}
-
-/*
- *==============================================================================
- *
- *                                ENTRY POINT
- *
- *==============================================================================
- */
-
-int main(int argc, char *argv[])
-{
-	int  tmp, result;
-	int  dump_status = 0, ignore_bad = 0, time_only = 0, verbose = 0;
-	int  mode = -1;
-	bkr_direction_t  direction = BKR_WRITING;
-	struct mtget  mtget;
-	struct bkr_stream_t  *stream;
-	char  msg[100];
-	FILE  *format_file;
-	const struct bkr_stream_ops_t  *stdio_ops, *frame_ops, *gcr_ops, *splp_ops, *ecc2_ops;
-	bkr_frame_private_t  *frame_private;
-	bkr_splp_private_t  *splp_private;
-
-	/*
-	 * Some setup stuff
-	 */
-
-	pthread_mutex_init(&io_activity_lock, NULL);
-	pthread_cond_init(&io_activity, NULL);
-
-	stdio_ops = bkr_stdio_dev_init();
-	frame_ops = bkr_frame_codec_init();
-	gcr_ops = bkr_gcr_codec_init();
-	splp_ops = bkr_splp_codec_init();
-	ecc2_ops = bkr_ecc2_codec_init();
-
-	/*
-	 * Process command line options
-	 */
-
-	while((result = getopt(argc, argv, "D:d::F:f::hsT:tuV:v")) != EOF)
-		switch(result) {
-			case 'd':
-			dump_status = 1;
-			if(optarg)
-				if(*optarg == 's')
-					break;
-			fcntl(STDERR_FILENO, F_SETFL, O_NONBLOCK);
-			break;
-
-			case 'f':
-			if(!optarg)
-				optarg = DEFAULT_DEVICE;
-			sprintf(msg, PROGRAM_NAME ": %s", optarg);
-			if((tmp = open(optarg, O_RDONLY)) >= 0)
-				if(ioctl(tmp, MTIOCGET, &mtget) >= 0) {
-					close(tmp);
-					mode = mtget.mt_dsreg;
-					break;
-				}
-			perror(msg);
-			exit(1);
-
-			case 's':
-			ignore_bad = 1;
-			break;
-
-			case 'T':
-			sprintf(msg, PROGRAM_NAME ": cannot read format table from %s", optarg);
-			format_file = fopen(optarg, "r");
-			if(format_file)
-				if(bkr_proc_read_format_table(format_file, format_tbl) >= 0) {
-					fclose(format_file);
-					break;
-				}
-			perror(msg);
-			exit(1);
-
-			case 't':
-			time_only = 1;
-			break;
-
-			case 'u':
-			direction = BKR_READING;
-			break;
-
-			case 'v':
-			verbose = 1;
-			break;
-
-			case 'D':
-			mode &= ~BKR_DENSITY(-1);
-			switch(tolower(optarg[0])) {
-				case 'h':
-				mode |= BKR_HIGH;
-				break;
-				case 'l':
-				mode |= BKR_LOW;
-				break;
-				default:
-				mode |= BKR_DENSITY(-1);
-				break;
-			}
-			break;
-
-			case 'F':
-			mode &= ~BKR_CODEC(-1);
-			switch(tolower(optarg[0])) {
-				case 'e':
-				mode |= BKR_EP;
-				break;
-				case 's':
-				mode |= BKR_SP;
-				break;
-				default:
-				mode |= BKR_CODEC(-1);
-				break;
-			}
-			break;
-
-			case 'V':
-			mode &= ~BKR_VIDEOMODE(-1);
-			switch(tolower(optarg[0])) {
-				case 'n':
-				mode |= BKR_NTSC;
-				break;
-				case 'p':
-				mode |= BKR_PAL;
-				break;
-				default:
-				mode |= BKR_VIDEOMODE(-1);
-				break;
-			}
-			break;
-
-			case 'h':
-			default:
-			fputs(
+	fputs(
 	"Backer tape data encoder/unencoder.\n" \
 	"Usage: " PROGRAM_NAME " [options...]\n" \
 	"The following options are recognized:\n" \
@@ -393,115 +123,271 @@ int main(int argc, char *argv[])
 	"	-Vn      Set the video mode to NTSC\n" \
 	"	-Vp      Set the video mode to PAL\n" \
 	"	-d[s]    Dump status info to stderr [synchronously]\n" \
-	"	-f[dev]  Get the format to use from dev (default " DEFAULT_DEVICE ")\n" \
-	"	-Ttbl    Read the format parameter table from file tbl\n" \
 	"	-h       Display this usage message\n" \
 	"	-s       Skip bad sectors\n" \
 	"	-t       Compute time only (do not encode or decode data)\n" \
 	"	-u       Unencode tape data (default is to encode)\n" \
-	"	-v       Be verbose\n", stderr);
+	"	-v       Be verbose\n", stderr
+	);
+}
+
+
+static struct options parse_command_line(int *argc, char **argv[])
+{
+	struct options options = default_options();
+	struct option long_options[] = {
+		{"bit-density",	required_argument,	NULL,	'D'},
+		{"dump-status",	optional_argument,	NULL,	'd'},
+		{"sector-format",	required_argument,	NULL,	'F'},
+		{"help",	no_argument,	NULL,	'h'},
+		{"skip-bad-sectors",	no_argument,	NULL,	's'},
+		{"time-only",	no_argument,	NULL,	't'},
+		{"unencode",	no_argument,	NULL,	'u'},
+		{"video-mode",	required_argument,	NULL,	'V'},
+		{"verbose",	no_argument,	NULL,	'v'},
+		{NULL,	0,	NULL,	0}
+	};
+	int c, index;
+
+	opterr = 1;	/* enable error messages */
+	do switch(c = getopt_long(*argc, *argv, "D:d::F:hstuV:v", long_options, &index)) {
+	case 'd':
+		options.dump_status = 1;
+		if(optarg) {
+			if(tolower(optarg[0]) == 's')
+				options.dump_status_async = 0;
+			else {
+				usage();
+				exit(1);
+			}
+		}
+		break;
+
+	case 'h':
+		usage();
+		exit(1);
+
+	case 's':
+		options.ignore_bad = 1;
+		break;
+
+	case 't':
+		options.time_only = 1;
+		break;
+
+	case 'u':
+		options.direction = DECODING;
+		break;
+
+	case 'v':
+		options.verbose = 1;
+		break;
+
+	case 'D':
+		switch(tolower(optarg[0])) {
+		case 'h':
+			options.bitdensity = BKR_HIGH;
+			break;
+		case 'l':
+			options.bitdensity = BKR_LOW;
+			break;
+		default:
+			usage();
 			exit(1);
 		}
+		break;
 
-	/*
-	 * Retrieve mode from stdin/stdout if required.
-	 */
+	case 'F':
+		switch(tolower(optarg[0])) {
+		case 'e':
+			options.sectorformat = BKR_EP;
+			break;
+		case 's':
+			options.sectorformat = BKR_SP;
+			break;
+		default:
+			usage();
+			exit(1);
+		}
+		break;
 
-	if(bkr_mode_to_format(mode) < 0) {
-		if(direction == BKR_READING) {
-			if(ioctl(STDIN_FILENO, MTIOCGET, &mtget) < 0) {
-				perror(PROGRAM_NAME ": stdin");
-				exit(1);
-			}
-		} else {
-			if(ioctl(STDOUT_FILENO, MTIOCGET, &mtget) < 0) {
-				perror(PROGRAM_NAME ": stdout");
-				exit(1);
-			}
+	case 'V':
+		switch(tolower(optarg[0])) {
+		case 'n':
+			options.videomode = BKR_NTSC;
+			break;
+		case 'p':
+			options.videomode = BKR_PAL;
+			break;
+		default:
+			usage();
+			exit(1);
 		}
-		if(BKR_DENSITY(mode) == BKR_DENSITY(-1)) {
-			mode &= ~BKR_DENSITY(-1);
-			mode |= BKR_DENSITY(mtget.mt_dsreg);
-		}
-		if((BKR_CODEC(mode) == BKR_CODEC(-1)) &&
-		   (BKR_CODEC(mtget.mt_dsreg) != BKR_RAW)) {
-			mode &= ~BKR_CODEC(-1);
-			mode |= BKR_CODEC(mtget.mt_dsreg);
-		}
-		if(BKR_VIDEOMODE(mode) == BKR_VIDEOMODE(-1)) {
-			mode &= ~BKR_VIDEOMODE(-1);
-			mode |= BKR_VIDEOMODE(mtget.mt_dsreg);
-		}
-	}
-	if(bkr_mode_to_format(mode) < 0) {
-		fputs(PROGRAM_NAME ": ambiguous data stream format\n", stderr);
+		break;
+
+	case 0:
+		/* option sets a flag */
+		break;
+
+	case -1:
+		/* end of arguments */
+		break;
+
+	case '?':
+		/* unrecognized option */
+		usage();
 		exit(1);
-	}
 
+	case ':':
+		/* missing argument for an option */
+		usage();
+		exit(1);
+
+	default:
+		/* FIXME: pring bug warning */
+		break;
+	} while(c != -1);
+
+	if(options.dump_status)
+		/* verbosity interferes with status parsing */
+		options.verbose = 0;
+
+	return options;
+}
+
+
+/*
+ *==============================================================================
+ *
+ *                           Pipeline Construction
+ *
+ *==============================================================================
+ */
+
+static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
+{
+	/* FIXME: in EP mode, a gcr encoder goes between the splp and frame
+	 * elements, and an ecc2 encoder goes between the source and splp
+	 * elements. */
+	GstElement *pipeline = gst_pipeline_new("pipeline");
+	GstElement *source = gst_element_factory_make("fdsrc", "source");
+	GstElement *splp = gst_element_factory_make("bkr_splpenc", "splp");
+	GstElement *frame = gst_element_factory_make("bkr_frameenc", "frame");
+	GstElement *sink = gst_element_factory_make("fdsink", "sink");
+
+	g_object_set(G_OBJECT(source), "fd", 0, NULL);
+	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
+
+	g_object_set(G_OBJECT(frame), "videomode", v, NULL);
+	g_object_set(G_OBJECT(frame), "density", d, NULL);
+	g_object_set(G_OBJECT(frame), "format", f, NULL);
+
+	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
+	g_object_set(G_OBJECT(splp), "density", d, NULL);
+	g_object_set(G_OBJECT(splp), "format", f, NULL);
+
+	g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);
+
+	gst_element_link_many(source, splp, frame, sink, NULL);
+
+	gst_bin_add_many(GST_BIN(pipeline), source, splp, frame, sink, NULL);
+
+	return pipeline;
+}
+
+
+static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
+{
+	/* FIXME: in EP mode, a gcr encoder goes between the frame and splp
+	 * elements, and an ecc2 encoder goes between the splp and sink
+	 * elements. */
+	GstElement *pipeline = gst_pipeline_new("pipeline");
+	GstElement *source = gst_element_factory_make("fdsrc", "source");
+	GstElement *frame = gst_element_factory_make("bkr_frameenc", "frame");
+	GstElement *splp = gst_element_factory_make("bkr_splpenc", "splp");
+	GstElement *sink = gst_element_factory_make("fdsink", "sink");
+
+	g_object_set(G_OBJECT(source), "fd", 0, NULL);
+	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
+
+	g_object_set(G_OBJECT(frame), "videomode", v, NULL);
+	g_object_set(G_OBJECT(frame), "density", d, NULL);
+	g_object_set(G_OBJECT(frame), "format", f, NULL);
+
+	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
+	g_object_set(G_OBJECT(splp), "density", d, NULL);
+	g_object_set(G_OBJECT(splp), "format", f, NULL);
+
+	/*g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);*/
+
+	gst_element_link_many(source, frame, splp, sink, NULL);
+
+	gst_bin_add_many(GST_BIN(pipeline), source, frame, splp, sink, NULL);
+
+	return pipeline;
+}
+
+
+/*
+ *==============================================================================
+ *
+ *                                Entry Point
+ *
+ *==============================================================================
+ */
+
+int main(int argc, char *argv[])
+{
+	struct options options;
+	GstElement *pipeline;
 
 	/*
-	 * Do more setup stuff.
+	 * Init.
 	 */
 
-	mode &= BKR_MODE_MASK;
-	if(dump_status)
-		verbose = 0;	/* verbosity interferes with status parsing */
-	if(verbose) {
-		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", (direction == BKR_READING) ? "DECODING" : "ENCODING");
-		bkr_display_mode(stderr, mode);
-	}
+	gst_init(&argc, &argv);
 
-	/*
-	 * Grab interrupt signal so we can write a nice EOR before exiting
-	 * on SIGINT.
-	 */
+	options = parse_command_line(&argc, &argv);
 
-	if(direction == BKR_WRITING)
+	if(options.direction == ENCODING)
 		signal(SIGINT, sigint_handler);
 
-	/*
-	 * Chain the appropriate codecs.
-	 */
+	if(options.dump_status && options.dump_status_async)
+		fcntl(STDERR_FILENO, F_SETFL, O_NONBLOCK);
 
-	stream = stdio_ops->new(NULL, mode, &format_tbl[bkr_mode_to_format(mode)]);
-	stream = frame_ops->new(stream, mode, &format_tbl[bkr_mode_to_format(mode)]);
-	frame_private = stream->private;
-	if(BKR_CODEC(mode) == BKR_EP)
-		stream = gcr_ops->new(stream, mode, &format_tbl[bkr_mode_to_format(mode)]);
-	stream = splp_ops->new(stream, mode, &format_tbl[bkr_mode_to_format(mode)]);
-	splp_private = stream->private;
-	if(BKR_CODEC(mode) == BKR_EP)
-		stream = ecc2_ops->new(stream, mode, &format_tbl[bkr_mode_to_format(mode)]);
-
-	if(!stream) {
-		errno = ENOMEM;
-		perror(PROGRAM_NAME);
-		exit(1);
+	if(options.verbose) {
+		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", (options.direction == DECODING) ? "DECODING" : "ENCODING");
+		bkr_display_mode(stderr, options.videomode, options.bitdensity, options.sectorformat);
 	}
 
-	bkr_stream_set_callback(stream, callback, NULL);
+
+	/*
+	 * Construct the pipeline.
+	 */
+
+	if(options.direction == ENCODING) {
+		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
+	} else {
+		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
+	}
+
 
 	/*
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
 
-	stream->ops.start(stream, direction);
-	switch(direction) {
-		case BKR_READING:
-		decode(stream, dump_status, ignore_bad, time_only, verbose);
-		break;
-
-		case BKR_WRITING:
-		encode(stream, frame_private, splp_private, dump_status, time_only);
-		break;
-
-		default:
-		break;
+	gst_element_set_state(pipeline, GST_STATE_PLAYING);
+	while(gst_bin_iterate(GST_BIN(pipeline)));
+	if((options.direction == ENCODING) && (feof(stdin) || got_sigint)) {
+		/* FIXME: send EOS event to top of stream */
 	}
-	while(stream->ops.release(stream) == -EAGAIN);
 
-	pthread_cond_destroy(&io_activity);
-	pthread_mutex_destroy(&io_activity_lock);
 
+	/*
+	 * Clean up.
+	 */
+
+	gst_element_set_state(pipeline, GST_STATE_NULL);
+	gst_object_unref(GST_OBJECT(pipeline));
 	exit(0);
 }

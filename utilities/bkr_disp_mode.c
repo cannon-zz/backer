@@ -26,36 +26,36 @@
 #include <backer.h>
 #include <bkr_disp_mode.h>
 
-void  bkr_display_mode(FILE *file, unsigned int mode)
+void  bkr_display_mode(FILE *file, enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
-	switch(BKR_VIDEOMODE(mode)) {
-		case BKR_PAL:
+	switch(v) {
+	case BKR_PAL:
 		fputs("\tVideo mode:   [*] PAL   [ ] NTSC\n", file);
 		break;
-		case BKR_NTSC:
+	case BKR_NTSC:
 		fputs("\tVideo mode:   [ ] PAL   [*] NTSC\n", file);
-		default:
+	default:
 		break;
 	}
-	switch(BKR_DENSITY(mode)) {
-		case BKR_LOW:
+	switch(d) {
+	case BKR_LOW:
 		fputs("\tData rate:    [*] LOW   [ ] HIGH\n", file);
 		break;
-		case BKR_HIGH:
+	case BKR_HIGH:
 		fputs("\tData rate:    [ ] LOW   [*] HIGH\n", file);
-		default:
+	default:
 		break;
 	}
-	switch(BKR_CODEC(mode)) {
-		case BKR_RAW:
+	switch(f) {
+	case BKR_RAW:
 		fputs("\tData format:  [*] RAW   [ ] SP/LP  [ ] EP\n", file);
 		break;
-		case BKR_SP:
+	case BKR_SP:
 		fputs("\tData format:  [ ] RAW   [*] SP/LP  [ ] EP\n", file);
 		break;
-		case BKR_EP:
+	case BKR_EP:
 		fputs("\tData format:  [ ] RAW   [ ] SP/LP  [*] EP\n", file);
-		default:
+	default:
 		break;
 	}
 }

@@ -24,7 +24,8 @@
 #define _BKR_DISP_MODE_H
 
 #include <stdio.h>
+#include <backer.h>
 
-void bkr_display_mode(FILE *, unsigned int);
+void bkr_display_mode(FILE *, enum bkr_videomode, enum bkr_bitdensity, enum bkr_sectorformat);
 
 #endif /* _BKR_DISP_MODE_H */

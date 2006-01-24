@@ -1,5 +1,7 @@
 INCLUDES = -I../drivers -I../codecs
 
+bin_SCRIPTS = bkrvideo
+
 bin_PROGRAMS = bkrencode
 
 bkrencode_SOURCES = bkrencode.c bkr_disp_mode.c

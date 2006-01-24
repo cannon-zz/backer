@@ -15,7 +15,7 @@ BKR_HIGH=8
 #
 
 DEFAULT_VIDEOMODE=${BKR_NTSC}
-DEFAULT_DENSITY=${BKR_HIGH}
+DEFAULT_BITDENSITY=${BKR_HIGH}
 
 
 #
@@ -27,7 +27,7 @@ function usage() {
 }
 
 VIDEOMODE=${DEFAULT_VIDEOMODE}
-DENSITY=${DEFAULT_DENSITY}
+BITDENSITY=${DEFAULT_BITDENSITY}
 
 while getopts "V:D:" OPT ; do
 	case "${OPT}" in
@@ -44,9 +44,9 @@ while getopts "V:D:" OPT ; do
 	D)
 		case "${OPTARG}" in
 		l)
-			DENSITY=${BKR_LOW} ;;
+			BITDENSITY=${BKR_LOW} ;;
 		h)
-			DENSITY=${BKR_HIGH} ;;
+			BITDENSITY=${BKR_HIGH} ;;
 		*)
 			usage
 			exit 1 ;;
@@ -62,4 +62,4 @@ done
 # construct and run pipeline
 #
 
-gst-launch-0.8 fdsrc ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${DENSITY} ! ximagesink
+gst-launch-0.8 fdsrc ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ximagesink

@@ -28,6 +28,15 @@
 #define  BKR_FONT_WIDTH  5	/* font width  */
 #define  BKR_FONT_HEIGHT 14	/* font height */
 
-int bkr_puts(const char *, unsigned char *, int, int, bkr_format_info_t *);
+struct bkr_puts_format {
+	int leader;
+	int data_size;
+	int key_interval;
+	int key_length;
+	int bytes_per_line;
+};
+
+struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode, enum bkr_bitdensity, enum bkr_sectorformat);
+int bkr_puts(const char *, unsigned char *, int, int, const struct bkr_puts_format *);
 
 #endif	/* _BKR_PUTS_H */

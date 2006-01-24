@@ -23,6 +23,73 @@
 
 
 /*
+ * ============================================================================
+ *
+ *                             Format Information
+ *
+ * ============================================================================
+ */
+
+struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
+{
+	switch(d) {
+	case BKR_LOW:
+		switch(v) {
+		case BKR_NTSC:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_puts_format) { 40,  720,  44, 22,  4};
+			case BKR_SP:
+				return (struct bkr_puts_format) { 32,  830,  45, 22,  4};
+			case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 1012,   0,  0,  4};
+			}
+		case BKR_PAL:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_puts_format) { 48,  888,  40, 29,  4};
+			case BKR_SP:
+				return (struct bkr_puts_format) { 40,  980,  49, 24,  4};
+			case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 1220,   0,  0,  4};
+			}
+		}
+	case BKR_HIGH:
+		switch(v) {
+		case BKR_NTSC:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_puts_format) {100, 1848,  84, 29, 10};
+			case BKR_SP:
+				return (struct bkr_puts_format) { 80, 2160, 125, 20, 10};
+			case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 2530,   0,  0, 10};
+			}
+		case BKR_PAL:
+			switch(f) {
+			case BKR_EP:
+				return (struct bkr_puts_format) {120, 2288,  91, 32, 10};
+			case BKR_SP:
+				return (struct bkr_puts_format) {100, 2618, 136, 22, 10};
+			case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 3050,   0,  0, 10};
+			}
+		}
+	}
+
+	return (struct bkr_puts_format) {0,};
+}
+
+
+/*
+ * ============================================================================
+ *
+ *                                Helper Code
+ *
+ * ============================================================================
+ */
+
+/*
  * Return the minimum of two values.
  */
 
@@ -36,8 +103,6 @@
 
 
 /*
- * ascii_to_glyph()
- *
  * Convert an ASCII code to a glyph number (non-printable characters are
  * mapped to ' ').
  */
@@ -51,27 +116,23 @@ static int ascii_to_glyph(char code)
 
 
 /*
- * is_key_byte()
- *
  * Return true iff offset is in a key byte.
  */
 
-static int is_key_byte(int offset, bkr_format_info_t *format)
+static int is_key_byte(int offset, const struct bkr_puts_format *format)
 {
 	return(offset % format->key_interval == 0);
 }
 
 
 /*
- * screen_to_sector()
- *
  * Convert a zero-origin byte offset on the screen to a zero-origin byte
  * offset within a sector.  Returns < 0 if the specified screen location
  * does not contain a data byte (i.e. it's occupied by part of the tape
  * format itself --- "meta-data"?).
  */
 
-static int screen_to_sector(int offset, bkr_format_info_t *format)
+static int screen_to_sector(int offset, const struct bkr_puts_format *format)
 {
 	offset -= format->leader;
 
@@ -90,8 +151,14 @@ static int screen_to_sector(int offset, bkr_format_info_t *format)
 
 
 /*
- * int bkr_puts()
+ * ============================================================================
  *
+ *                                 bkr_puts()
+ *
+ * ============================================================================
+ */
+
+/*
  * This function modifies the contents of sector so that when written to
  * tape, the null-terminated string s will be visible as human-readable
  * graphic text in the video signal.  The top-left corner of the text will
@@ -140,7 +207,7 @@ static int screen_to_sector(int offset, bkr_format_info_t *format)
  * check to see which bytes in the sector buffer no longer contain 0xff.
  */
 
-int bkr_puts(const char *s, unsigned char *sector, int line, int bit, bkr_format_info_t *format)
+int bkr_puts(const char *s, unsigned char *sector, int line, int bit, const struct bkr_puts_format *format)
 {
 	int  screen_offset;     /* bit position from start of video field */
 	int  row, column;       /* .xpm row and column counters */
@@ -148,13 +215,6 @@ int bkr_puts(const char *s, unsigned char *sector, int line, int bit, bkr_format
 	int  screen_mask;       /* bit mask for current screen byte */
 	int  sector_offset;     /* current byte in sector */
 	int  bits_per_line;     /* number of bits across one video line */
-
-	/*
-	 * Check for a valid format.
-	 */
-
-	if(format->modulation_pad)
-		return(-1);
 
 	/*
 	 * Determine how many bits will be drawn in each line.

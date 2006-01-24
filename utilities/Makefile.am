@@ -2,7 +2,10 @@ INCLUDES = -I../drivers -I../codecs
 
 bin_SCRIPTS = bkrvideo
 
-bin_PROGRAMS = bkrencode
+bin_PROGRAMS = bkrencode bkrcheck
+
+bkrcheck_SOURCES = bkrcheck.c bkr_disp_mode.c bkr_puts.c ../codecs/bkr_splp_randomize.c
+bkrcheck_CFLAGS = $(GST_CFLAGS)
 
 bkrencode_SOURCES = bkrencode.c bkr_disp_mode.c
 bkrencode_CFLAGS = $(GST_CFLAGS)

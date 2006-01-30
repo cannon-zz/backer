@@ -255,6 +255,17 @@ static struct options parse_command_line(int *argc, char **argv[])
 }
 
 
+static const char *gstversionstring(void)
+{
+	static char s[] = "xxx.xxx.xxx";	/* big enough? */
+	guint major, minor, micro;
+
+	gst_version(&major, &minor, &micro);
+	sprintf(s, "%d.%d.%d", major, minor, micro);
+
+	return s;
+}
+
 /*
  * ============================================================================
  *
@@ -370,6 +381,7 @@ int main(int argc, char *argv[])
 		fcntl(STDERR_FILENO, F_SETFL, O_NONBLOCK);
 
 	if(options.verbose) {
+		fprintf(stderr, PROGRAM_NAME ": linked against GStreamer %s\n", gstversionstring());
 		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", (options.direction == DECODING) ? "DECODING" : "ENCODING");
 		bkr_display_mode(stderr, options.videomode, options.bitdensity, options.sectorformat);
 	}
@@ -392,8 +404,10 @@ int main(int argc, char *argv[])
 
 	gst_element_set_state(pipeline, GST_STATE_PLAYING);
 	while(gst_bin_iterate(GST_BIN(pipeline)) && !got_sigint);
-	if((options.direction == ENCODING) && (feof(stdin) || got_sigint)) {
-		/* FIXME: send EOS event to top of stream */
+	if(options.direction == ENCODING) {
+		/* FIXME: this doesn't work.  How do we send EOS down the
+		 * pipeline?  Why does fdsrc do it for crying out loud? */
+		gst_element_send_event(pipeline, gst_event_new(GST_EVENT_EOS));
 	}
 
 

@@ -25,6 +25,7 @@
 #include <backer.h>
 #include <bkr_elements.h>
 #include <bkr_frame.h>
+#include <bkr_gcr.h>
 #include <bkr_splp.h>
 #include <bkr_video_out.h>
 #include <rs.h>
@@ -108,6 +109,8 @@ static gboolean plugin_init(GstPlugin *plugin)
 	} *element, elements[] = {
 		{"bkr_framedec", bkr_framedec_get_type},
 		{"bkr_frameenc", bkr_frameenc_get_type},
+		{"bkr_gcrdec", bkr_gcrdec_get_type},
+		{"bkr_gcrenc", bkr_gcrenc_get_type},
 		{"bkr_splpdec", bkr_splpdec_get_type},
 		{"bkr_splpenc", bkr_splpenc_get_type},
 		{"bkr_video_out", bkr_video_out_get_type},

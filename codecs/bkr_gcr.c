@@ -20,54 +20,59 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-
-#ifdef __KERNEL__
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/slab.h>
-static void *malloc(size_t size)  { return(kmalloc(size, GFP_KERNEL)); }
-static void free(void *ptr) { kfree(ptr); }
-#else
-#include <errno.h>
 #include <string.h>
-#include <stdlib.h>
-#endif /* __KERNEL__ */
 
+#include <gst/gst.h>
 #include <backer.h>
 #include <bkr_bytes.h>
+#include <bkr_elements.h>
 #include <bkr_gcr.h>
-#include <bkr_ring_buffer.h>
-#include <bkr_stream.h>
 
 
 /*
  * ========================================================================
  *
- *                              Parameters
+ *                              PARAMETERS
  *
  * ========================================================================
  */
 
-#define  GCR_BUFFER_SIZE   (1<<14)
-#define  GCR_TIMEOUT_MULT  1
+/*
+ * Format info.
+ */
+
+static struct bkr_gcr_format format(enum bkr_videomode v, enum bkr_bitdensity d)
+{
+	switch(d) {
+	case BKR_LOW:
+		switch(v) {
+		case BKR_NTSC:
+			return (struct bkr_gcr_format) { 816, 102};
+		case BKR_PAL:
+			return (struct bkr_gcr_format) { 984, 123};
+		}
+	case BKR_HIGH:
+		switch(v) {
+		case BKR_NTSC:
+			return (struct bkr_gcr_format) {2072, 259};
+		case BKR_PAL:
+			return (struct bkr_gcr_format) {2496, 312};
+		}
+	}
+
+	return (struct bkr_gcr_format) {0,};
+}
 
 
 /*
  * ========================================================================
  *
- *                     8/9 GCR Modem Implementation
+ *                              Global Data
  *
  * ========================================================================
  */
 
-/* use inline assembly if possible */
-#if 1
-#define  rolw(x, n)  asm("rolw %2, %0" : "=r" (x) : "0" (x), "c" (n))
-#else
-#define  rolw(x, n)  do { x = bswap_16(x) >> (8 - (n)) } while(0)
-#endif
-
-static const u_int16_t gcr_encode[] = {
+static const guint16 gcr_encode[] = {
 	0x089, 0x08a, 0x08b, 0x08c, 0x08d, 0x08e, 0x091, 0x092,
 	0x093, 0x094, 0x095, 0x096, 0x099, 0x09a, 0x09b, 0x09c,
 	0x09d, 0x09e, 0x0a2, 0x0a3, 0x0a4, 0x0a5, 0x0a6, 0x0a9,
@@ -101,19 +106,37 @@ static const u_int16_t gcr_encode[] = {
 	0x1db, 0x1dc, 0x1dd, 0x1de, 0x1e1, 0x1e2, 0x1e3, 0x1e4,
 	0x1e5, 0x1e6, 0x1e9, 0x1ea, 0x1eb, 0x1ec, 0x1ed, 0x1ee
 };
-static unsigned char gcr_decode[512];
-#define  GCR_MASK  ((u_int16_t) 0x01ff)
+
+static guint8 gcr_decode[512];
+
+#define  GCR_MASK  ((guint16) 0x01ff)
 
 
-static void gcr_demodulate(unsigned char *src, unsigned char *dst, size_t n)
+/*
+ * ========================================================================
+ *
+ *                              CODEC Functions
+ *
+ * ========================================================================
+ */
+
+/* use inline assembly if possible */
+#if 1
+#define  rolw(x, n)  asm("rolw %2, %0" : "=r" (x) : "0" (x), "c" (n))
+#else
+#define  rolw(x, n)  do { x = bswap_16(x) >> (8 - (n)) } while(0)
+#endif
+
+
+static void gcr_demodulate(guint8 *src, guint8 *dst, gint n)
 {
-	u_int16_t  state = 0, rgstr;
-	signed char  shift = 1;
+	guint16 state = 0, rgstr;
+	gint8 shift = 1;
 
 	n >>= 3;
 
 	while(1) {
-		rgstr = __le16_to_cpu(get_unaligned((u_int16_t *) src++));
+		rgstr = __le16_to_cpu(get_unaligned((guint16 *) src++));
 		rolw(rgstr, shift);
 		if(state & 1)
 			rgstr = ~rgstr;
@@ -129,10 +152,10 @@ static void gcr_demodulate(unsigned char *src, unsigned char *dst, size_t n)
 }
 
 
-static void gcr_modulate(unsigned char *src, unsigned char *dst, size_t n)
+static void gcr_modulate(guint8 *src, guint8 *dst, gint n)
 {
-	u_int16_t  state = 0, rgstr = 0;
-	signed char  shift = 7;
+	guint16 state = 0, rgstr = 0;
+	gint8 shift = 7;
 
 	n >>= 3;
 
@@ -144,12 +167,12 @@ static void gcr_modulate(unsigned char *src, unsigned char *dst, size_t n)
 		if(--shift >= 0) {
 			rgstr = bswap_16(rgstr);
 			*dst++ = rgstr; /* write low byte */
-			rgstr &= (u_int16_t) 0xff00;
+			rgstr &= (guint16) 0xff00;
 		} else {
-			put_unaligned(__cpu_to_be16(rgstr), (u_int16_t *) dst);
+			put_unaligned(__cpu_to_be16(rgstr), (guint16 *) dst);
 			if(!--n)
 				break;
-			dst += sizeof(u_int16_t);
+			dst += sizeof(guint16);
 			rgstr = 0;
 			shift = 7;
 		}
@@ -157,193 +180,336 @@ static void gcr_modulate(unsigned char *src, unsigned char *dst, size_t n)
 }
 
 
-static int flush(struct bkr_stream_t *stream)
-{
-	return(bkr_stream_fill_to(stream, stream->capacity, BKR_FILLER) < 0 ? -EAGAIN : bytes_in_ring(stream->ring) ? bkr_source_write_status(stream) : 0);
-}
-
-
 /*
- * ========================================================================
+ * ============================================================================
  *
- *                        I/O Activity Callbacks
+ *                       GStreamer Encoder Support Code
  *
- * ========================================================================
+ * ============================================================================
  */
 
-ring_data_t *ring_head(struct ring *ring)
-{
-	ring_data_t *ptr;
-
-	ring_lock(ring);
-	ptr = ring->buffer + ring->head;
-	ring_unlock(ring);
-
-	return(ptr);
-}
-
-
-ring_data_t *ring_tail(struct ring *ring)
-{
-	ring_data_t *ptr;
-
-	ring_lock(ring);
-	ptr = ring->buffer + ring->tail;
-	ring_unlock(ring);
-
-	return(ptr);
-}
-
-
-static void read_callback(struct bkr_stream_t *stream)
-{
-	int  source_capacity = stream->source->capacity;
-	int  capacity = stream->capacity;
-	struct ring  *src_ring = stream->source->ring;
-	struct ring  *dst_ring = stream->ring;
-
-	while((bytes_in_ring(src_ring) >= source_capacity) && (space_in_ring(dst_ring) >= capacity)) {
-		gcr_demodulate(ring_tail(src_ring), ring_head(dst_ring), capacity);
-		ring_drain(src_ring, source_capacity);
-		ring_fill(dst_ring, capacity);
-	}
-
-	bkr_stream_do_callback(stream);
-}
-
-
-static void write_callback(struct bkr_stream_t *stream)
-{
-	int  source_capacity = stream->source->capacity;
-	int  capacity = stream->capacity;
-	struct ring  *src_ring = stream->ring;
-	struct ring  *dst_ring = stream->source->ring;
-
-	while((bytes_in_ring(src_ring) >= capacity) && (space_in_ring(dst_ring) >= source_capacity)) {
-		gcr_modulate(ring_tail(src_ring), ring_head(dst_ring), capacity);
-		ring_drain(src_ring, capacity);
-		ring_fill(dst_ring, source_capacity);
-	}
-
-	bkr_stream_do_callback(stream);
-}
-
-
 /*
- * ========================================================================
- *
- *                              Stream API
- *
- * ========================================================================
+ * Properties
  */
 
-static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
-{
-	struct bkr_stream_t  *source = stream->source;
-	int  result;
-
-	if(direction == BKR_READING)
-		bkr_stream_set_callback(source, (void (*)(void *)) read_callback, stream);
-	else
-		bkr_stream_set_callback(source, (void (*)(void *)) write_callback, stream);
-
-	result = source->ops.start(source, direction);
-	if(result >= 0)
-		stream->direction = direction;
-
-	return(result);
-}
-
-
-static int release(struct bkr_stream_t *stream)
-{
-	int  result;
-
-	if(stream->direction == BKR_WRITING) {
-		result = flush(stream);
-		if(result < 0)
-			return(result);
-	}
-	stream->direction = BKR_STOPPED;
-
-	result = stream->source->ops.release(stream->source);
-	if(result < 0)
-		return(result);
-
-	ring_free(stream->ring);
-	free(stream->ring);
-	free(stream->private);
-	free(stream);
-	return(0);
-}
-
-
-static struct bkr_stream_t *new(struct bkr_stream_t *, int, const bkr_format_info_t *);
-
-static const struct bkr_stream_ops_t stream_ops = {
-	.new = new,
-	.start = start,
-	.release = release,
-	.read = bkr_simple_stream_read,
-	.write = bkr_simple_stream_write,
+enum property {
+	ARG_VIDEOMODE = 1,
+	ARG_BITDENSITY,
 };
 
-static struct bkr_stream_t *new(struct bkr_stream_t *source, int mode, const bkr_format_info_t *fmt)
+
+static void enc_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
 {
-	int  capacity;
-	struct bkr_stream_t  *stream;
+	BkrGCREnc *filter = BKR_GCRENC(object);
 
-	if(!source)
-		goto no_source;
+	switch(id) {
+	case ARG_VIDEOMODE:
+		filter->videomode = g_value_get_enum(value);
+		break;
 
-	capacity = source->capacity - fmt->modulation_pad;
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
+		break;
+	}
 
-	stream = malloc(sizeof(*stream));
-	if(!stream)
-		goto no_stream;
-	stream->ring = malloc(sizeof(*stream->ring));
-	if(!stream->ring)
-		goto no_stream;
+	filter->format = format(filter->videomode, filter->bitdensity);
+}
 
-	if(!ring_alloc(stream->ring, GCR_BUFFER_SIZE - GCR_BUFFER_SIZE % capacity))
-		goto no_ring_buffer;
 
-	stream->fmt = *fmt;
-	stream->source = source;
-	bkr_stream_set_callback(stream, NULL, NULL);
-	stream->mode = mode;
-	stream->direction = BKR_STOPPED;
-	stream->ops = stream_ops;
-	stream->capacity = capacity;
-	stream->timeout = GCR_TIMEOUT_MULT * source->timeout;
-	stream->private = NULL;
+static void enc_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrGCREnc *filter = BKR_GCRENC(object);
 
-	return(stream);
+	switch(id) {
+	case ARG_VIDEOMODE:
+		g_value_set_enum(value, filter->videomode);
+		break;
 
-no_ring_buffer:
-	free(stream->ring);
-no_stream:
-	free(stream);
-no_source:
-	return(NULL);
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
+		break;
+	}
 }
 
 
 /*
- * ========================================================================
+ * Chain function.  See
  *
- *                               CODEC API
- *
- * ========================================================================
+ * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
-const struct bkr_stream_ops_t *bkr_gcr_codec_init(void)
+static void enc_chain(GstPad *pad, GstData *data)
 {
-	int  i;
+	BkrGCREnc *filter = BKR_GCRENC(GST_OBJECT_PARENT(pad));
+	GstBuffer *inbuf = GST_BUFFER(data);
+	GstBuffer *outbuf;
 
-	memset(gcr_decode, (signed char) -1, 512);
-	for(i = 0; i < 256; i++)
-		gcr_decode[gcr_encode[i]] = i;
+	g_return_if_fail(inbuf != NULL);
 
-	return(&stream_ops);
+	/* check that element properties are set */
+	g_return_if_fail(filter->format.capacity != 0);
+
+	/* modulate data and move it along */
+	if(GST_BUFFER_SIZE(inbuf) >= filter->format.capacity) {
+		outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.capacity + filter->format.modulation_pad);
+		gcr_modulate(GST_BUFFER_DATA(inbuf), GST_BUFFER_DATA(outbuf), filter->format.capacity);
+		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
+	}
+
+	gst_data_unref(data);
+}
+
+
+/*
+ * Class init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
+ */
+
+static GstElementClass *enc_parent_class = NULL;
+
+static void enc_class_init(BkrGCREncClass *class)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	object_class->set_property = enc_set_property;
+	object_class->get_property = enc_get_property;
+
+	enc_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
+}
+
+
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+static void enc_base_init(BkrGCREncClass *class)
+{
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	static GstElementDetails plugin_details = {
+		"Backer GCR Encoder",
+		"Filter",
+		"Backer run-length limiting bit modulation encoder",
+		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
+	};
+
+	gst_element_class_set_details(element_class, &plugin_details);
+}
+
+
+/*
+ * Instance init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
+ */
+
+static void enc_instance_init(BkrGCREnc *filter)
+{
+	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
+
+	/* input, "sink", pad.  No link function because pad can accept
+	 * anything as input */
+	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
+	gst_pad_set_chain_function(filter->sinkpad, enc_chain);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
+
+	/* output, "source", pad.  No link function because pad sends a
+	 * typeless byte stream */
+	filter->srcpad = gst_pad_new("src", GST_PAD_SRC);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
+}
+
+
+/*
+ * bkr_gcrenc_get_type().
+ */
+
+GType bkr_gcrenc_get_type(void)
+{
+	static GType type = 0;
+
+	if (!type) {
+		static const GTypeInfo info = {
+			.class_size = sizeof(BkrGCREncClass),
+			.class_init = (GClassInitFunc) enc_class_init,
+			.base_init = (GBaseInitFunc) enc_base_init,
+			.instance_size = sizeof(BkrGCREnc),
+			.instance_init = (GInstanceInitFunc) enc_instance_init,
+		};
+		int  i;
+		memset(gcr_decode, (gint8) -1, 512);
+		for(i = 0; i < 256; i++)
+			gcr_decode[gcr_encode[i]] = i;
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrGCREnc", &info, 0);
+	}
+	return type;
+}
+
+
+/*
+ * ============================================================================
+ *
+ *                       GStreamer Decoder Support Code
+ *
+ * ============================================================================
+ */
+
+/*
+ * Properties
+ */
+
+static void dec_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
+{
+	BkrGCRDec *filter = BKR_GCRDEC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		filter->videomode = g_value_get_enum(value);
+		break;
+
+	case ARG_BITDENSITY:
+		filter->bitdensity = g_value_get_enum(value);
+		break;
+	}
+
+	filter->format = format(filter->videomode, filter->bitdensity);
+}
+
+
+static void dec_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrGCRDec *filter = BKR_GCRDEC(object);
+
+	switch(id) {
+	case ARG_VIDEOMODE:
+		g_value_set_enum(value, filter->videomode);
+		break;
+
+	case ARG_BITDENSITY:
+		g_value_set_enum(value, filter->bitdensity);
+		break;
+	}
+}
+
+
+/*
+ * Chain function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
+ */
+
+static void dec_chain(GstPad *pad, GstData *data)
+{
+	BkrGCRDec *filter = BKR_GCRDEC(GST_OBJECT_PARENT(pad));
+	GstBuffer *inbuf = GST_BUFFER(data);
+	GstBuffer *outbuf;
+
+	g_return_if_fail(inbuf != NULL);
+
+	/* check that element properties are set */
+	g_return_if_fail(filter->format.capacity != 0);
+
+	/* demodulate data and move it along */
+	if(GST_BUFFER_SIZE(inbuf) >= filter->format.capacity + filter->format.modulation_pad) {
+		outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, filter->format.capacity);
+		gcr_demodulate(GST_BUFFER_DATA(inbuf), GST_BUFFER_DATA(outbuf), filter->format.capacity);
+		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
+	}
+
+	gst_data_unref(data);
+}
+
+
+/*
+ * Parent class.
+ */
+
+static GstElementClass *dec_parent_class = NULL;
+
+
+/*
+ * Class init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
+ */
+
+static void dec_class_init(BkrGCRDecClass *class)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
+	object_class->set_property = dec_set_property;
+	object_class->get_property = dec_get_property;
+
+	dec_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
+}
+
+
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+static void dec_base_init(BkrGCRDecClass *class)
+{
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	static GstElementDetails plugin_details = {
+		"Backer GCR Decoder",
+		"Filter",
+		"Backer run-length limiting bit modulation decoder",
+		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
+	};
+
+	gst_element_class_set_details(element_class, &plugin_details);
+}
+
+
+/*
+ * Instance init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
+ */
+
+static void dec_instance_init(BkrGCRDec *filter)
+{
+	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
+
+	/* input, "sink", pad.  No link function because pad can accept
+	 * anything as input */
+	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
+	gst_pad_set_chain_function(filter->sinkpad, dec_chain);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
+
+	/* output, "source", pad.  No link function because pad sends a
+	 * typeless byte stream */
+	filter->srcpad = gst_pad_new("src", GST_PAD_SRC);
+	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
+}
+
+
+/*
+ * bkr_gcrdec_get_type().
+ */
+
+GType bkr_gcrdec_get_type(void)
+{
+	static GType type = 0;
+
+	if (!type) {
+		static const GTypeInfo info = {
+			.class_size = sizeof(BkrGCRDecClass),
+			.class_init = (GClassInitFunc) dec_class_init,
+			.base_init = (GBaseInitFunc) dec_base_init,
+			.instance_size = sizeof(BkrGCRDec),
+			.instance_init = (GInstanceInitFunc) dec_instance_init,
+		};
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrGCRDec", &info, 0);
+	}
+	return type;
 }

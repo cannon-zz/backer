@@ -743,7 +743,7 @@ static void dec_get_property(GObject *object, enum property id, GValue *value, G
  * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
-static void dec_chain(GstPad *pad, GstData *in)
+static void dec_chain(GstPad *pad, GstData *data)
 {
 	BkrSPLPDec *filter = BKR_SPLPDEC(GST_OBJECT_PARENT(pad));
 	GstBuffer *outbuf;
@@ -751,11 +751,11 @@ static void dec_chain(GstPad *pad, GstData *in)
 	/* check that element has been initialized */
 	g_return_if_fail(filter->format.interleave != 0);
 
-	outbuf = decode_sector(filter, GST_BUFFER(in));
+	outbuf = decode_sector(filter, GST_BUFFER(data));
 	if(outbuf)
 		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
 	else
-		gst_data_unref(in);
+		gst_data_unref(data);
 }
 
 

@@ -545,7 +545,7 @@ static void enc_chain(GstPad *pad, GstData *data)
  * the data.
  */
 
-GstBuffer *enc_bufferalloc(GstPad *pad, guint64 offset, guint size)
+static GstBuffer *enc_bufferalloc(GstPad *pad, guint64 offset, guint size)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(GST_OBJECT_PARENT(pad));
 	GstBuffer *buf;

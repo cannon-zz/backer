@@ -30,7 +30,6 @@
 #include <gst/gst.h>
 
 #include <backer.h>
-#include <bkr_frame.h>
 #include <bkr_splp.h>
 
 #define  PROGRAM_NAME    "bkrencode"
@@ -266,12 +265,12 @@ static struct options parse_command_line(int *argc, char **argv[])
 
 static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
-	/* FIXME: in EP mode, a gcr encoder goes between the splp and frame
-	 * elements, and an ecc2 encoder goes between the source and splp
+	/* FIXME: in EP mode, an ecc2 encoder goes between the source and splp
 	 * elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", "source");
 	GstElement *splp = gst_element_factory_make("bkr_splpenc", "splp");
+	GstElement *gcr = (f == BKR_EP) ? gst_element_factory_make("bkr_gcrenc", "gcr") : NULL;
 	GstElement *frame = gst_element_factory_make("bkr_frameenc", "frame");
 	GstElement *sink = gst_element_factory_make("fdsink", "sink");
 
@@ -282,15 +281,24 @@ static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
 	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
 
+	if(f == BKR_EP) {
+		g_object_set(G_OBJECT(gcr), "videomode", v, NULL);
+		g_object_set(G_OBJECT(gcr), "bitdensity", d, NULL);
+	}
+
 	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
 	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
 	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
 
 	g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);
 
-	gst_element_link_many(source, splp, frame, sink, NULL);
-
-	gst_bin_add_many(GST_BIN(pipeline), source, splp, frame, sink, NULL);
+	if(f == BKR_EP) {
+		gst_element_link_many(source, splp, gcr, frame, sink, NULL);
+		gst_bin_add_many(GST_BIN(pipeline), source, splp, gcr, frame, sink, NULL);
+	} else {
+		gst_element_link_many(source, splp, frame, sink, NULL);
+		gst_bin_add_many(GST_BIN(pipeline), source, splp, frame, sink, NULL);
+	}
 
 	return pipeline;
 }
@@ -298,12 +306,12 @@ static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 
 static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
-	/* FIXME: in EP mode, a gcr encoder goes between the frame and splp
-	 * elements, and an ecc2 encoder goes between the splp and sink
+	/* FIXME: in EP mode, an ecc2 encoder goes between the splp and sink
 	 * elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", "source");
 	GstElement *frame = gst_element_factory_make("bkr_framedec", "frame");
+	GstElement *gcr = (f == BKR_EP) ? gst_element_factory_make("bkr_gcrdec", "gcr") : NULL;
 	GstElement *splp = gst_element_factory_make("bkr_splpdec", "splp");
 	GstElement *sink = gst_element_factory_make("fdsink", "sink");
 
@@ -314,13 +322,22 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
 	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
 
+	if(f == BKR_EP) {
+		g_object_set(G_OBJECT(gcr), "videomode", v, NULL);
+		g_object_set(G_OBJECT(gcr), "bitdensity", d, NULL);
+	}
+
 	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
 	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
 	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
 
-	gst_element_link_many(source, frame, splp, sink, NULL);
-
-	gst_bin_add_many(GST_BIN(pipeline), source, frame, splp, sink, NULL);
+	if(f == BKR_EP) {
+		gst_element_link_many(source, frame, gcr, splp, sink, NULL);
+		gst_bin_add_many(GST_BIN(pipeline), source, frame, gcr, splp, sink, NULL);
+	} else {
+		gst_element_link_many(source, frame, splp, sink, NULL);
+		gst_bin_add_many(GST_BIN(pipeline), source, frame, splp, sink, NULL);
+	}
 
 	return pipeline;
 }

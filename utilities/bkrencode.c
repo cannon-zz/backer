@@ -303,8 +303,8 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	 * elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", "source");
-	GstElement *frame = gst_element_factory_make("bkr_frameenc", "frame");
-	GstElement *splp = gst_element_factory_make("bkr_splpenc", "splp");
+	GstElement *frame = gst_element_factory_make("bkr_framedec", "frame");
+	GstElement *splp = gst_element_factory_make("bkr_splpdec", "splp");
 	GstElement *sink = gst_element_factory_make("fdsink", "sink");
 
 	g_object_set(G_OBJECT(source), "fd", 0, NULL);
@@ -317,8 +317,6 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
 	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
 	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
-
-	/*g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);*/
 
 	gst_element_link_many(source, frame, splp, sink, NULL);
 

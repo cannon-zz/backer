@@ -28,30 +28,28 @@ AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 PKG_PROG_PKG_CONFIG()
 
-# Set some useful CFLAGS
-CFLAGS="${CFLAGS} -Wstrict-prototypes"
-
 # Check for kernel source
 AX_KERNEL_VERSION
 AX_CHECK_KERNEL_SOURCE
+
+# CFLAGS
+AC_SUBST([AM_CFLAGS], [-Wall])
 
 # Check for GTK+ 2
 AC_SUBST([HAVE_GTK], [no])
 AM_PATH_GTK_2_0([2.0.0],[HAVE_GTK=yes])
 AM_CONDITIONAL([COND_GTK], [test "${HAVE_GTK}" == "yes"])
 
-# Check for GStreamer 0.8
-AC_SUBST([GST_VERSION], [0.8])
-PKG_CHECK_MODULES([GST], [gstreamer-${GST_VERSION}], [HAVE_GST=yes], [HAVE_GST=no])
-# FIXME: figure out to get pkg-config to give us the flags for
-# libgstbytestream.so
-GST_BYTESTREAM_LIBS="-lgstbytestream"
-GST_BYTESTREAM_LDFLAGS="-L/usr/lib/gstreamer-${GST_VERSION} -Wl,--rpath -Wl,/usr/lib/gstreamer-${GST_VERSION}"
-GST_LIBS="${GST_LIBS} ${GST_BYTESTREAM_LIBS}"
+# Check for GStreamer 0.10
+AC_SUBST([GST_VERSION], [0.10])
+PKG_CHECK_MODULES([GST], [gstreamer-${GST_VERSION}], , [echo "Not Found!" ; exit 1])
+PKG_CHECK_MODULES([GST_BASE], [gstreamer-base-${GST_VERSION}], , [echo "Not Found!" ; exit 1])
 AC_SUBST([GST_CFLAGS])
 AC_SUBST([GST_LIBS])
+AC_SUBST([GST_BASE_CFLAGS])
+AC_SUBST([GST_BASE_LIBS])
 AC_SUBST([plugindir], [${libdir}/gstreamer-${GST_VERSION}])
-AC_SUBST([GST_LDFLAGS], ["-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).* ${GST_BYTESTREAM_LDFLAGS}"])
+AC_SUBST([GST_PLUGIN_LDFLAGS], ["-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*"])
 
 
 # Set driver configuration

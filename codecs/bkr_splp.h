@@ -18,19 +18,24 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #ifndef __BKR_SPLP_H__
 #define __BKR_SPLP_H__
+
 
 #include <gst/gst.h>
 #include <backer.h>
 #include <rs.h>
 
+
 G_BEGIN_DECLS
+
 
 /*
  * Format information.
  *	capacity = data_size - sizeof(header)
  */
+
 
 struct bkr_splp_format {
 	gint data_size;
@@ -44,20 +49,20 @@ struct bkr_splp_format {
  * Encoder
  */
 
+
 #define BKR_SPLPENC_TYPE		(bkr_splpenc_get_type())
 #define BKR_SPLPENC(obj)		(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_SPLPENC_TYPE, BkrSPLPEnc))
 #define BKR_SPLPENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST((klass), BKR_SPLPENC_TYPE, BkrSPLPEnc))
 #define GST_IS_BKR_SPLPENC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_SPLPENC_TYPE))
 #define GST_IS_BKR_SPLPENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_SPLPENC_TYPE))
 
-typedef struct _BkrSPLPEncClass BkrSPLPEncClass;
-typedef struct _BkrSPLPEnc BkrSPLPEnc;
 
-struct _BkrSPLPEncClass {
+typedef struct {
 	GstElementClass parent_class;
-};
+} BkrSPLPEncClass;
 
-struct _BkrSPLPEnc {
+
+typedef struct {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
@@ -69,7 +74,8 @@ struct _BkrSPLPEnc {
 	rs_format_t *rs_format;
 
 	gint sector_number;
-};
+} BkrSPLPEnc;
+
 
 GType bkr_splpenc_get_type(void);
 
@@ -78,20 +84,20 @@ GType bkr_splpenc_get_type(void);
  * Decoder
  */
 
+
 #define BKR_SPLPDEC_TYPE		(bkr_splpdec_get_type())
 #define BKR_SPLPDEC(obj)		(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_SPLPDEC_TYPE, BkrSPLPDec))
 #define BKR_SPLPDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST((klass), BKR_SPLPDEC_TYPE, BkrSPLPDec))
 #define GST_IS_BKR_SPLPDEC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_SPLPDEC_TYPE))
 #define GST_IS_BKR_SPLPDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_SPLPDEC_TYPE))
 
-typedef struct _BkrSPLPDecClass BkrSPLPDecClass;
-typedef struct _BkrSPLPDec BkrSPLPDec;
 
-struct _BkrSPLPDecClass {
+typedef struct {
 	GstElementClass parent_class;
-};
+} BkrSPLPDecClass;
 
-struct _BkrSPLPDec {
+
+typedef struct {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
@@ -112,9 +118,13 @@ struct _BkrSPLPDec {
 	gint decoded_number;
 	gint not_underrunning;
 	gint sector_number;
-};
+} BkrSPLPDec;
+
 
 GType bkr_splpdec_get_type(void);
 
+
 G_END_DECLS
+
+
 #endif				/* __BKR_SPLP_H__ */

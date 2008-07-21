@@ -22,7 +22,9 @@
 #ifndef _BKR_ECC2_H
 #define _BKR_ECC2_H
 
+
 #include <bkr_stream.h>
+
 
 /*
  * ========================================================================
@@ -32,6 +34,8 @@
  * ========================================================================
  */
 
+
 const struct bkr_stream_ops_t *bkr_ecc2_codec_init(void);
+
 
 #endif /* _BKR_ECC2_H */

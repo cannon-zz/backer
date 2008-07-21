@@ -18,19 +18,24 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #ifndef __BKR_FRAME_H__
 #define __BKR_FRAME_H__
 
+
 #include <gst/gst.h>
-#include <gst/bytestream/adapter.h>
+#include <gst/base/gstadapter.h>
 #include <backer.h>
 
+
 G_BEGIN_DECLS
+
 
 /*
  * Format information.
  * 	interlace = number of extra bytes in an odd field
  */
+
 
 struct bkr_frame_format {
 	gint field_size;
@@ -47,20 +52,20 @@ struct bkr_frame_format {
  * Encoder
  */
 
+
 #define BKR_FRAMEENC_TYPE			(bkr_frameenc_get_type())
 #define BKR_FRAMEENC(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_FRAMEENC_TYPE, BkrFrameEnc))
 #define BKR_FRAMEENC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_FRAMEENC_TYPE, BkrFrameEnc))
 #define GST_IS_BKR_FRAMEENC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_FRAMEENC_TYPE))
 #define GST_IS_BKR_FRAMEENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_FRAMEENC_TYPE))
 
-typedef struct _BkrFrameEncClass BkrFrameEncClass;
-typedef struct _BkrFrameEnc BkrFrameEnc;
 
-struct _BkrFrameEncClass {
+typedef struct {
 	GstElementClass parent_class;
-};
+} BkrFrameEncClass;
 
-struct _BkrFrameEnc {
+
+typedef struct _BkrFrameEnc {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
@@ -70,7 +75,8 @@ struct _BkrFrameEnc {
 	enum bkr_sectorformat sectorformat;
 	gint odd_field;
 	struct bkr_frame_format format;
-};
+} BkrFrameEnc;
+
 
 GType bkr_frameenc_get_type(void);
 
@@ -79,20 +85,20 @@ GType bkr_frameenc_get_type(void);
  * Decoder
  */
 
+
 #define BKR_FRAMEDEC_TYPE			(bkr_framedec_get_type())
 #define BKR_FRAMEDEC(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_FRAMEDEC_TYPE, BkrFrameDec))
 #define BKR_FRAMEDEC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_FRAMEDEC_TYPE, BkrFrameDec))
 #define GST_IS_BKR_FRAMEDEC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_FRAMEDEC_TYPE))
 #define GST_IS_BKR_FRAMEDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_FRAMEDEC_TYPE))
 
-typedef struct _BkrFrameDecClass BkrFrameDecClass;
-typedef struct _BkrFrameDec BkrFrameDec;
 
-struct _BkrFrameDecClass {
+typedef struct {
 	GstElementClass parent_class;
-};
+} BkrFrameDecClass;
 
-struct _BkrFrameDec {
+
+typedef struct _BkrFrameDec {
 	GstElement element;
 
 	GstPad *sinkpad, *srcpad;
@@ -109,9 +115,13 @@ struct _BkrFrameDec {
 	gint last_field_offset;
 	guint smallest_field;
 	gint largest_field;
-};
+} BkrFrameDec;
+
 
 GType bkr_framedec_get_type(void);
 
+
 G_END_DECLS
+
+
 #endif	/* __BKR_FRAME_H__ */

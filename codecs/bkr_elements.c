@@ -20,7 +20,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include <gst/gst.h>
+
 
 #include <backer.h>
 #include <bkr_elements.h>
@@ -38,6 +40,7 @@
  *
  * ============================================================================
  */
+
 
 GType bkr_videomode_get_type(void)
 {
@@ -101,18 +104,19 @@ GType bkr_sectorformat_get_type(void)
  * ============================================================================
  */
 
+
 static gboolean plugin_init(GstPlugin *plugin)
 {
 	struct element_info {
-		gchar *name;
+		const gchar *name;
 		GType (*type)(void);
 	} *element, elements[] = {
-		{"bkr_framedec", bkr_framedec_get_type},
+		/*{"bkr_framedec", bkr_framedec_get_type},
 		{"bkr_frameenc", bkr_frameenc_get_type},
 		{"bkr_gcrdec", bkr_gcrdec_get_type},
 		{"bkr_gcrenc", bkr_gcrenc_get_type},
 		{"bkr_splpdec", bkr_splpdec_get_type},
-		{"bkr_splpenc", bkr_splpenc_get_type},
+		{"bkr_splpenc", bkr_splpenc_get_type},*/
 		{"bkr_video_out", bkr_video_out_get_type},
 		{NULL, 0},
 	};
@@ -131,5 +135,6 @@ static gboolean plugin_init(GstPlugin *plugin)
 /*
  * This is the structure that gst-register looks for.
  */
+
 
 GST_PLUGIN_DEFINE(GST_VERSION_MAJOR, GST_VERSION_MINOR, "bkr_elements", "Backer Bytestream Processing Elements", plugin_init, PACKAGE_VERSION, "GPL", PACKAGE_NAME, "http://linbacker.sf.net")

@@ -1,13 +1,15 @@
 /*
  */
 
+
 #include <gst/gst.h>
-#include <gst/bytestream/adapter.h>
+#include <gst/base/gstadapter.h>
 #include <backer.h>
 #include <bkr_elements.h>
 #include <bkr_video_out.h>
 
-#define VIDEO_BPP 32
+
+#define VIDEO_BPP 32	/* cannot be changed without modifying draw_field */
 
 
 /*
@@ -18,12 +20,15 @@
  * ============================================================================
  */
 
+
 /*
  * How to draw data.
  */
 
+
 static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 {
+	/* 4 pixels for a high density bit */
 	*pos++ = colour;
 	*pos++ = colour;
 	*pos++ = colour;
@@ -34,6 +39,7 @@ static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 
 static guint32 *draw_bit_l(guint32 *pos, guint32 colour)
 {
+	/* 8 pixels for a low density bit */
 	return draw_bit_h(draw_bit_h(pos, colour), colour);
 }
 
@@ -61,38 +67,52 @@ static guint32 *draw_line(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *p
 
 static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *dest, gint bytes_per_line, gint lines, const guint8 *data)
 {
-	while(lines--) {
+	for(; lines--; data += bytes_per_line)
 		dest = draw_line(pixel_func, dest, data, bytes_per_line, 0x00ffffff);
-		data += bytes_per_line;
-	}
 }
 
 
 /*
  * Format information.
- * 	width = pixels/bit * bits/byte * bytes/line
  */
 
-static struct bkr_video_out_format format(enum bkr_videomode v, enum bkr_bitdensity d)
+
+static struct bkr_video_out_format compute_format(enum bkr_videomode v, enum bkr_bitdensity d)
 {
+	/* initialize to 0 to silence compiler warning about possibly
+	 * uninitialized data */
+	struct bkr_video_out_format format = {0,};
+
 	switch(d) {
 	case BKR_LOW:
-		switch(v) {
-		case BKR_NTSC:
-			return (struct bkr_video_out_format) {4, 1, 8 * 8 * 5, 253, draw_bit_l};
-		case BKR_PAL:
-			return (struct bkr_video_out_format) {4, 0, 8 * 8 * 5, 305, draw_bit_l};
-		}
+		format.bytes_per_line = 4;
+		format.width = 8;	/* pixels / bit */
+		format.pixel_func = draw_bit_l;
+		break;
+
 	case BKR_HIGH:
-		switch(v) {
-		case BKR_NTSC:
-			return (struct bkr_video_out_format) {10, 1, 4 * 8 * 11, 253, draw_bit_h};
-		case BKR_PAL:
-			return (struct bkr_video_out_format) {10, 0, 4 * 8 * 11, 305, draw_bit_h};
-		}
+		format.bytes_per_line = 10;
+		format.width = 4;	/* pixels / bit */
+		format.pixel_func = draw_bit_h;
+		break;
 	}
 
-	return (struct bkr_video_out_format) {0,};
+	/* *= bits / byte * bytes / line = pixels / line */
+	format.width *= 8 * (format.bytes_per_line + 1);
+
+	switch(v) {
+	case BKR_NTSC:
+		format.height = 253;
+		format.interlace = 1;
+		break;
+
+	case BKR_PAL:
+		format.height = 305;
+		format.interlace = 0;
+		break;
+	}
+
+	return format;
 }
 
 
@@ -104,9 +124,11 @@ static struct bkr_video_out_format format(enum bkr_videomode v, enum bkr_bitdens
  * ============================================================================
  */
 
+
 /*
  * Element properties
  */
+
 
 enum property {
 	ARG_VIDEOMODE = 1,
@@ -117,18 +139,40 @@ enum property {
 static void set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
 {
 	BkrVideoOut *filter = BKR_VIDEO_OUT(object);
+	enum bkr_videomode videomode = filter->videomode;
+	enum bkr_bitdensity bitdensity = filter->bitdensity;
+	struct bkr_video_out_format format;
+	GstCaps *caps;
 
 	switch(id) {
 	case ARG_VIDEOMODE:
-		filter->videomode = g_value_get_enum(value);
+		videomode = g_value_get_enum(value);
 		break;
 
 	case ARG_BITDENSITY:
-		filter->bitdensity = g_value_get_enum(value);
+		bitdensity = g_value_get_enum(value);
 		break;
 	}
 
-	filter->format = format(filter->videomode, filter->bitdensity);
+	format = compute_format(videomode, bitdensity);
+
+	caps = gst_caps_new_simple(
+		"video/x-raw-rgb",
+		"width", G_TYPE_INT, format.width,
+		"height", G_TYPE_INT, format.height + format.interlace,
+		"bpp", G_TYPE_INT, VIDEO_BPP,
+		"depth", G_TYPE_INT, 24,
+		"framerate", GST_TYPE_FRACTION, videomode == BKR_NTSC ? 60000 : 50000, videomode == BKR_NTSC ? 1001 : 1000,
+		NULL
+	);
+
+	if(gst_pad_set_caps(filter->srcpad, caps)) {
+		/* caps were accepted, update element properties */
+		filter->videomode = videomode;
+		filter->bitdensity = bitdensity;
+		filter->format = format;
+	}
+	gst_object_unref(caps);
 }
 
 
@@ -149,76 +193,73 @@ static void get_property(GObject *object, enum property id, GValue *value, GPara
 
 
 /*
- * Source pad getcaps function.
+ * Source pad set/getcaps function.
  */
-
-static GstCaps *src_getcaps(GstPad *pad)
-{
-	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
-	GstCaps *caps = gst_caps_new_simple(
-		"video/x-raw-rgb",
-		"width", G_TYPE_INT, filter->format.width,
-		"height", G_TYPE_INT, filter->format.height + filter->format.interlace,
-		"bpp", G_TYPE_INT, VIDEO_BPP,
-		"depth", G_TYPE_INT, 24,
-		"framerate", G_TYPE_DOUBLE, (double) 60.0,
-		NULL
-	);
-
-	return caps;
-}
-
-
-/*
- * Source pad link function.
- */
-
-static GstPadLinkReturn src_link(GstPad *pad, const GstCaps *caps)
-{
-	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
-
-	/* FIXME:  wtf am I supposed to do? */
-	return GST_PAD_LINK_OK;
-}
 
 
 /*
  * Pad chain function.  See
  *
- * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
+ * file:///usr/share/doc/gstreamer0.10-doc/gstreamer-0.10/GstPad.html#GstPadChainFunction
  */
 
-static void chain(GstPad *pad, GstData *data)
-{
-	BkrVideoOut *filter = BKR_VIDEO_OUT(GST_OBJECT_PARENT(pad));
-	const guint8 *inbuf;
-	GstBuffer *outbuf;
-	gint lines;
 
-	/* check that element properties are set */
-	g_return_if_fail(filter->format.pixel_func != NULL);
+static GstFlowReturn chain(GstPad *pad, GstBuffer *sinkbuf)
+{
+	BkrVideoOut *filter = BKR_VIDEO_OUT(gst_pad_get_parent(pad));
+	GstPad *srcpad = filter->srcpad;
+	const guint8 *data;
+	GstBuffer *srcbuf;
+	GstFlowReturn result;
+	gint lines;
+	gint bytes_per_image = (VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace);
+
+	if(!GST_PAD_CAPS(srcpad)) {
+		GST_DEBUG("caps not set on src pad");
+		result = GST_FLOW_NOT_NEGOTIATED;
+		goto done;
+	}
 
 	/* add input data to adapter */
-	gst_adapter_push(filter->adapter, GST_BUFFER(data));
+	GST_DEBUG("pushing %d byte buffer into adapter", GST_BUFFER_SIZE(sinkbuf));
+	gst_adapter_push(filter->adapter, sinkbuf);
 
-	/* try to extract one video field's worth */
+	/* loop until the adapter runs out of data */
 	while(1) {
+		/* ask for one video field's worth of data */
 		lines = filter->format.height + (filter->odd_field ? filter->format.interlace : 0);
-		inbuf = gst_adapter_peek(filter->adapter, lines * filter->format.bytes_per_line);
-		if(!inbuf)
-			return;
+		GST_DEBUG("need %d lines (%d bytes) of data", lines, lines * filter->format.bytes_per_line);
+		data = gst_adapter_peek(filter->adapter, lines * filter->format.bytes_per_line);
+		if(!data) {
+			GST_DEBUG("not enough data yet");
+			result = GST_FLOW_OK;
+			break;
+		}
+		GST_DEBUG("got it");
 
-		/* draw video image */
-		outbuf = gst_pad_alloc_buffer(filter->srcpad, 0, (VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace));
-		g_return_if_fail(outbuf != NULL);
+		/* ask the downstream peer for a buffer */
+		result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, bytes_per_image, GST_PAD_CAPS(srcpad), &srcbuf);
+		if(result != GST_FLOW_OK)
+			break;
 
-		draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(outbuf), filter->format.bytes_per_line, lines, inbuf);
+		/* draw the video field */
+		draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(srcbuf), filter->format.bytes_per_line, lines, data);
 
-		/* send picture */
+		/* send image */
+		result = gst_pad_push(srcpad, srcbuf);
+		if(result != GST_FLOW_OK)
+			break;
+
+		/* flush the data we've just used from adapter */
 		gst_adapter_flush(filter->adapter, lines * filter->format.bytes_per_line);
-		gst_pad_push(filter->srcpad, GST_DATA(outbuf));
+
+		/* reset for next */
 		filter->odd_field ^= 1;
 	}
+
+done:
+	gst_object_unref(filter);
+	return result;
 }
 
 
@@ -226,18 +267,96 @@ static void chain(GstPad *pad, GstData *data)
  * Parent class.
  */
 
+
 static GstElementClass *parent_class = NULL;
 
 
 /*
- * Instance finalize function.  See ???
+ * Instance finalize function.  See
+ *
+ * file:///usr/share/doc/libglib2.0-doc/gobject/gobject-The-Base-Object-Type.html
+ *
+ * FIXME:  should the unref()ing be done in a dispose() function?  The
+ * gobject documentation says so.
  */
+
 
 static void finalize(GObject *object)
 {
-	g_object_unref(BKR_VIDEO_OUT(object)->adapter);
+	BkrVideoOut *filter = BKR_VIDEO_OUT(object);
+
+	/* FIXME: need to call gst_adapter_clear() on FLUSH_STOP, EOS, and
+	 * GST_STATE_PAUSED --> GST_STATE_READY. */
+
+	g_object_unref(filter->adapter);
+	filter->adapter = NULL;
+	gst_object_unref(filter->srcpad);
+	filter->srcpad = NULL;
 
 	G_OBJECT_CLASS(parent_class)->finalize(object);
+}
+
+
+/*
+ * Pad templates.  NOTE:  the srcpad template must be kept synchronized
+ * with the caps computed in set_property().
+ */
+
+
+GstStaticPadTemplate sinkpad_template = GST_STATIC_PAD_TEMPLATE(
+	"sink",
+	GST_PAD_SINK,
+	GST_PAD_ALWAYS,
+	GST_STATIC_CAPS_ANY
+);
+
+
+GstStaticPadTemplate srcpad_template = GST_STATIC_PAD_TEMPLATE(
+	"src",
+	GST_PAD_SRC,
+	GST_PAD_ALWAYS,
+	GST_STATIC_CAPS(
+		"video/x-raw-rgb, " \
+		"width = (int) { 320, 352 }, " /* format.width */ \
+		"height = (int)254, " /* format.height + format.interlace */ \
+		"bpp = (int)32, " /* VIDEO_BPP */ \
+		"depth = (int)24, " \
+		"framerate = (fraction)60000/1001; " \
+		"video/x-raw-rgb, " \
+		"width = (int) { 320, 352 }, " /* format.width */ \
+		"height = (int)305, " /* format.height + format.interlace */ \
+		"bpp = (int)32, " /* VIDEO_BPP */ \
+		"depth = (int)24, " \
+		"framerate = (fraction)50000/1000"
+	)
+);
+
+
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+
+static void base_init(gpointer class)
+{
+	static GstElementDetails plugin_details = {
+		"Backer Video Out",
+		"Codec/Decoder/Video",
+		"Simulates a Backer's byte-stream to video conversion",
+		"Kipp Cannon <kcannon@ligo.caltech.edu>"
+	};
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+
+	object_class->set_property = set_property;
+	object_class->get_property = get_property;
+	object_class->finalize = finalize;
+
+	gst_element_class_set_details(element_class, &plugin_details);
+	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sinkpad_template));
+	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&srcpad_template));
 }
 
 
@@ -247,38 +366,15 @@ static void finalize(GObject *object)
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
  */
 
-static void class_init(BkrVideoOutClass *class)
+
+static void class_init(gpointer class, gpointer class_data)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
 	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
 	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
-	object_class->set_property = set_property;
-	object_class->get_property = get_property;
-
-	object_class->finalize = finalize;
 
 	parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
-}
-
-
-/*
- * Base init function.  See
- *
- * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
- */
-
-static void base_init(BkrVideoOutClass *class)
-{
-	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
-	static GstElementDetails plugin_details = {
-		"Backer Video Out",
-		"Codec/Decoder/Video",
-		"Simulates a Backer's byte-stream to video conversion",
-		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
-	};
-
-	gst_element_class_set_details(element_class, &plugin_details);
 }
 
 
@@ -288,32 +384,37 @@ static void base_init(BkrVideoOutClass *class)
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
  */
 
-static void instance_init(BkrVideoOut *filter)
+
+static void instance_init(GTypeInstance *object, gpointer class)
 {
-	GstElementClass *class = GST_ELEMENT_GET_CLASS(filter);
+	GstElement *element = GST_ELEMENT(object);
+	BkrVideoOut *filter = BKR_VIDEO_OUT(object);
+	GstPad *pad;
 
-	/* input, "sink", pad.  No link function because pad can accept
-	 * anything as input */
-	filter->sinkpad = gst_pad_new("sink", GST_PAD_SINK);
-	gst_pad_set_chain_function(filter->sinkpad, chain);
-	gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
+	gst_element_create_all_pads(element);
 
-	/* output, "source", pad */
-	filter->srcpad = gst_pad_new("src", GST_PAD_SRC);
-	gst_pad_set_getcaps_function(filter->srcpad, src_getcaps);
-	/*gst_pad_set_link_function(filter->srcpad, src_link);*/
-	gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
+	/* configure sink pad */
+	pad = gst_element_get_static_pad(element, "sink");
+	gst_pad_set_chain_function(pad, chain);
+	gst_object_unref(pad);
+
+	/* configure src pad */
+	pad = gst_element_get_static_pad(element, "src");
+
+	/* consider this to consume the reference */
+	filter->srcpad = pad;
 
 	/* internal state */
 	filter->adapter = gst_adapter_new();
 	filter->odd_field = 1;
-	filter->format = format(filter->videomode, filter->bitdensity);
+	filter->format = compute_format(filter->videomode, filter->bitdensity);
 }
 
 
 /*
  * bkr_video_out_get_type()
  */
+
 
 GType bkr_video_out_get_type(void)
 {
@@ -322,10 +423,10 @@ GType bkr_video_out_get_type(void)
 	if (!type) {
 		static const GTypeInfo info = {
 			.class_size = sizeof(BkrVideoOutClass),
-			.class_init = (GClassInitFunc) class_init,
-			.base_init = (GBaseInitFunc) base_init,
+			.class_init = class_init,
+			.base_init = base_init,
 			.instance_size = sizeof(BkrVideoOut),
-			.instance_init = (GInstanceInitFunc) instance_init,
+			.instance_init = instance_init,
 		};
 		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrVideoOut", &info, 0);
 	}

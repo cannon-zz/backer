@@ -23,24 +23,15 @@ DEFAULT_BITDENSITY=${BKR_HIGH}
 #
 
 function usage() {
-	echo "Usage: bkrvideo [-V{n|p}] [-D{h|l}] < input"
+	echo "Usage: bkrvideo [-Vn|-Vp] [-Dh|-Dl] [-v] < input"
 }
 
 VIDEOMODE=${DEFAULT_VIDEOMODE}
 BITDENSITY=${DEFAULT_BITDENSITY}
+VERBOSE=""
 
-while getopts "V:D:" OPT ; do
+while getopts "D:V:v" OPT ; do
 	case "${OPT}" in
-	V)
-		case "${OPTARG}" in
-		n)
-			VIDEOMODE=${BKR_NTSC} ;;
-		p)
-			VIDEOMODE=${BKR_PAL} ;;
-		*)
-			usage
-			exit 1 ;;
-		esac ;;
 	D)
 		case "${OPTARG}" in
 		l)
@@ -51,6 +42,18 @@ while getopts "V:D:" OPT ; do
 			usage
 			exit 1 ;;
 		esac ;;
+	V)
+		case "${OPTARG}" in
+		n)
+			VIDEOMODE=${BKR_NTSC} ;;
+		p)
+			VIDEOMODE=${BKR_PAL} ;;
+		*)
+			usage
+			exit 1 ;;
+		esac ;;
+	v)
+		VERBOSE="-v" ;;
 	*)
 		usage
 		exit 1 ;;
@@ -62,4 +65,12 @@ done
 # construct and run pipeline
 #
 
-gst-launch-0.8 fdsrc ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ximagesink
+PIPELINE="fdsrc fd=0 ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ximagesink"
+
+if [ "${VERBOSE}" == "-v" ] ; then
+	echo "Pipeline:  ${PIPELINE}"
+fi
+
+#DEBUGFLAGS="--gst-debug-level=4"
+
+gst-launch ${DEBUGFLAGS} ${VERBOSE} ${PIPELINE}

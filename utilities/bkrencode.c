@@ -20,6 +20,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -27,10 +28,13 @@
 #include <stdio.h>
 #include <unistd.h>
 
+
 #include <gst/gst.h>
+
 
 #include <backer.h>
 #include <bkr_splp.h>
+
 
 #define  PROGRAM_NAME    "bkrencode"
 
@@ -42,6 +46,7 @@
  *
  * ============================================================================
  */
+
 
 enum direction {
 	ENCODING,
@@ -57,7 +62,9 @@ enum direction {
  * ============================================================================
  */
 
+
 static unsigned int  got_sigint = 0;
+
 
 static void sigint_handler(int num)
 {
@@ -74,6 +81,7 @@ static void sigint_handler(int num)
  *
  * ============================================================================
  */
+
 
 struct options {
 	int verbose;
@@ -266,6 +274,7 @@ static const char *gstversionstring(void)
 	return s;
 }
 
+
 /*
  * ============================================================================
  *
@@ -273,6 +282,7 @@ static const char *gstversionstring(void)
  *
  * ============================================================================
  */
+
 
 static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
@@ -292,7 +302,7 @@ static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
 	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
 
-	if(f == BKR_EP) {
+	if(gcr) {
 		g_object_set(G_OBJECT(gcr), "videomode", v, NULL);
 		g_object_set(G_OBJECT(gcr), "bitdensity", d, NULL);
 	}
@@ -362,14 +372,17 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
  * ============================================================================
  */
 
+
 int main(int argc, char *argv[])
 {
 	struct options options;
 	GstElement *pipeline;
 
+
 	/*
 	 * Init.
 	 */
+
 
 	gst_init(&argc, &argv);
 	options = parse_command_line(&argc, &argv);
@@ -391,6 +404,7 @@ int main(int argc, char *argv[])
 	 * Construct the pipeline.
 	 */
 
+
 	if(options.direction == ENCODING) {
 		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
 	} else {
@@ -401,6 +415,7 @@ int main(int argc, char *argv[])
 	/*
 	 * Transfer data one sector at a time until EOF is reached.
 	 */
+
 
 	gst_element_set_state(pipeline, GST_STATE_PLAYING);
 	while(gst_bin_iterate(GST_BIN(pipeline)) && !got_sigint);
@@ -414,6 +429,7 @@ int main(int argc, char *argv[])
 	/*
 	 * Clean up.
 	 */
+
 
 	gst_element_set_state(pipeline, GST_STATE_NULL);
 	gst_object_unref(GST_OBJECT(pipeline));

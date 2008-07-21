@@ -5,21 +5,26 @@
  * Portions Copyright (C) 1999 Phil Karn, KA9Q
  */
 
+
 #ifndef RS_H
 #define RS_H
+
 
 /*
  * Decoder error conditions.
  */
 
+
 #define RS_EDEGENERATEROOTS  1  /* lambda(x) has degenerate roots */
 #define RS_EFORNEY           2  /* divide by 0 in Forney algorithm */
 #define RS_EINVALIDROOT      3  /* erasure location beyond code length */
+
 
 /*
  * Set MM to be the size of each code symbol in bits. The maximum
  * Reed-Solomon block size will then be 2^MM - 1 symbols.
  */
+
 
 #define MM  8
 
@@ -27,6 +32,7 @@
 /*
  * Define the type used for storing code word symbols.
  */
+
 
 #if MM <= 8
 typedef unsigned char rs_symbol_t;
@@ -43,12 +49,14 @@ typedef unsigned short rs_symbol_t;
  * choice is made (usually int).
  */
 
+
 typedef int gf;
 
 
 /*
  * Reed-Solomon encoder/decoder format descriptor.
  */
+
 
 typedef struct {
 	int  n;                 /* number of symbols in code word */
@@ -95,6 +103,7 @@ typedef struct {
  * sizes from 2 to 16 bits can be found below.
  */
 
+
 void galois_field_init(int p);
 
 
@@ -125,10 +134,11 @@ void galois_field_init(int p);
 /*
  * Reed-Solomon encoder/decoder setup routine.
  *
- * Must be called before the encoder or decoder are called.  The code
- * parameters are used to initialize a format structure.  Checking is done
- * on the parameters and the return value is < 0 if they are invalid and
- * the format structure is unchanged otherwise 0 is returned.
+ * Used to allocate and initialize a encoder/decoder format descriptor
+ * structure.  The function parameters are used to initialize the
+ * newly-allocated format descriptor.  The return value is the address of
+ * the newly-allocated format descriptor or NULL on error.  An error can
+ * indicate out-of-memory or that the input parameters are invalid.
  *
  * Parameters:
  *   n
@@ -158,10 +168,8 @@ void galois_field_init(int p);
  *
  *        0       1       2       3   . . .    Interleave = 2
  *            0       1       2
- *
- *   format
- *      Pointer to the format structure to initialize.
  */
+
 
 rs_format_t *reed_solomon_codec_new(unsigned int n, unsigned int k, int interleave);
 
@@ -171,6 +179,7 @@ rs_format_t *reed_solomon_codec_new(unsigned int n, unsigned int k, int interlea
  *
  * Call this when finished to free all allocated memory.
  */
+
 
 void reed_solomon_codec_free(rs_format_t *format);
 
@@ -182,6 +191,7 @@ void reed_solomon_codec_free(rs_format_t *format);
  * computed parity symbols are placed in parity[] which must be large
  * enough to contain them.
  */
+
 
 void reed_solomon_encode(rs_symbol_t *parity, const rs_symbol_t *data, rs_format_t format);
 
@@ -198,10 +208,12 @@ void reed_solomon_encode(rs_symbol_t *parity, const rs_symbol_t *data, rs_format
  * The decoder corrects the symbols (both data and parity) in place (if
  * possible) and returns the number of symbols corrected.  format->erasure
  * is left filled with the computed error and erasure positions.  If the
- * codeword is illegal or uncorrectable, the block[] array is unchanged and
- * -1 is returned.
+ * codeword is illegal or uncorrectable, the data and parity arrays are
+ * unchanged and -1 is returned.
  */
 
+
 int reed_solomon_decode(rs_symbol_t *parity, rs_symbol_t *data, int num_erase, rs_format_t format);
+
 
 #endif /* RS_H */

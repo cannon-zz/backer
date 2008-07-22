@@ -95,6 +95,13 @@ static struct bkr_video_out_format compute_format(enum bkr_videomode v, enum bkr
 		format.width = 4;	/* pixels / bit */
 		format.pixel_func = draw_bit_h;
 		break;
+
+	default:
+		/* set to impossible values */
+		format.bytes_per_line = 0;
+		format.width = 0;
+		format.pixel_func = NULL;
+		break;
 	}
 
 	/* *= bits / byte * bytes / line = pixels / line */
@@ -108,6 +115,12 @@ static struct bkr_video_out_format compute_format(enum bkr_videomode v, enum bkr
 
 	case BKR_PAL:
 		format.height = 305;
+		format.interlace = 0;
+		break;
+
+	default:
+		/* set to impossible values */
+		format.height = 0;
 		format.interlace = 0;
 		break;
 	}
@@ -172,7 +185,7 @@ static void set_property(GObject *object, enum property id, const GValue *value,
 		filter->bitdensity = bitdensity;
 		filter->format = format;
 	}
-	gst_object_unref(caps);
+	gst_caps_unref(caps);
 }
 
 
@@ -190,11 +203,6 @@ static void get_property(GObject *object, enum property id, GValue *value, GPara
 		break;
 	}
 }
-
-
-/*
- * Source pad set/getcaps function.
- */
 
 
 /*
@@ -298,44 +306,12 @@ static void finalize(GObject *object)
 
 
 /*
- * Pad templates.  NOTE:  the srcpad template must be kept synchronized
- * with the caps computed in set_property().
- */
-
-
-GstStaticPadTemplate sinkpad_template = GST_STATIC_PAD_TEMPLATE(
-	"sink",
-	GST_PAD_SINK,
-	GST_PAD_ALWAYS,
-	GST_STATIC_CAPS_ANY
-);
-
-
-GstStaticPadTemplate srcpad_template = GST_STATIC_PAD_TEMPLATE(
-	"src",
-	GST_PAD_SRC,
-	GST_PAD_ALWAYS,
-	GST_STATIC_CAPS(
-		"video/x-raw-rgb, " \
-		"width = (int) { 320, 352 }, " /* format.width */ \
-		"height = (int)254, " /* format.height + format.interlace */ \
-		"bpp = (int)32, " /* VIDEO_BPP */ \
-		"depth = (int)24, " \
-		"framerate = (fraction)60000/1001; " \
-		"video/x-raw-rgb, " \
-		"width = (int) { 320, 352 }, " /* format.width */ \
-		"height = (int)305, " /* format.height + format.interlace */ \
-		"bpp = (int)32, " /* VIDEO_BPP */ \
-		"depth = (int)24, " \
-		"framerate = (fraction)50000/1000"
-	)
-);
-
-
-/*
  * Base init function.  See
  *
  * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ *
+ * NOTE:  the srcpad template must be kept synchronized with the caps
+ * computed in set_property().
  */
 
 
@@ -349,14 +325,39 @@ static void base_init(gpointer class)
 	};
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	GstPadTemplate *sinkpad_template = gst_pad_template_new(
+		"sink",
+		GST_PAD_SINK,
+		GST_PAD_ALWAYS,
+		GST_CAPS_ANY
+	);
+	GstPadTemplate *srcpad_template = gst_pad_template_new(
+		"src",
+		GST_PAD_SRC,
+		GST_PAD_ALWAYS,
+		gst_caps_from_string(
+			"video/x-raw-rgb, " \
+			"width = (int) { 320, 352 }, " /* format.width */ \
+			"height = (int) 254, " /* format.height + format.interlace */ \
+			"bpp = (int) 32, " /* VIDEO_BPP */ \
+			"depth = (int) 24, " \
+			"framerate = (fraction) 60000/1001; " \
+			"video/x-raw-rgb, " \
+			"width = (int) { 320, 352 }, " /* format.width */ \
+			"height = (int) 305, " /* format.height + format.interlace */ \
+			"bpp = (int) 32, " /* VIDEO_BPP */ \
+			"depth = (int) 24, " \
+			"framerate = (fraction) 50000/1000"
+		)
+	);
 
 	object_class->set_property = set_property;
 	object_class->get_property = get_property;
 	object_class->finalize = finalize;
 
 	gst_element_class_set_details(element_class, &plugin_details);
-	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sinkpad_template));
-	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&srcpad_template));
+	gst_element_class_add_pad_template(element_class, sinkpad_template);
+	gst_element_class_add_pad_template(element_class, srcpad_template);
 }
 
 

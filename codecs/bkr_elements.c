@@ -84,7 +84,7 @@ GType bkr_sectorformat_get_type(void)
 
 	if(!type) {
 		static GEnumValue values[] = {
-			{ BKR_SP, "SP/LP", "SP/LP sector format" },
+			{ BKR_SP, "SPLP", "SP/LP sector format" },
 			{ BKR_EP, "EP", "EP sector format" },
 			{ 0, NULL, NULL }
 		};
@@ -107,22 +107,29 @@ GType bkr_sectorformat_get_type(void)
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
-	struct element_info {
+	struct {
 		const gchar *name;
 		GType (*type)(void);
 	} *element, elements[] = {
-		/*{"bkr_framedec", bkr_framedec_get_type},
+		/*{"bkr_gcrenc", bkr_gcrdec_get_type},
+		{"bkr_gcrdec", bkr_gcrenc_get_type},
+		{"bkr_splpenc", bkr_splpenc_get_type},
+		{"bkr_splpdec", bkr_splpdec_get_type},*/
 		{"bkr_frameenc", bkr_frameenc_get_type},
-		{"bkr_gcrdec", bkr_gcrdec_get_type},
-		{"bkr_gcrenc", bkr_gcrenc_get_type},
-		{"bkr_splpdec", bkr_splpdec_get_type},
-		{"bkr_splpenc", bkr_splpenc_get_type},*/
+		{"bkr_framedec", bkr_framedec_get_type},
 		{"bkr_video_out", bkr_video_out_get_type},
 		{NULL, 0},
 	};
 
 	/* initialize Reed-Solomon coder/decoder */
 	galois_field_init(GF00256);
+
+	/* make sure the enums are created before a caps string has to be
+	 * parsed */
+	/* FIXME:  is this needed? */
+	BKR_TYPE_VIDEOMODE;
+	BKR_TYPE_BITDENSITY;
+	BKR_TYPE_SECTORFORMAT;
 
 	/* tell gstreamer about the elements */
 	for(element = elements; element->name; element++)

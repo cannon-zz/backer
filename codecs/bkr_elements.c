@@ -155,9 +155,9 @@ static gboolean plugin_init(GstPlugin *plugin)
 		GType (*type)(void);
 	} *element, elements[] = {
 		/*{"bkr_gcrenc", bkr_gcrdec_get_type},
-		{"bkr_gcrdec", bkr_gcrenc_get_type},
+		{"bkr_gcrdec", bkr_gcrenc_get_type},*/
 		{"bkr_splpenc", bkr_splpenc_get_type},
-		{"bkr_splpdec", bkr_splpdec_get_type},*/
+		{"bkr_splpdec", bkr_splpdec_get_type},
 		{"bkr_frameenc", bkr_frameenc_get_type},
 		{"bkr_framedec", bkr_framedec_get_type},
 		{"bkr_video_out", bkr_video_out_get_type},

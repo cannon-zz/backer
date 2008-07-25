@@ -1,7 +1,9 @@
 /*
  * Driver for Danmere's Backer 16/32 video tape backup cards.
  *
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
+ *                                Sector Codec
+ *
+ * Copyright (C) 2000,2001,2002,2008  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,20 +34,6 @@ G_BEGIN_DECLS
 
 
 /*
- * Format information.
- *	capacity = data_size - sizeof(header)
- */
-
-
-struct bkr_splp_format {
-	gint data_size;
-	gint parity_size;
-	gint capacity;
-	gint interleave;
-};
-
-
-/*
  * Encoder
  */
 
@@ -65,12 +53,24 @@ typedef struct {
 typedef struct {
 	GstElement element;
 
-	GstPad *sinkpad, *srcpad;
+	GstPad *srcpad;
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
-	struct bkr_splp_format format;
+
+	/*
+	 * Format information.
+	 *	capacity = data_size - sizeof(header)
+	 */
+
+	struct bkr_splp_format {
+		gint data_size;
+		gint parity_size;
+		gint capacity;
+		gint interleave;
+	} *format;
+
 	rs_format_t *rs_format;
 
 	gint sector_number;
@@ -100,12 +100,12 @@ typedef struct {
 typedef struct {
 	GstElement element;
 
-	GstPad *sinkpad, *srcpad;
+	GstPad *srcpad;
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
-	struct bkr_splp_format format;
+	struct bkr_splp_format *format;
 	rs_format_t *rs_format;
 
 	gint header_is_good;
@@ -117,7 +117,7 @@ typedef struct {
 	gint duplicate_runs;
 	gint decoded_number;
 	gint not_underrunning;
-	gint sector_number;
+	gint sector_number;	/* FIXME:  use buffer sequence number? */
 } BkrSPLPDec;
 
 

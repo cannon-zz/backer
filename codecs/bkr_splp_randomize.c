@@ -21,6 +21,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include <gst/gst.h>
 #include <bkr_bytes.h>
 #include <bkr_splp_randomize.h>
@@ -35,6 +36,7 @@
  * Semi-Numerical Algorithms, 2nd ed., vol 2 of The Art of Computer
  * Programing.
  */
+
 
 void bkr_splp_sector_randomize(void *buff, gint count, guint32 seed)
 {

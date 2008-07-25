@@ -520,7 +520,13 @@ static void enc_base_init(gpointer class)
 		"src",
 		GST_PAD_SRC,
 		GST_PAD_ALWAYS,
-		GST_CAPS_ANY
+		/* FIXME:  I figure out how to make the caps enums */
+		gst_caps_from_string(
+			"application/x-backer, " \
+			"videomode=(int){ 1, 2 }, " \
+			"bitdensity=(int){ 4, 8 }, " \
+			"sectorformat=(int){ 16, 32 }"
+		)
 	);
 
 	gst_element_class_set_details(element_class, &plugin_details);

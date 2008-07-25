@@ -194,6 +194,7 @@ static void encode_field(const struct bkr_frame_format *format, guint8 *dst, con
 
 static void reset_statistics(BkrFrameDec *filter)
 {
+	/* NOTE: keep synchronized with defaults in dec_class_init() */
 	filter->worst_key = filter->format->key_length;
 	filter->best_nonkey = 0;
 	filter->frame_warnings = 0;
@@ -428,6 +429,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		result = GST_FLOW_NOT_NEGOTIATED;
 		goto done;
 	}
+
 	if(GST_BUFFER_SIZE(sinkbuf) != filter->format->active_size - filter->format->key_length) {
 		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("received incorrect buffer size, got %d bytes expected %d bytes.", GST_BUFFER_SIZE(sinkbuf), filter->format->active_size - filter->format->key_length), (NULL));
 		result = GST_FLOW_ERROR;
@@ -614,54 +616,90 @@ GType bkr_frameenc_get_type(void)
  */
 
 
-enum property {
-	ARG_VIDEOMODE = 1,
-	ARG_BITDENSITY,
-	ARG_SECTORFORMAT
+enum dec_property {
+	ARG_DEC_WORST_KEY = 1,
+	ARG_DEC_BEST_NONKEY,
+	ARG_DEC_FRAME_WARNINGS,
+	ARG_DEC_SMALLEST_FIELD,
+	ARG_DEC_LARGEST_FIELD
 };
 
 
-static void dec_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
+static void dec_set_property(GObject *object, enum dec_property id, const GValue *value, GParamSpec *pspec)
 {
 	BkrFrameDec *filter = BKR_FRAMEDEC(object);
 
 	switch(id) {
-	case ARG_VIDEOMODE:
-		filter->videomode = g_value_get_enum(value);
+	case ARG_DEC_WORST_KEY:
+		filter->worst_key = g_value_get_int(value);
 		break;
 
-	case ARG_BITDENSITY:
-		filter->bitdensity = g_value_get_enum(value);
+	case ARG_DEC_BEST_NONKEY:
+		filter->best_nonkey = g_value_get_int(value);
 		break;
 
-	case ARG_SECTORFORMAT:
-		filter->sectorformat = g_value_get_enum(value);
+	case ARG_DEC_FRAME_WARNINGS:
+		filter->frame_warnings = g_value_get_int(value);
+		break;
+
+	case ARG_DEC_SMALLEST_FIELD:
+		filter->smallest_field = g_value_get_int(value);
+		break;
+
+	case ARG_DEC_LARGEST_FIELD:
+		filter->largest_field = g_value_get_int(value);
 		break;
 	}
-
-	free(filter->format);
-	filter->format = compute_format(filter->videomode, filter->bitdensity, filter->sectorformat);
-	reset_statistics(filter);
 }
 
 
-static void dec_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+static void dec_get_property(GObject *object, enum dec_property id, GValue *value, GParamSpec *pspec)
 {
 	BkrFrameDec *filter = BKR_FRAMEDEC(object);
 
 	switch(id) {
-	case ARG_VIDEOMODE:
-		g_value_set_enum(value, filter->videomode);
+	case ARG_DEC_WORST_KEY:
+		g_value_set_int(value, filter->worst_key);
 		break;
 
-	case ARG_BITDENSITY:
-		g_value_set_enum(value, filter->bitdensity);
+	case ARG_DEC_BEST_NONKEY:
+		g_value_set_int(value, filter->best_nonkey);
 		break;
 
-	case ARG_SECTORFORMAT:
-		g_value_set_enum(value, filter->sectorformat);
+	case ARG_DEC_FRAME_WARNINGS:
+		g_value_set_int(value, filter->frame_warnings);
+		break;
+
+	case ARG_DEC_SMALLEST_FIELD:
+		g_value_set_int(value, filter->smallest_field);
+		break;
+
+	case ARG_DEC_LARGEST_FIELD:
+		g_value_set_int(value, filter->largest_field);
 		break;
 	}
+}
+
+
+/*
+ * Sink pad setcaps function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.10-doc/gstreamer-0.10/GstPad.html#GstPadBufferAllocFunction
+ */
+
+
+static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
+{
+	BkrFrameDec *filter = BKR_FRAMEDEC(gst_pad_get_parent(pad));
+
+	free(filter->format);
+	filter->format = caps_to_format(caps);
+	if(filter->format)
+		reset_statistics(filter);
+
+	gst_object_unref(filter);
+
+	return filter->format ? TRUE : FALSE;
 }
 
 
@@ -675,13 +713,16 @@ static void dec_get_property(GObject *object, enum property id, GValue *value, G
 static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 {
 	BkrFrameDec *filter = BKR_FRAMEDEC(gst_pad_get_parent(pad));
+	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
 	GstPad *srcpad = filter->srcpad;
-	GstBuffer *srcbuf;
 	const guint8 *data;
 	GstFlowReturn result;
 
-	if(!GST_PAD_CAPS(srcpad)) {
-		GST_DEBUG("caps not set on src pad");
+	if(!caps || (caps != GST_PAD_CAPS(pad))) {
+		if(!caps)
+			GST_DEBUG("caps not set on buffer");
+		else if(caps != GST_PAD_CAPS(pad))
+			GST_DEBUG("buffer's caps don't match pad's caps");
 		result = GST_FLOW_NOT_NEGOTIATED;
 		goto done;
 	}
@@ -689,21 +730,29 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 	gst_adapter_push(filter->adapter, sinkbuf);
 
 	while((data = find_field(filter, sector_key))) {
-		result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, filter->format->active_size - filter->format->key_length, GST_PAD_CAPS(filter->srcpad), &srcbuf);
-		if(result != GST_FLOW_OK)
+		GstBuffer *srcbuf;
+
+		result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->active_size - filter->format->key_length, caps, &srcbuf);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_alloc_buffer() failed");
 			goto done;
+		}
 
 		decode_field(filter->format, GST_BUFFER_DATA(srcbuf), data);
 
 		gst_adapter_flush(filter->adapter, filter->format->active_size);
 
-		result = gst_pad_push(filter->srcpad, srcbuf);
-
-		if(result != GST_FLOW_OK)
+		result = gst_pad_push(srcpad, srcbuf);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_push() failed");
 			goto done;
+		}
 	}
 
+	result = GST_FLOW_OK;
+
 done:
+	gst_caps_unref(caps);
 	gst_object_unref(filter);
 	return result;
 }
@@ -758,7 +807,25 @@ static void dec_base_init(gpointer class)
 		"sink",
 		GST_PAD_SINK,
 		GST_PAD_ALWAYS,
-		GST_CAPS_ANY
+		/* FIXME:  I figure out how to make the caps enums */
+		gst_caps_from_string(
+			"application/x-backer, " \
+			"videomode=(int){ 1, 2 }, " \
+			"bitdensity=(int){ 4, 8 }, " \
+			"sectorformat=(int){ 16, 32 }"
+		)
+	);
+	GstPadTemplate *srcpad_template = gst_pad_template_new(
+		"src",
+		GST_PAD_SRC,
+		GST_PAD_ALWAYS,
+		/* FIXME:  I figure out how to make the caps enums */
+		gst_caps_from_string(
+			"application/x-backer, " \
+			"videomode=(int){ 1, 2 }, " \
+			"bitdensity=(int){ 4, 8 }, " \
+			"sectorformat=(int){ 16, 32 }"
+		)
 	);
 
 	gst_element_class_set_details(element_class, &plugin_details);
@@ -768,6 +835,7 @@ static void dec_base_init(gpointer class)
 	object_class->finalize = dec_finalize;
 
 	gst_element_class_add_pad_template(element_class, sinkpad_template);
+	gst_element_class_add_pad_template(element_class, srcpad_template);
 }
 
 
@@ -782,9 +850,11 @@ static void dec_class_init(gpointer class, gpointer class_data)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 
-	g_object_class_install_property(object_class, ARG_VIDEOMODE, g_param_spec_enum("videomode", "Video mode", "Video mode", BKR_TYPE_VIDEOMODE, DEFAULT_VIDEOMODE, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_BITDENSITY, g_param_spec_enum("bitdensity", "Bit density", "Bit density", BKR_TYPE_BITDENSITY, DEFAULT_BITDENSITY, G_PARAM_READWRITE));
-	g_object_class_install_property(object_class, ARG_SECTORFORMAT, g_param_spec_enum("sectorformat", "Sector format", "Sector format", BKR_TYPE_SECTORFORMAT, DEFAULT_SECTORFORMAT, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_DEC_WORST_KEY, g_param_spec_int("worst_key", "Worst key", "Worst key", 0, INT_MAX, INT_MAX, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_DEC_BEST_NONKEY, g_param_spec_int("best_nonkey", "Best non-key", "Best non-key", 0, INT_MAX, 0, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_DEC_FRAME_WARNINGS, g_param_spec_int("frame_warnings", "Frame warnings", "Frame warnings", 0, INT_MAX, 0, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_DEC_SMALLEST_FIELD, g_param_spec_int("smallest_field", "Smallest field", "Smallest field", 0, INT_MAX, INT_MAX, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_DEC_LARGEST_FIELD, g_param_spec_int("largest_field", "Largest field", "Largest field", 0, INT_MAX, 0, G_PARAM_READWRITE));
 
 	dec_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
@@ -807,21 +877,19 @@ static void dec_instance_init(GTypeInstance *object, gpointer class)
 
 	/* configure sink pad */
 	pad = gst_element_get_static_pad(element, "sink");
+	gst_pad_set_setcaps_function(pad, dec_setcaps);
 	gst_pad_set_chain_function(pad, dec_chain);
 	gst_object_unref(pad);
 
-	/* create and configure src pad */
-	pad = gst_pad_new("src", GST_PAD_SRC);
-	gst_element_add_pad(GST_ELEMENT(filter), pad);
+	/* configure src pad */
+	pad = gst_element_get_static_pad(element, "src");
 
-	/* save a reference */
+	/* consider this to consume the reference */
 	filter->srcpad = pad;
-	gst_object_ref(pad);
 
 	/* internal state */
 	filter->adapter = gst_adapter_new();
 	filter->format = NULL;
-	reset_statistics(filter);
 }
 
 

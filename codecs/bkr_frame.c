@@ -508,25 +508,13 @@ static void enc_base_init(gpointer class)
 		"sink",
 		GST_PAD_SINK,
 		GST_PAD_ALWAYS,
-		/* FIXME:  I figure out how to make the caps enums */
-		gst_caps_from_string(
-			"application/x-backer, " \
-			"videomode=(int){ 1, 2 }, " \
-			"bitdensity=(int){ 4, 8 }, " \
-			"sectorformat=(int){ 16, 32 }"
-		)
+		bkr_get_template_caps()
 	);
 	GstPadTemplate *srcpad_template = gst_pad_template_new(
 		"src",
 		GST_PAD_SRC,
 		GST_PAD_ALWAYS,
-		/* FIXME:  I figure out how to make the caps enums */
-		gst_caps_from_string(
-			"application/x-backer, " \
-			"videomode=(int){ 1, 2 }, " \
-			"bitdensity=(int){ 4, 8 }, " \
-			"sectorformat=(int){ 16, 32 }"
-		)
+		bkr_get_template_caps()
 	);
 
 	gst_element_class_set_details(element_class, &plugin_details);
@@ -813,25 +801,13 @@ static void dec_base_init(gpointer class)
 		"sink",
 		GST_PAD_SINK,
 		GST_PAD_ALWAYS,
-		/* FIXME:  I figure out how to make the caps enums */
-		gst_caps_from_string(
-			"application/x-backer, " \
-			"videomode=(int){ 1, 2 }, " \
-			"bitdensity=(int){ 4, 8 }, " \
-			"sectorformat=(int){ 16, 32 }"
-		)
+		bkr_get_template_caps()
 	);
 	GstPadTemplate *srcpad_template = gst_pad_template_new(
 		"src",
 		GST_PAD_SRC,
 		GST_PAD_ALWAYS,
-		/* FIXME:  I figure out how to make the caps enums */
-		gst_caps_from_string(
-			"application/x-backer, " \
-			"videomode=(int){ 1, 2 }, " \
-			"bitdensity=(int){ 4, 8 }, " \
-			"sectorformat=(int){ 16, 32 }"
-		)
+		bkr_get_template_caps()
 	);
 
 	gst_element_class_set_details(element_class, &plugin_details);

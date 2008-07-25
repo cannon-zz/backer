@@ -182,7 +182,6 @@ enum bkr_bitdensity {
 	BKR_HIGH = 0x0008      /* High density */
 };
 enum bkr_sectorformat {
-	BKR_RAW = 0x0000,      /* read/write raw data */
 	BKR_SP = 0x0010,       /* read/write SP/LP format */
 	BKR_EP = 0x0020        /* read/write EP format */
 };
@@ -191,8 +190,11 @@ enum bkr_sectorformat {
 /*
  * Convert a mode (as above) to an index into the format array (below).
  * Return < 0 if the mode is invalid.
+ *
+ * FIXME:  is this needed anymore?
  */
 
+#if 0
 static int bkr_mode_to_format(int mode)
 {
 	int  format = 0;
@@ -214,6 +216,7 @@ static int bkr_mode_to_format(int mode)
 
 	return(format);
 }
+#endif
 
 
 /*

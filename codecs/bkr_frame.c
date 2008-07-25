@@ -98,16 +98,16 @@ static guint correlate(const guint8 *data, gint key_interval, gint key_length, c
 
 static const guint8 *find_field(BkrFrameDec *filter, const guint8 *key)
 {
-	gint threshold = filter->format.key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
+	gint threshold = filter->format->key_length * FRAME_THRESHOLD_A / FRAME_THRESHOLD_B;
 	const guint8 *data;
 	gint corr;
 
 	while(1) {
-		data = gst_adapter_peek(filter->adapter, filter->format.active_size);
+		data = gst_adapter_peek(filter->adapter, filter->format->active_size);
 		if(!data)
 			return NULL;
 
-		corr = correlate(data, filter->format.key_interval, filter->format.key_length, key);
+		corr = correlate(data, filter->format->key_interval, filter->format->key_length, key);
 		if(corr >= threshold)
 			break;
 		if(corr > filter->best_nonkey)
@@ -141,18 +141,20 @@ static const guint8 *find_field(BkrFrameDec *filter, const guint8 *key)
  */
 
 
-static void decode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 *src)
+static void decode_field(const struct bkr_frame_format *format, guint8 *dst, const guint8 *src)
 {
+	int key_length = format->key_length;
+	int key_interval_minus_1 = format->key_interval - 1;
 	int i;
 
-	for(i = 1; i < fmt.key_length; i++) {
+	for(i = 1; i < key_length; i++) {
 		src++;
-		memcpy(dst, src, fmt.key_interval - 1);
-		dst += fmt.key_interval - 1;
-		src += fmt.key_interval - 1;
+		memcpy(dst, src, key_interval_minus_1);
+		dst += key_interval_minus_1;
+		src += key_interval_minus_1;
 	}
 	src++;
-	memcpy(dst, src, fmt.active_size % fmt.key_interval - 1);
+	memcpy(dst, src, format->active_size % format->key_interval - 1);
 }
 
 
@@ -162,24 +164,26 @@ static void decode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 
  */
 
 
-static void encode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 *src, const guint8 *key, gint field_number)
+static void encode_field(const struct bkr_frame_format *format, guint8 *dst, const guint8 *src, const guint8 *key, gint field_number)
 {
-	gint i;
+	int key_length = format->key_length;
+	int key_interval_minus_1 = format->key_interval - 1;
+	int i;
 
-	memset(dst, BKR_LEADER, fmt.leader);
-	dst += fmt.leader;
+	memset(dst, BKR_LEADER, format->leader);
+	dst += format->leader;
 
-	for(i = 1; i < fmt.key_length; i++) {
+	for(i = 1; i < key_length; i++) {
 		*dst++ = *key++;
-		memcpy(dst, src, fmt.key_interval - 1);
-		dst += fmt.key_interval - 1;
-		src += fmt.key_interval - 1;
+		memcpy(dst, src, key_interval_minus_1);
+		dst += key_interval_minus_1;
+		src += key_interval_minus_1;
 	}
 	*dst++ = *key++;
-	memcpy(dst, src, fmt.active_size % fmt.key_interval - 1);
-	dst += fmt.active_size % fmt.key_interval - 1;
+	memcpy(dst, src, format->active_size % format->key_interval - 1);
+	dst += format->active_size % format->key_interval - 1;
 
-	memset(dst, BKR_TRAILER, fmt.trailer + ((field_number & 1) ? fmt.interlace : 0));
+	memset(dst, BKR_TRAILER, format->trailer + ((field_number & 1) ? format->interlace : 0));
 }
 
 
@@ -190,7 +194,7 @@ static void encode_field(struct bkr_frame_format fmt, guint8 *dst, const guint8 
 
 static void reset_statistics(BkrFrameDec *filter)
 {
-	filter->worst_key = filter->format.key_length;
+	filter->worst_key = filter->format->key_length;
 	filter->best_nonkey = 0;
 	filter->frame_warnings = 0;
 	filter->last_field_offset = -1;
@@ -204,67 +208,92 @@ static void reset_statistics(BkrFrameDec *filter)
  */
 
 
-static struct bkr_frame_format compute_format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
+static struct bkr_frame_format *compute_format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
+	struct bkr_frame_format initializer;
+	struct bkr_frame_format *format;
+
 	switch(d) {
 	case BKR_LOW:
 		switch(v) {
 		case BKR_NTSC:
 			switch(f) {
 			case BKR_EP:
-				return (struct bkr_frame_format) {1012, 4,  40, 32,  940,  44, 22};
+				initializer = (struct bkr_frame_format) {1012, 4,  40, 32,  940,  44, 22};
+				break;
 			case BKR_SP:
-				return (struct bkr_frame_format) {1012, 4,  32, 28,  952,  45, 22};
+				initializer = (struct bkr_frame_format) {1012, 4,  32, 28,  952,  45, 22};
+				break;
 			default:
 				GST_DEBUG("unrecognized sectorformat");
-				break;
+				return NULL;
 			}
+			break;
 		case BKR_PAL:
 			switch(f) {
 			case BKR_EP:
-				return (struct bkr_frame_format) {1220, 0,  48, 36, 1136,  40, 29};
+				initializer = (struct bkr_frame_format) {1220, 0,  48, 36, 1136,  40, 29};
+				break;
 			case BKR_SP:
-				return (struct bkr_frame_format) {1220, 0,  40, 36, 1144,  49, 24};
+				initializer = (struct bkr_frame_format) {1220, 0,  40, 36, 1144,  49, 24};
+				break;
 			default:
 				GST_DEBUG("unrecognized sectorformat");
-				break;
+				return NULL;
 			}
+			break;
 		default:
 			GST_DEBUG("unrecognized videomode");
-			break;
+			return NULL;
 		}
+		break;
 	case BKR_HIGH:
 		switch(v) {
 		case BKR_NTSC:
 			switch(f) {
 			case BKR_EP:
-				return (struct bkr_frame_format) {2530, 10, 100, 70, 2360,  84, 29};
+				initializer = (struct bkr_frame_format) {2530, 10, 100, 70, 2360,  84, 29};
+				break;
 			case BKR_SP:
-				return (struct bkr_frame_format) {2530, 10,  80, 70, 2380, 125, 20};
+				initializer = (struct bkr_frame_format) {2530, 10,  80, 70, 2380, 125, 20};
+				break;
 			default:
 				GST_DEBUG("unrecognized sectorformat");
-				break;
+				return NULL;
 			}
+			break;
 		case BKR_PAL:
 			switch(f) {
 			case BKR_EP:
-				return (struct bkr_frame_format) {3050, 0, 120, 90, 2840,  91, 32};
+				initializer = (struct bkr_frame_format) {3050, 0, 120, 90, 2840,  91, 32};
+				break;
 			case BKR_SP:
-				return (struct bkr_frame_format) {3050, 0, 100, 90, 2860, 136, 22};
+				initializer = (struct bkr_frame_format) {3050, 0, 100, 90, 2860, 136, 22};
+				break;
 			default:
 				GST_DEBUG("unrecognized sectorformat");
-				break;
+				return NULL;
 			}
+			break;
 		default:
 			GST_DEBUG("unrecognized videomode");
-			break;
+			return NULL;
 		}
+		break;
 	default:
 		GST_DEBUG("unrecognized bitdensity");
-		break;
+		return NULL;
 	}
 
-	return (struct bkr_frame_format) {0,};
+	format = malloc(sizeof(*format));
+	if(!format) {
+		GST_DEBUG("memory allocation failure");
+		return NULL;
+	}
+
+	*format = initializer;
+
+	return format;
 }
 
 
@@ -284,7 +313,7 @@ static struct bkr_frame_format compute_format(enum bkr_videomode v, enum bkr_bit
  */
 
 
-static struct bkr_frame_format *caps_to_format(struct bkr_frame_format *format, GstCaps *caps)
+static struct bkr_frame_format *caps_to_format(GstCaps *caps)
 {
 	const GstStructure *s;
 	enum bkr_videomode videomode;
@@ -296,8 +325,8 @@ static struct bkr_frame_format *caps_to_format(struct bkr_frame_format *format, 
 		GST_DEBUG("failed to retrieve structure from caps");
 		return NULL;
 	}
-	/* FIXME:  when I figure out how to make the caps integers, put
-	 * these back */
+	/* FIXME:  when I figure out how to make the caps enums, put these
+	 * back */
 	/*if(!gst_structure_get_enum(s, "videomode", BKR_TYPE_VIDEOMODE, (int *) &videomode)) {*/
 	if(!gst_structure_get_int(s, "videomode", (int *) &videomode)) {
 		GST_DEBUG("could not retrieve videomode from caps");
@@ -314,22 +343,20 @@ static struct bkr_frame_format *caps_to_format(struct bkr_frame_format *format, 
 		return NULL;
 	}
 
-	*format = compute_format(videomode, bitdensity, sectorformat);
-
-	return format;
+	return compute_format(videomode, bitdensity, sectorformat);
 }
 
 
 static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrFrameEnc *filter = BKR_FRAMEENC(gst_pad_get_parent(pad));
-	gboolean result;
 
-	result = caps_to_format(&filter->format, caps) != NULL;
+	free(filter->format);
+	filter->format = caps_to_format(caps);
 
 	gst_object_unref(filter);
 
-	return result;
+	return filter->format ? TRUE : FALSE;
 }
 
 
@@ -342,19 +369,29 @@ static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 
 static GstFlowReturn enc_bufferalloc(GstPad *pad, guint64 offset, guint size, GstCaps *caps, GstBuffer **buf)
 {
-	BkrFrameEnc *filter = BKR_FRAMEENC(gst_pad_get_parent(pad));
-	struct bkr_frame_format format;
+	size_t buffer_size;
 	GstFlowReturn result;
 
+	/* incase something goes wrong */
+	*buf = NULL;
+
 	/* avoid computing the format if we already know what it is */
-	if(caps == GST_PAD_CAPS(pad))
-		format = filter->format;
-	else {
-		/* FIXME:  add error handling errors */
-		result = caps_to_format(&format, caps) ? GST_FLOW_OK : GST_FLOW_OK;
+	if(caps == GST_PAD_CAPS(pad)) {
+		BkrFrameEnc *filter = BKR_FRAMEENC(gst_pad_get_parent(pad));
+		buffer_size = filter->format->active_size - filter->format->key_length;
+		gst_object_unref(filter);
+	} else {
+		struct bkr_frame_format *format = caps_to_format(caps);
+		if(!format) {
+			/* FIXME:  is this enough error handling? */
+			result = GST_FLOW_ERROR;
+			goto done;
+		}
+		buffer_size = format->active_size - format->key_length;
+		free(format);
 	}
 
-	*buf = gst_buffer_new_and_alloc(format.active_size - format.key_length);
+	*buf = gst_buffer_new_and_alloc(buffer_size);
 	if(!*buf) {
 		result = GST_FLOW_ERROR;
 		goto done;
@@ -364,7 +401,6 @@ static GstFlowReturn enc_bufferalloc(GstPad *pad, guint64 offset, guint size, Gs
 	result = GST_FLOW_OK;
 
 done:
-	gst_object_unref(filter);
 	return result;
 }
 
@@ -384,18 +420,21 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 	GstBuffer *srcbuf;
 	GstFlowReturn result;
 
-	if(!caps) {
-		GST_DEBUG("caps not set on buffer");
+	if(!caps || (caps != GST_PAD_CAPS(pad))) {
+		if(!caps)
+			GST_DEBUG("caps not set on buffer");
+		else if(caps != GST_PAD_CAPS(pad))
+			GST_DEBUG("buffer's caps don't match pad's caps");
 		result = GST_FLOW_NOT_NEGOTIATED;
 		goto done;
 	}
-	if(GST_BUFFER_SIZE(sinkbuf) != filter->format.active_size - filter->format.key_length) {
-		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("received incorrect buffer size, got %d bytes expected %d bytes.", GST_BUFFER_SIZE(sinkbuf), filter->format.active_size - filter->format.key_length), (NULL));
+	if(GST_BUFFER_SIZE(sinkbuf) != filter->format->active_size - filter->format->key_length) {
+		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("received incorrect buffer size, got %d bytes expected %d bytes.", GST_BUFFER_SIZE(sinkbuf), filter->format->active_size - filter->format->key_length), (NULL));
 		result = GST_FLOW_ERROR;
 		goto done;
 	}
 
-	result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format.field_size + (filter->odd_field ? filter->format.interlace : 0), caps, &srcbuf);
+	result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->field_size + (filter->odd_field ? filter->format->interlace : 0), caps, &srcbuf);
 	if(result != GST_FLOW_OK) {
 		GST_DEBUG("gst_pad_alloc_buffer() failed");
 		goto done;
@@ -438,6 +477,8 @@ static void enc_finalize(GObject *object)
 
 	gst_object_unref(filter->srcpad);
 	filter->srcpad = NULL;
+	free(filter->format);
+	filter->format = NULL;
 
 	G_OBJECT_CLASS(enc_parent_class)->finalize(object);
 }
@@ -532,6 +573,7 @@ static void enc_instance_init(GTypeInstance *object, gpointer class)
 
 	/* internal state */
 	filter->odd_field = 1;
+	filter->format = NULL;
 }
 
 
@@ -597,6 +639,7 @@ static void dec_set_property(GObject *object, enum property id, const GValue *va
 		break;
 	}
 
+	free(filter->format);
 	filter->format = compute_format(filter->videomode, filter->bitdensity, filter->sectorformat);
 	reset_statistics(filter);
 }
@@ -646,13 +689,13 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 	gst_adapter_push(filter->adapter, sinkbuf);
 
 	while((data = find_field(filter, sector_key))) {
-		result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, filter->format.active_size - filter->format.key_length, GST_PAD_CAPS(filter->srcpad), &srcbuf);
+		result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, filter->format->active_size - filter->format->key_length, GST_PAD_CAPS(filter->srcpad), &srcbuf);
 		if(result != GST_FLOW_OK)
 			goto done;
 
 		decode_field(filter->format, GST_BUFFER_DATA(srcbuf), data);
 
-		gst_adapter_flush(filter->adapter, filter->format.active_size);
+		gst_adapter_flush(filter->adapter, filter->format->active_size);
 
 		result = gst_pad_push(filter->srcpad, srcbuf);
 
@@ -687,6 +730,8 @@ static void dec_finalize(GObject *object)
 	filter->adapter = NULL;
 	gst_object_unref(filter->srcpad);
 	filter->srcpad = NULL;
+	free(filter->format);
+	filter->format = NULL;
 
 	G_OBJECT_CLASS(dec_parent_class)->finalize(object);
 }
@@ -775,6 +820,7 @@ static void dec_instance_init(GTypeInstance *object, gpointer class)
 
 	/* internal state */
 	filter->adapter = gst_adapter_new();
+	filter->format = NULL;
 	reset_statistics(filter);
 }
 

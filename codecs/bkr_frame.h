@@ -72,7 +72,7 @@ typedef struct {
 		gint active_size;
 		gint key_interval;
 		gint key_length;
-	} format;
+	} *format;
 } BkrFrameEnc;
 
 
@@ -105,7 +105,7 @@ typedef struct {
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
-	struct bkr_frame_format format;
+	struct bkr_frame_format *format;
 
 	gint worst_key;
 	gint best_nonkey;

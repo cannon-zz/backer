@@ -125,6 +125,7 @@ GstCaps *bkr_get_template_caps(void)
 	static GstCaps *caps = NULL;
 
 	if(!caps) {
+		/* FIXME:  figure out how to write the caps as enums */
 		caps = gst_caps_from_string(
 			"application/x-backer, " \
 			"videomode=(int){ 1, 2 }, " \

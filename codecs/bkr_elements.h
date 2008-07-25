@@ -39,6 +39,7 @@ G_BEGIN_DECLS
 GType bkr_videomode_get_type(void);
 GType bkr_bitdensity_get_type(void);
 GType bkr_sectorformat_get_type(void);
+GstCaps *bkr_get_template_caps(void);
 
 
 #define DEFAULT_VIDEOMODE	BKR_NTSC

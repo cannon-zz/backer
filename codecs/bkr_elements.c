@@ -36,9 +36,14 @@
 /*
  * ============================================================================
  *
- *                                 Properties
+ *                                Custom Types
  *
  * ============================================================================
+ */
+
+
+/*
+ * videomode enum
  */
 
 
@@ -60,6 +65,11 @@ GType bkr_videomode_get_type(void)
 }
 
 
+/*
+ * bitdensity enum
+ */
+
+
 GType bkr_bitdensity_get_type(void)
 {
 	static GType type = 0;
@@ -78,6 +88,11 @@ GType bkr_bitdensity_get_type(void)
 }
 
 
+/*
+ * sectorformat enum
+ */
+
+
 GType bkr_sectorformat_get_type(void)
 {
 	static GType type = 0;
@@ -93,6 +108,33 @@ GType bkr_sectorformat_get_type(void)
 	}
 
 	return type;
+}
+
+
+/*
+ * ============================================================================
+ *
+ *                                    Data
+ *
+ * ============================================================================
+ */
+
+
+GstCaps *bkr_get_template_caps(void)
+{
+	static GstCaps *caps = NULL;
+
+	if(!caps) {
+		caps = gst_caps_from_string(
+			"application/x-backer, " \
+			"videomode=(int){ 1, 2 }, " \
+			"bitdensity=(int){ 4, 8 }, " \
+			"sectorformat=(int){ 16, 32 }"
+		);
+	} else
+		gst_caps_ref(caps);
+
+	return caps;
 }
 
 

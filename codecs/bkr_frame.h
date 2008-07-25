@@ -32,23 +32,6 @@ G_BEGIN_DECLS
 
 
 /*
- * Format information.
- * 	interlace = number of extra bytes in an odd field
- */
-
-
-struct bkr_frame_format {
-	gint field_size;
-	gint interlace;
-	gint leader;
-	gint trailer;
-	gint active_size;
-	gint key_interval;
-	gint key_length;
-};
-
-
-/*
  * Encoder
  */
 
@@ -65,16 +48,31 @@ typedef struct {
 } BkrFrameEncClass;
 
 
-typedef struct _BkrFrameEnc {
+typedef struct {
 	GstElement element;
 
-	GstPad *sinkpad, *srcpad;
+	GstPad *srcpad;
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
+
 	gint odd_field;
-	struct bkr_frame_format format;
+
+	/*
+	 * Format information.
+	 * 	interlace = number of extra bytes in an odd field
+	 */
+
+	struct bkr_frame_format {
+		gint field_size;
+		gint interlace;
+		gint leader;
+		gint trailer;
+		gint active_size;
+		gint key_interval;
+		gint key_length;
+	} format;
 } BkrFrameEnc;
 
 
@@ -98,10 +96,10 @@ typedef struct {
 } BkrFrameDecClass;
 
 
-typedef struct _BkrFrameDec {
+typedef struct {
 	GstElement element;
 
-	GstPad *sinkpad, *srcpad;
+	GstPad *srcpad;
 	GstAdapter *adapter;
 
 	enum bkr_videomode videomode;

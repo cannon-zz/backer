@@ -416,8 +416,8 @@ done:
 static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 {
 	BkrFrameEnc *filter = BKR_FRAMEENC(gst_pad_get_parent(pad));
-	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
 	GstPad *srcpad = filter->srcpad;
+	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
 	GstBuffer *srcbuf;
 	GstFlowReturn result;
 

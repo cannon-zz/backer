@@ -266,16 +266,20 @@ static GstFlowReturn chain(GstPad *pad, GstBuffer *sinkbuf)
 
 		/* ask the downstream peer for a buffer */
 		result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, bytes_per_image, GST_PAD_CAPS(srcpad), &srcbuf);
-		if(result != GST_FLOW_OK)
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_alloc_buffer() failed");
 			break;
+		}
 
 		/* draw the video field */
 		draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(srcbuf), filter->format.bytes_per_line, lines, data);
 
 		/* send image */
 		result = gst_pad_push(srcpad, srcbuf);
-		if(result != GST_FLOW_OK)
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_push() failed");
 			break;
+		}
 
 		/* flush the data we've just used from adapter */
 		gst_adapter_flush(filter->adapter, lines * filter->format.bytes_per_line);

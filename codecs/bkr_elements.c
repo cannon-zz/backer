@@ -148,6 +148,12 @@ GstCaps *bkr_get_template_caps(void)
  */
 
 
+/*
+ * compute the number of video fields per second.  used to translate marker
+ * lengths into sector counts.
+ */
+
+
 int bkr_fields_per_second(enum bkr_videomode videomode)
 {
 	switch(videomode) {
@@ -157,6 +163,55 @@ int bkr_fields_per_second(enum bkr_videomode videomode)
 	case BKR_PAL:
 		return 50;
 	}
+}
+
+
+/*
+ * parse the contents of a GstCaps containing an application/x-backer
+ * format specification.  The videomode, bitdensity, and sectorformat are
+ * written into the given locations.  The return value is TRUE if the caps
+ * could be parsed, or FALSE if not, in which case the output variables are
+ * set to 0.
+ */
+
+
+int bkr_parse_caps(GstCaps *caps, enum bkr_videomode *videomode, enum bkr_bitdensity *bitdensity, enum bkr_sectorformat *sectorformat)
+{
+	const GstStructure *s;
+
+	/* incase something goes wrong */
+	*videomode = 0;
+	*bitdensity = 0;
+	*sectorformat = 0;
+
+	/* retrieve the structure */
+	s = gst_caps_get_structure(caps, 0);
+	if(!s) {
+		GST_DEBUG("failed to retrieve structure from caps");
+		return FALSE;
+	}
+
+	/* FIXME:  when I figure out how to make the caps enums, put these
+	 * back */
+	/*if(!gst_structure_get_enum(s, "videomode", BKR_TYPE_VIDEOMODE, (int *) &videomode)) {*/
+	if(!gst_structure_get_int(s, "videomode", (int *) &videomode)) {
+		GST_DEBUG("could not retrieve videomode from caps");
+		return FALSE;
+	}
+
+	/*if(!gst_structure_get_enum(s, "bitdensity", BKR_TYPE_BITDENSITY, (int *) &bitdensity)) {*/
+	if(!gst_structure_get_int(s, "bitdensity", (int *) &bitdensity)) {
+		GST_DEBUG("could not retrieve bitdensity from caps");
+		return FALSE;
+	}
+
+	/*if(!gst_structure_get_enum(s, "sectorformat", BKR_TYPE_SECTORFORMAT, (int *) &sectorformat)) {*/
+	if(!gst_structure_get_int(s, "sectorformat", (int *) &sectorformat)) {
+		GST_DEBUG("could not retrieve sectorformat from caps");
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 

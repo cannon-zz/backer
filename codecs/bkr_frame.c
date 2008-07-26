@@ -687,8 +687,8 @@ static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 {
 	BkrFrameDec *filter = BKR_FRAMEDEC(gst_pad_get_parent(pad));
-	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
 	GstPad *srcpad = filter->srcpad;
+	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
 	const guint8 *data;
 	GstFlowReturn result;
 

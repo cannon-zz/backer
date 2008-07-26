@@ -500,7 +500,7 @@ static void enc_base_init(gpointer class)
 		"Backer Frame Encoder",
 		"Filter",
 		"Backer frame synchronization encoder",
-		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
+		"Kipp Cannon <kcannon@ligo.caltech.edu>"
 	};
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
@@ -793,7 +793,7 @@ static void dec_base_init(gpointer class)
 		"Backer Frame Decoder",
 		"Filter",
 		"Backer frame synchronization decoder",
-		"Kipp Cannon <kipp@gravity.phys.uwm.edu>"
+		"Kipp Cannon <kcannon@ligo.caltech.edu>"
 	};
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
 	GstElementClass *element_class = GST_ELEMENT_CLASS(class);

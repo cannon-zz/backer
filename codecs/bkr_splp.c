@@ -511,27 +511,12 @@ static GstFlowReturn write_eor(BkrSPLPEnc *filter, GstCaps *caps)
 
 static struct bkr_splp_format *caps_to_format(GstCaps *caps)
 {
-	const GstStructure *s;
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
 
-	s = gst_caps_get_structure(caps, 0);
-	if(!s) {
-		GST_DEBUG("failed to retrieve structure from caps");
-		return NULL;
-	}
-
-	if(!gst_structure_get_int(s, "videomode", (int *) &videomode)) {
-		GST_DEBUG("could not retrieve videomode from caps");
-		return NULL;
-	}
-	if(!gst_structure_get_int(s, "bitdensity", (int *) &bitdensity)) {
-		GST_DEBUG("could not retrieve bitdensity from caps");
-		return NULL;
-	}
-	if(!gst_structure_get_int(s, "sectorformat", (int *) &sectorformat)) {
-		GST_DEBUG("could not retrieve sectorformat from caps");
+	if(!bkr_parse_caps(caps, &videomode, &bitdensity, &sectorformat)) {
+		GST_DEBUG("failure parsing caps");
 		return NULL;
 	}
 

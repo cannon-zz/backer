@@ -316,31 +316,12 @@ static struct bkr_frame_format *compute_format(enum bkr_videomode v, enum bkr_bi
 
 static struct bkr_frame_format *caps_to_format(GstCaps *caps)
 {
-	const GstStructure *s;
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
 
-	s = gst_caps_get_structure(caps, 0);
-	if(!s) {
-		GST_DEBUG("failed to retrieve structure from caps");
-		return NULL;
-	}
-	/* FIXME:  when I figure out how to make the caps enums, put these
-	 * back */
-	/*if(!gst_structure_get_enum(s, "videomode", BKR_TYPE_VIDEOMODE, (int *) &videomode)) {*/
-	if(!gst_structure_get_int(s, "videomode", (int *) &videomode)) {
-		GST_DEBUG("could not retrieve videomode from caps");
-		return NULL;
-	}
-	/*if(!gst_structure_get_enum(s, "bitdensity", BKR_TYPE_BITDENSITY, (int *) &bitdensity)) {*/
-	if(!gst_structure_get_int(s, "bitdensity", (int *) &bitdensity)) {
-		GST_DEBUG("could not retrieve bitdensity from caps");
-		return NULL;
-	}
-	/*if(!gst_structure_get_enum(s, "sectorformat", BKR_TYPE_SECTORFORMAT, (int *) &sectorformat)) {*/
-	if(!gst_structure_get_int(s, "sectorformat", (int *) &sectorformat)) {
-		GST_DEBUG("could not retrieve sectorformat from caps");
+	if(!bkr_parse_caps(caps, &videomode, &bitdensity, &sectorformat)) {
+		GST_DEBUG("failure parsing caps");
 		return NULL;
 	}
 
@@ -484,7 +465,6 @@ static void enc_finalize(GObject *object)
 
 	G_OBJECT_CLASS(enc_parent_class)->finalize(object);
 }
-
 
 
 /*

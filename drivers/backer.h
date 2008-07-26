@@ -262,17 +262,4 @@ enum {
 	BACKER_FORMAT=2
 };
 
-
-/*
- * bkr_fields_per_second()
- *
- * The number of sectors generated each second computed from the given
- * mode.
- */
-
-static int bkr_fields_per_second(int mode)
-{
-	return(BKR_VIDEOMODE(mode) == BKR_PAL ? 50 : 60);
-}
-
 #endif /* _BACKER_H */

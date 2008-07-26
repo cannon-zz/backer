@@ -1,7 +1,7 @@
 /*
  * Driver for Danmere's Backer 16/32 video tape backup cards.
  *
- *                           Video Modem Simulator
+ *                            Video Modem Emulator
  *
  * Copyright (C) 2008  Kipp C. Cannon
  *
@@ -195,6 +195,10 @@ static void set_property(GObject *object, enum property id, const GValue *value,
 		"bpp", G_TYPE_INT, VIDEO_BPP,
 		"depth", G_TYPE_INT, 24,
 		"framerate", GST_TYPE_FRACTION, videomode == BKR_NTSC ? 60000 : 50000, videomode == BKR_NTSC ? 1001 : 1000,
+		/*"endianness", G_TYPE_INT, 4321,
+		"red_mask", G_TYPE_INT, 0x0000ff00,
+		"green_mask", G_TYPE_INT, 0x00ff0000,
+		"blue_mask", G_TYPE_INT, 0xff000000,*/
 		NULL
 	);
 

@@ -117,7 +117,7 @@ typedef struct {
 	gint duplicate_runs;
 	gint decoded_number;
 	gint not_underrunning;
-	gint sector_number;	/* FIXME:  use buffer sequence number? */
+	gint sector_number;
 } BkrSPLPDec;
 
 

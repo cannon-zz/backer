@@ -247,29 +247,32 @@ static GstFlowReturn chain(GstPad *pad, GstBuffer *sinkbuf)
 		goto done;
 	}
 
-	/* add input data to adapter */
-	GST_DEBUG("pushing %d byte buffer into adapter", GST_BUFFER_SIZE(sinkbuf));
 	gst_adapter_push(filter->adapter, sinkbuf);
 
 	/* loop until the adapter runs out of data */
 	while(1) {
-		/* ask for one video field's worth of data */
-		lines = filter->format.height + (filter->odd_field ? filter->format.interlace : 0);
-		GST_DEBUG("need %d lines (%d bytes) of data", lines, lines * filter->format.bytes_per_line);
+		lines = filter->format.height + (filter->field_number & 1 ? filter->format.interlace : 0);
 		data = gst_adapter_peek(filter->adapter, lines * filter->format.bytes_per_line);
 		if(!data) {
-			GST_DEBUG("not enough data yet");
+			GST_DEBUG("not enough data yet, need %d lines (%d bytes)", lines, lines * filter->format.bytes_per_line);
 			result = GST_FLOW_OK;
 			break;
 		}
-		GST_DEBUG("got it");
 
-		/* ask the downstream peer for a buffer */
-		result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, bytes_per_image, GST_PAD_CAPS(srcpad), &srcbuf);
+		/* ask the downstream peer for a buffer.  use the video
+		 * field number as the media-specific offset */
+		result = gst_pad_alloc_buffer(srcpad, filter->field_number, bytes_per_image, GST_PAD_CAPS(srcpad), &srcbuf);
 		if(result != GST_FLOW_OK) {
 			GST_DEBUG("gst_pad_alloc_buffer() failed");
 			break;
 		}
+
+		/* set the time stamp from the field number.  field number
+		 * is origin 1, subtract 1 so that time is origin 0 */
+#if 0
+		GST_BUFFER_TIMESTAMP(srcbuf) = GST_SECOND * (GST_BUFFER_OFFSET(srcbuf) - 1) / bkr_fields_per_second(filter->videomode);
+		GST_BUFFER_DURATION(srcbuf) = GST_SECOND / bkr_fields_per_second(filter->videomode);
+#endif
 
 		/* draw the video field */
 		draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(srcbuf), filter->format.bytes_per_line, lines, data);
@@ -285,7 +288,7 @@ static GstFlowReturn chain(GstPad *pad, GstBuffer *sinkbuf)
 		gst_adapter_flush(filter->adapter, lines * filter->format.bytes_per_line);
 
 		/* reset for next */
-		filter->odd_field ^= 1;
+		filter->field_number++;
 	}
 
 done:
@@ -430,7 +433,7 @@ static void instance_init(GTypeInstance *object, gpointer class)
 
 	/* internal state */
 	filter->adapter = gst_adapter_new();
-	filter->odd_field = 1;
+	filter->field_number = 1;
 	filter->format = compute_format(filter->videomode, filter->bitdensity);
 }
 

@@ -36,10 +36,10 @@ typedef struct {
 	enum bkr_bitdensity bitdensity;
 
 	/*
-	 * non-zero == next field will be odd
+	 * next field number (first field is number 1, an odd field)
 	 */
 
-	gint odd_field;
+	gint field_number;
 
 	/*
 	 * Format information.

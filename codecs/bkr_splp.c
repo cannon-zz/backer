@@ -198,7 +198,7 @@ static bkr_sector_header_t get_sector_header(guint8 *data, const struct bkr_splp
 }
 
 
-static void put_sector_header(guint8 *data, const struct bkr_splp_format *format, gint sector_number, gint encoded_length)
+static void put_sector_header(guint8 *data, const struct bkr_splp_format *format, int sector_number, int encoded_length)
 {
 	union {
 		guint32 as_int;
@@ -260,11 +260,11 @@ static guint decode_sector_length(guint high, guint low)
  */
 
 
-static gint correct_sector(BkrSPLPDec *filter, guint8 *data)
+static int correct_sector(BkrSPLPDec *filter, guint8 *data)
 {
 	guint8 *parity = data + filter->format->data_size;
-	gint block, bytes_corrected;
-	gint result = 0;
+	int block, bytes_corrected;
+	int result = 0;
 
 	/* FIXME: remove this to enable error correction */
 	return 0;
@@ -391,8 +391,8 @@ static GstBuffer* decode_sector(BkrSPLPDec *filter, GstBuffer *buffer)
 static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
 {
 	guint8 *data = GST_BUFFER_DATA(buffer);
-	gint size = GST_BUFFER_SIZE(buffer);
-	int  block;
+	int size = GST_BUFFER_SIZE(buffer);
+	int block;
 
 	/*
 	 * Randomize the data (it is safe for the randomizer to go past the
@@ -432,26 +432,54 @@ static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
 
 
 /*
- * Generate EOR mark.
+ * Generate beginning-of-record and end-of-record marks.
+ *
+ * NOTE:  write_empty_sectors() requires the caps argument to be the caps
+ * from which the filter's format structure was computed.  This function
+ * will screw up if caps corresponds to a different format.  This is
+ * enforced in enc_chain(), where write_empty_sectors() gets called (via
+ * write_bor()) after a check for caps consistency.
  */
 
 
-static GstFlowReturn write_empty_sectors(BkrSPLPEnc *filter, gint n)
+static int bkr_fields_per_second(enum bkr_videomode videomode)
 {
-	GstBuffer *buffer;
+	switch(videomode) {
+	default:
+	case BKR_NTSC:
+		return 60;
+	case BKR_PAL:
+		return 50;
+	}
+}
+
+
+static GstFlowReturn write_empty_sectors(BkrSPLPEnc *filter, GstCaps *caps, int n)
+{
+	size_t buffer_size;
 	GstFlowReturn result = GST_FLOW_OK;
 
+	if(!filter->format) {
+		GST_DEBUG("format == NULL");
+		result = GST_FLOW_NOT_NEGOTIATED;
+		goto done;
+	}
+
+	buffer_size = filter->format->data_size + filter->format->parity_size;
+
 	while(n--) {
-		result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, filter->format->data_size + filter->format->parity_size, GST_PAD_CAPS(filter->srcpad), &buffer);
-		if(!result != GST_FLOW_OK) {
+		GstBuffer *buf;
+
+		result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, buffer_size, caps, &buf);
+		if(result != GST_FLOW_OK) {
 			GST_DEBUG("gst_pad_alloc_buffer() failed");
 			goto done;
 		}
 
-		GST_BUFFER_SIZE(buffer) = 0;
-		encode_sector(filter, buffer);
+		GST_BUFFER_SIZE(buf) = 0;
+		encode_sector(filter, buf);
 
-		result = gst_pad_push(filter->srcpad, buffer);
+		result = gst_pad_push(filter->srcpad, buf);
 		if(result != GST_FLOW_OK) {
 			GST_DEBUG("gst_pad_alloc_buffer() failed");
 			goto done;
@@ -463,9 +491,17 @@ done:
 }
 
 
-static GstFlowReturn write_eor(BkrSPLPEnc *filter)
+static GstFlowReturn write_bor(BkrSPLPEnc *filter, GstCaps *caps)
 {
-	return write_empty_sectors(filter, bkr_fields_per_second(filter->videomode) * EOR_LENGTH);
+	/* upon entry into this function, sector_number should be -1 * the
+	 * count of sectors to write for the BOR mark */
+	return write_empty_sectors(filter, caps, -filter->sector_number);
+}
+
+
+static GstFlowReturn write_eor(BkrSPLPEnc *filter, GstCaps *caps)
+{
+	return write_empty_sectors(filter, caps, EOR_LENGTH * bkr_fields_per_second(filter->videomode));
 }
 
 
@@ -595,6 +631,7 @@ done:
 static gboolean enc_event(GstPad *pad, GstEvent *event)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
+	GstCaps *caps = GST_PAD_CAPS(pad);
 	gboolean result;
 
 	switch(GST_EVENT_TYPE(event)) {
@@ -604,20 +641,29 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 		result = gst_pad_push_event(filter->srcpad, event);
 		if(!result)
 			break;
-		/* write the beginning-of-record mark */
-		result = write_empty_sectors(filter, -filter->sector_number);
-		if(result != GST_FLOW_OK) {
-			GST_DEBUG("failure writing BOR mark");
-			result = FALSE;
-			break;
-		} else
-			result = TRUE;
+
+		/*
+		 * initialize the sector number so as to induce a BOR mark
+		 * to be written
+		 */
+
+		/* FIXME:  caps are not negotiated at this point, so this
+		 * can't be done here.  works ok because defaults to NTSC,
+		 * but this should be fixed. */
+
+		filter->sector_number = -BOR_LENGTH * bkr_fields_per_second(filter->videomode);
 		break;
 
 	case GST_EVENT_EOS:
-		/* write the end-of-record mark */
-		if(write_eor(filter) != GST_FLOW_OK) {
+		/*
+		 * write the end-of-record mark.  note that pushing an
+		 * event on a pad cannot change its caps, so we don't have
+		 * to check that filter's format matches the pad's caps.
+		 */
+
+		if(write_eor(filter, caps) != GST_FLOW_OK) {
 			GST_DEBUG("failure writing EOR mark");
+			gst_event_unref(event);
 			result = FALSE;
 			break;
 		}
@@ -662,6 +708,14 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("buffer too large, got %d bytes, cannot be more than %d bytes.", GST_BUFFER_SIZE(sinkbuf), filter->format->capacity), (NULL));
 		result = GST_FLOW_ERROR;
 		goto done;
+	}
+
+	if(filter->sector_number < 0) {
+		result = write_bor(filter, caps);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("failure writing BOR mark");
+			goto done;
+		}
 	}
 
 	result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->data_size + filter->format->parity_size, caps, &srcbuf);

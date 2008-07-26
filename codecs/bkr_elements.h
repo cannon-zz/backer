@@ -42,25 +42,6 @@ GType bkr_sectorformat_get_type(void);
 GstCaps *bkr_get_template_caps(void);
 
 
-/*
- * bkr_fields_per_second()
- *
- * The number of sectors generated each second computed from the given
- * mode.
- */
-
-
-static int bkr_fields_per_second(enum bkr_videomode videomode)
-{
-	switch(videomode) {
-	case BKR_NTSC:
-		return 60;
-	case BKR_PAL:
-		return 50;
-	}
-}
-
-
 #define DEFAULT_VIDEOMODE	BKR_NTSC
 #define DEFAULT_BITDENSITY	BKR_HIGH
 #define DEFAULT_SECTORFORMAT	BKR_SP

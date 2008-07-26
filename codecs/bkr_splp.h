@@ -26,6 +26,7 @@
 
 
 #include <gst/gst.h>
+#include <gst/base/gstadapter.h>
 #include <backer.h>
 #include <rs.h>
 
@@ -54,6 +55,7 @@ typedef struct {
 	GstElement element;
 
 	GstPad *srcpad;
+	GstAdapter *adapter;
 
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;

@@ -665,7 +665,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 	BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
 	GstPad *srcpad = filter->srcpad;
 	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
-	GstBuffer *srcbuf;
+	const guint8 *data;
 	GstFlowReturn result;
 
 	if(!caps || (caps != GST_PAD_CAPS(pad))) {
@@ -677,11 +677,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		goto done;
 	}
 
-	if(GST_BUFFER_SIZE(sinkbuf) > filter->format->capacity) {
-		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("buffer too large, got %d bytes, cannot be more than %d bytes.", GST_BUFFER_SIZE(sinkbuf), filter->format->capacity), (NULL));
-		result = GST_FLOW_ERROR;
-		goto done;
-	}
+	gst_adapter_push(filter->adapter, sinkbuf);
 
 	if(filter->sector_number < 0) {
 		result = write_bor(filter, caps);
@@ -691,21 +687,29 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		}
 	}
 
-	result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->data_size + filter->format->parity_size, caps, &srcbuf);
-	if(result != GST_FLOW_OK) {
-		GST_DEBUG("gst_pad_alloc_buffer() failed");
-		goto done;
+	while((data = gst_adapter_peek(filter->adapter, filter->format->capacity))) {
+		GstBuffer *srcbuf;
+
+		result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->data_size + filter->format->parity_size, caps, &srcbuf);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_alloc_buffer() failed");
+			goto done;
+		}
+
+		memcpy(GST_BUFFER_DATA(srcbuf), data, filter->format->capacity * sizeof(*data));
+		GST_BUFFER_SIZE(srcbuf) = filter->format->capacity;
+		encode_sector(filter, srcbuf);
+
+		gst_adapter_flush(filter->adapter, filter->format->capacity);
+
+		result = gst_pad_push(filter->srcpad, srcbuf);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_push() failed");
+			goto done;
+		}
 	}
 
-	memcpy(GST_BUFFER_DATA(srcbuf), GST_BUFFER_DATA(sinkbuf), GST_BUFFER_SIZE(sinkbuf));
-	GST_BUFFER_SIZE(srcbuf) = GST_BUFFER_SIZE(sinkbuf);
-	encode_sector(filter, srcbuf);
-
-	result = gst_pad_push(filter->srcpad, srcbuf);
-	if(result != GST_FLOW_OK) {
-		GST_DEBUG("gst_pad_push() failed");
-		goto done;
-	}
+	result = GST_FLOW_OK;
 
 done:
 	gst_caps_unref(caps);
@@ -731,6 +735,8 @@ static void enc_finalize(GObject *object)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(object);
 
+	g_object_unref(filter->adapter);
+	filter->adapter = NULL;
 	gst_object_unref(filter->srcpad);
 	filter->srcpad = NULL;
 	reed_solomon_codec_free(filter->rs_format);
@@ -824,6 +830,7 @@ static void enc_instance_init(GTypeInstance *object, gpointer class)
 	filter->srcpad = pad;
 
 	/* internal state */
+	filter->adapter = gst_adapter_new();
 	filter->rs_format = NULL;
 	filter->format = NULL;
 	filter->sector_number = 0;

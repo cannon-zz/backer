@@ -27,7 +27,7 @@
 #include <backer.h>
 #include <bkr_elements.h>
 #include <bkr_frame.h>
-#include <bkr_gcr.h>
+#include <bkr_rll.h>
 #include <bkr_splp.h>
 #include <bkr_video_out.h>
 #include <rs.h>
@@ -194,19 +194,19 @@ int bkr_parse_caps(GstCaps *caps, enum bkr_videomode *videomode, enum bkr_bitden
 	/* FIXME:  when I figure out how to make the caps enums, put these
 	 * back */
 	/*if(!gst_structure_get_enum(s, "videomode", BKR_TYPE_VIDEOMODE, (int *) &videomode)) {*/
-	if(!gst_structure_get_int(s, "videomode", (int *) &videomode)) {
+	if(!gst_structure_get_int(s, "videomode", (int *) videomode)) {
 		GST_DEBUG("could not retrieve videomode from caps");
 		return FALSE;
 	}
 
 	/*if(!gst_structure_get_enum(s, "bitdensity", BKR_TYPE_BITDENSITY, (int *) &bitdensity)) {*/
-	if(!gst_structure_get_int(s, "bitdensity", (int *) &bitdensity)) {
+	if(!gst_structure_get_int(s, "bitdensity", (int *) bitdensity)) {
 		GST_DEBUG("could not retrieve bitdensity from caps");
 		return FALSE;
 	}
 
 	/*if(!gst_structure_get_enum(s, "sectorformat", BKR_TYPE_SECTORFORMAT, (int *) &sectorformat)) {*/
-	if(!gst_structure_get_int(s, "sectorformat", (int *) &sectorformat)) {
+	if(!gst_structure_get_int(s, "sectorformat", (int *) sectorformat)) {
 		GST_DEBUG("could not retrieve sectorformat from caps");
 		return FALSE;
 	}
@@ -230,8 +230,8 @@ static gboolean plugin_init(GstPlugin *plugin)
 		const gchar *name;
 		GType (*type)(void);
 	} *element, elements[] = {
-		/*{"bkr_gcrenc", bkr_gcrdec_get_type},
-		{"bkr_gcrdec", bkr_gcrenc_get_type},*/
+		{"bkr_rllenc", bkr_rlldec_get_type},
+		{"bkr_rlldec", bkr_rllenc_get_type},
 		{"bkr_splpenc", bkr_splpenc_get_type},
 		{"bkr_splpdec", bkr_splpdec_get_type},
 		{"bkr_frameenc", bkr_frameenc_get_type},

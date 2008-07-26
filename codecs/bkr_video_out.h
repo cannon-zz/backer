@@ -53,7 +53,7 @@ typedef struct {
 		gint interlace;
 		gint width;
 		gint height;
-		guint8 *(*pixel_func)(guint8 *, guint8);
+		guint32 *(*pixel_func)(guint32 *, guint32);
 	} format;
 } BkrVideoOut;
 

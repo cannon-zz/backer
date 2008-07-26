@@ -42,27 +42,25 @@
  */
 
 
-static guint8 *draw_bit_h(guint8 *pos, guint8 colour)
+static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 {
-	/* 4 pixels for a high density bit */
-	*pos++ = colour;
-	*pos++ = colour;
-	*pos++ = colour;
+	/* 4 pixels for a high density bit (draw all four by writing a
+	 * single 32-bit number to memory) */
 	*pos++ = colour;
 	return pos;
 }
 
 
-static guint8 *draw_bit_l(guint8 *pos, guint8 colour)
+static guint32 *draw_bit_l(guint32 *pos, guint32 colour)
 {
 	/* 8 pixels for a low density bit */
 	return draw_bit_h(draw_bit_h(pos, colour), colour);
 }
 
 
-static guint8 *draw_byte(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *pos, guint8 byte, guint8 colour)
+static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, guint8 byte, guint32 colour)
 {
-	gint i;
+	int i;
 
 	for(i = 0x80; i; i >>= 1)
 		pos = pixel_func(pos, byte & i ? colour : 0);
@@ -71,7 +69,7 @@ static guint8 *draw_byte(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *pos, g
 }
 
 
-static guint8 *draw_line(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *pos, const guint8 *data, gint n, guint8 colour)
+static guint32 *draw_line(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, const guint8 *data, int n, guint32 colour)
 {
 	pos = draw_byte(pixel_func, pos, 0x45, colour);
 	while(n--)
@@ -81,10 +79,13 @@ static guint8 *draw_line(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *pos, c
 }
 
 
-static void draw_field(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *dest, gint bytes_per_line, gint lines, const guint8 *data)
+static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint8 *dest, gint bytes_per_line, gint lines, const guint8 *data)
 {
+	guint32 *pos = (guint32 *) dest;
+
 	for(; lines--; data += bytes_per_line)
-		dest = draw_line(pixel_func, dest, data, bytes_per_line, 0xff);
+		/* colour value is 4 pixels wide */
+		pos = draw_line(pixel_func, pos, data, bytes_per_line, 0xffffffff);
 }
 
 

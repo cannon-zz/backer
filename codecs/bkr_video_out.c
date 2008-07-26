@@ -28,9 +28,6 @@
 #include <bkr_video_out.h>
 
 
-#define VIDEO_BPP 32	/* cannot be changed without modifying draw_field */
-
-
 /*
  * ============================================================================
  *
@@ -45,7 +42,7 @@
  */
 
 
-static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
+static guint8 *draw_bit_h(guint8 *pos, guint8 colour)
 {
 	/* 4 pixels for a high density bit */
 	*pos++ = colour;
@@ -56,14 +53,14 @@ static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
 }
 
 
-static guint32 *draw_bit_l(guint32 *pos, guint32 colour)
+static guint8 *draw_bit_l(guint8 *pos, guint8 colour)
 {
 	/* 8 pixels for a low density bit */
 	return draw_bit_h(draw_bit_h(pos, colour), colour);
 }
 
 
-static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, guint8 byte, guint32 colour)
+static guint8 *draw_byte(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *pos, guint8 byte, guint8 colour)
 {
 	gint i;
 
@@ -74,7 +71,7 @@ static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *p
 }
 
 
-static guint32 *draw_line(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, const guint8 *data, gint n, guint32 colour)
+static guint8 *draw_line(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *pos, const guint8 *data, gint n, guint8 colour)
 {
 	pos = draw_byte(pixel_func, pos, 0x45, colour);
 	while(n--)
@@ -84,10 +81,10 @@ static guint32 *draw_line(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *p
 }
 
 
-static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *dest, gint bytes_per_line, gint lines, const guint8 *data)
+static void draw_field(guint8 *(*pixel_func)(guint8 *, guint8), guint8 *dest, gint bytes_per_line, gint lines, const guint8 *data)
 {
 	for(; lines--; data += bytes_per_line)
-		dest = draw_line(pixel_func, dest, data, bytes_per_line, 0x00ffffff);
+		dest = draw_line(pixel_func, dest, data, bytes_per_line, 0xff);
 }
 
 
@@ -189,16 +186,12 @@ static void set_property(GObject *object, enum property id, const GValue *value,
 	format = compute_format(videomode, bitdensity);
 
 	caps = gst_caps_new_simple(
-		"video/x-raw-rgb",
+		"video/x-raw-gray",
 		"width", G_TYPE_INT, format.width,
 		"height", G_TYPE_INT, format.height + format.interlace,
-		"bpp", G_TYPE_INT, VIDEO_BPP,
-		"depth", G_TYPE_INT, 24,
+		"bpp", G_TYPE_INT, 8,
+		"depth", G_TYPE_INT, 8,
 		"framerate", GST_TYPE_FRACTION, videomode == BKR_NTSC ? 60000 : 50000, videomode == BKR_NTSC ? 1001 : 1000,
-		/*"endianness", G_TYPE_INT, 4321,
-		"red_mask", G_TYPE_INT, 0x0000ff00,
-		"green_mask", G_TYPE_INT, 0x00ff0000,
-		"blue_mask", G_TYPE_INT, 0xff000000,*/
 		NULL
 	);
 
@@ -243,7 +236,7 @@ static GstFlowReturn chain(GstPad *pad, GstBuffer *sinkbuf)
 	GstBuffer *srcbuf;
 	GstFlowReturn result;
 	gint lines;
-	gint bytes_per_image = (VIDEO_BPP/8) * filter->format.width * (filter->format.height + filter->format.interlace);
+	gint bytes_per_image = filter->format.width * (filter->format.height + filter->format.interlace);
 
 	if(!GST_PAD_CAPS(srcpad)) {
 		GST_DEBUG("caps not set on src pad");
@@ -279,7 +272,7 @@ static GstFlowReturn chain(GstPad *pad, GstBuffer *sinkbuf)
 #endif
 
 		/* draw the video field */
-		draw_field(filter->format.pixel_func, (guint32 *) GST_BUFFER_DATA(srcbuf), filter->format.bytes_per_line, lines, data);
+		draw_field(filter->format.pixel_func, GST_BUFFER_DATA(srcbuf), filter->format.bytes_per_line, lines, data);
 
 		/* send image */
 		result = gst_pad_push(srcpad, srcbuf);
@@ -366,17 +359,17 @@ static void base_init(gpointer class)
 		GST_PAD_SRC,
 		GST_PAD_ALWAYS,
 		gst_caps_from_string(
-			"video/x-raw-rgb, " \
+			"video/x-raw-gray, " \
 			"width = (int) { 320, 352 }, " /* format.width */ \
 			"height = (int) 254, " /* format.height + format.interlace */ \
-			"bpp = (int) 32, " /* VIDEO_BPP */ \
-			"depth = (int) 24, " \
+			"bpp = (int) 8, " \
+			"depth = (int) 8, " \
 			"framerate = (fraction) 60000/1001; " \
-			"video/x-raw-rgb, " \
+			"video/x-raw-gray, " \
 			"width = (int) { 320, 352 }, " /* format.width */ \
 			"height = (int) 305, " /* format.height + format.interlace */ \
-			"bpp = (int) 32, " /* VIDEO_BPP */ \
-			"depth = (int) 24, " \
+			"bpp = (int) 8, " \
+			"depth = (int) 8, " \
 			"framerate = (fraction) 50000/1000"
 		)
 	);

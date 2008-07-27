@@ -332,13 +332,16 @@ static struct bkr_frame_format *caps_to_format(GstCaps *caps)
 static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrFrameEnc *filter = BKR_FRAMEENC(gst_pad_get_parent(pad));
+	gboolean result;
 
 	free(filter->format);
 	filter->format = caps_to_format(caps);
 
+	result = filter->format ? TRUE : FALSE;
+
 	gst_object_unref(filter);
 
-	return filter->format ? TRUE : FALSE;
+	return result;
 }
 
 
@@ -665,15 +668,18 @@ static void dec_get_property(GObject *object, enum dec_property id, GValue *valu
 static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrFrameDec *filter = BKR_FRAMEDEC(gst_pad_get_parent(pad));
+	gboolean result;
 
 	free(filter->format);
 	filter->format = caps_to_format(caps);
 	if(filter->format)
 		reset_statistics(filter);
 
+	result = filter->format ? TRUE : FALSE;
+
 	gst_object_unref(filter);
 
-	return filter->format ? TRUE : FALSE;
+	return result;
 }
 
 

@@ -253,15 +253,16 @@ static struct bkr_rll_format *caps_to_format(GstCaps *caps)
 static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrRLLEnc *filter = BKR_RLLENC(gst_pad_get_parent(pad));
+	gboolean result;
 
 	free(filter->format);
 	filter->format = caps_to_format(caps);
 
-	/* FIXME:  strictly, the unref shouldn't be done while we still
-	 * need to check its contents */
+	result = filter->format ? TRUE : FALSE;
+
 	gst_object_unref(filter);
 
-	return filter->format ? TRUE : FALSE;
+	return result;
 }
 
 

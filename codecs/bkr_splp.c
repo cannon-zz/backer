@@ -611,6 +611,7 @@ static struct bkr_splp_format *caps_to_format(GstCaps *caps)
 static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
+	gboolean result;
 
 	free(filter->format);
 	filter->format = caps_to_format(caps);
@@ -626,9 +627,11 @@ static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 	} else
 		filter->rs_format = NULL;
 
+	result = filter->format ? TRUE : FALSE;
+
 	gst_object_unref(filter);
 
-	return filter->format ? TRUE : FALSE;
+	return result;
 }
 
 
@@ -1077,6 +1080,7 @@ static void dec_get_property(GObject *object, enum property id, GValue *value, G
 static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrSPLPDec *filter = BKR_SPLPDEC(gst_pad_get_parent(pad));
+	gboolean result;
 
 	free(filter->format);
 	filter->format = caps_to_format(caps);
@@ -1093,9 +1097,11 @@ static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 	} else
 		filter->rs_format = NULL;
 
+	result = filter->format ? TRUE : FALSE;
+
 	gst_object_unref(filter);
 
-	return filter->format ? TRUE : FALSE;
+	return result;
 }
 
 

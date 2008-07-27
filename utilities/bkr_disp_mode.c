@@ -21,10 +21,13 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include <stdio.h>
+
 
 #include <backer.h>
 #include <bkr_disp_mode.h>
+
 
 void  bkr_display_mode(FILE *file, enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
@@ -47,9 +50,6 @@ void  bkr_display_mode(FILE *file, enum bkr_videomode v, enum bkr_bitdensity d, 
 		break;
 	}
 	switch(f) {
-	case BKR_RAW:
-		fputs("\tData format:  [*] RAW   [ ] SP/LP  [ ] EP\n", file);
-		break;
 	case BKR_SP:
 		fputs("\tData format:  [ ] RAW   [*] SP/LP  [ ] EP\n", file);
 		break;

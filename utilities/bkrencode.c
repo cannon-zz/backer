@@ -272,6 +272,38 @@ static struct options parse_command_line(int *argc, char **argv[])
  */
 
 
+static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data)
+{
+	GMainLoop *loop = (GMainLoop *) data;
+
+	switch (GST_MESSAGE_TYPE (msg)) {
+	case GST_MESSAGE_EOS:
+		g_print ("End-of-stream\n");
+		g_main_loop_quit (loop);
+		break;
+
+	case GST_MESSAGE_ERROR: {
+		gchar *debug;
+		GError *err;
+
+		gst_message_parse_error (msg, &err, &debug);
+		g_free (debug);
+
+		g_print ("Error: %s\n", err->message);
+		g_error_free (err);
+
+		g_main_loop_quit (loop);
+		break;
+
+	}
+	default:
+		break;
+	}
+
+	return TRUE;
+}
+
+
 static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat)
 {
 	/* FIXME: in EP mode, an ecc2 encoder goes between the source and splp
@@ -368,6 +400,7 @@ int main(int argc, char *argv[])
 	struct options options;
 	GMainLoop *loop;
 	GstElement *pipeline;
+	GstBus *bus;
 
 
 	/*
@@ -397,15 +430,17 @@ int main(int argc, char *argv[])
 	 */
 
 
-	if(options.direction == ENCODING) {
+	loop = g_main_loop_new(NULL, FALSE);
+	if(options.direction == ENCODING)
 		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
-	} else {
+	else
 		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
-	}
 	if(!pipeline) {
 		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
 		exit(1);
 	}
+	bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+	gst_bus_add_watch(bus, bus_call, loop);
 
 
 	/*
@@ -414,15 +449,11 @@ int main(int argc, char *argv[])
 
 
 	gst_element_set_state(pipeline, GST_STATE_PLAYING);
-	loop = g_main_loop_new(NULL, FALSE);
 	g_main_loop_run(loop);
 #if 0
 	while(gst_bin_iterate(GST_BIN(pipeline)) && !got_sigint);
-	if(options.direction == ENCODING) {
-		/* FIXME: this doesn't work.  How do we send EOS down the
-		 * pipeline? */
-		gst_element_send_event(pipeline, gst_event_new(GST_EVENT_EOS));
-	}
+	if(options.direction == ENCODING)
+		gst_element_send_event(pipeline, gst_event_new_eos());
 #endif
 
 

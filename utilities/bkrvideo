@@ -65,7 +65,7 @@ done
 # construct and run pipeline
 #
 
-PIPELINE="fdsrc fd=0 ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ximagesink"
+PIPELINE="fdsrc fd=0 ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ffmpegcolorspace ! ximagesink"
 
 if [ "${VERBOSE}" == "-v" ] ; then
 	echo "Pipeline:  ${PIPELINE}"

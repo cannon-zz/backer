@@ -162,7 +162,7 @@ static struct bkr_splp_format *compute_format(enum bkr_videomode v, enum bkr_bit
 
 
 typedef struct {
-	gint32  number : BKR_SECTOR_NUMBER_BITS;
+	gint32  sector_number : BKR_SECTOR_NUMBER_BITS;
 	guint32  low_used : BKR_LOW_USED_BITS;
 } bkr_sector_header_t;
 
@@ -172,7 +172,7 @@ typedef struct {
 
 typedef struct {
 	guint32  low_used : BKR_LOW_USED_BITS;
-	gint32  number : BKR_SECTOR_NUMBER_BITS;
+	gint32  sector_number : BKR_SECTOR_NUMBER_BITS;
 } bkr_sector_header_t;
 
 
@@ -205,7 +205,7 @@ static void put_sector_header(guint8 *data, const struct bkr_splp_format *format
 		bkr_sector_header_t as_header;
 	} header = {
 		.as_header = {
-			.number = sector_number,
+			.sector_number = sector_number,
 			.low_used = encoded_length
 		}
 	};
@@ -243,6 +243,21 @@ static guint decode_sector_length(guint high, guint low)
 
 
 /*
+ * Container to hold the results of the sector decode process.
+ */
+
+
+struct sector_decode_status {
+	int sector_is_valid;	/* sector is error free */
+	int header_is_valid;	/* sector header is error free */
+	int sector_is_bor;	/* sector is part of BOR mark */
+	int sector_is_eor;	/* sector is part of EOR mark */
+	int sector_is_duplicate;	/* sector a repeat (ignore) */
+	int sectors_skipped;	/* this many sectors have been skipped */
+};
+
+
+/*
  * Retrieves the next sector from the I/O buffer.  The algorithm is to loop
  * until we either find an acceptable sector (it's a non-BOR sector and is
  * in the correct order) or we encounter an error.  If we find a sector we
@@ -260,24 +275,30 @@ static guint decode_sector_length(guint high, guint low)
  */
 
 
-static int correct_sector(BkrSPLPDec *filter, guint8 *data)
+static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *data)
 {
 	guint8 *parity = data + filter->format->data_size;
 	int block, bytes_corrected;
-	int result = 0;
+	struct sector_decode_status result = {
+		.sector_is_valid = 1,
+		.header_is_valid = 1,
+		.sector_is_bor = 0,
+		.sector_is_eor = 0,
+		.sector_is_duplicate = 0,
+		.sectors_skipped = 0
+	};
 
 	/* FIXME: remove this to enable error correction */
-	return 0;
+	return result;
 
-	filter->header_is_good = 1;
 	for(block = 0; block < filter->format->interleave; block++) {
 		bytes_corrected = reed_solomon_decode(parity + block, data + block, 0, *filter->rs_format);
 		/* block is uncorrectable? */
 		if(bytes_corrected < 0) {
-			result = -ENODATA;
+			result.sector_is_valid = 0;
 			/* block contains header? */
 			if(block >= filter->format->interleave - sizeof(bkr_sector_header_t))
-				filter->header_is_good = 0;
+				result.header_is_valid = 0;
 			continue;
 		}
 		filter->bytes_corrected += bytes_corrected;
@@ -303,63 +324,71 @@ static void reset_statistics(BkrSPLPDec *filter)
 }
 
 
-static GstBuffer* decode_sector(BkrSPLPDec *filter, GstBuffer *buffer)
+static struct sector_decode_status decode_sector(BkrSPLPDec *filter, GstBuffer *buffer)
 {
 	guint8 *data = GST_BUFFER_DATA(buffer);
 	bkr_sector_header_t header;
+	struct sector_decode_status status;
 
 	/*
-	 * Perform error correction.  If this fails, move to the next
-	 * sector.
+	 * Perform error correction.
 	 */
 
-	if(correct_sector(filter, data) < 0) {
+	status = correct_sector(filter, data);
+	if(!status.sector_is_valid)
 		filter->bad_sectors++;
-		return NULL;
-	}
+	if(!status.header_is_valid)
+		/* can't do anything without a valid header */
+		return status;
 
 	/*
 	 * Extract sector header.
 	 */
 
 	header = get_sector_header(data, filter->format);
-	filter->decoded_number = header.number;
 
 	/*
 	 * If a BOR sector, reset error counters and move to next sector.
 	 */
 
-	if(header.number < 0) {
+	if(header.sector_number < 0) {
+		status.sector_is_bor = 1;
+		GST_BUFFER_OFFSET(buffer) = GST_BUFFER_OFFSET_END(buffer) = GST_BUFFER_OFFSET_NONE;
 		reset_statistics(filter);
-		return NULL;
+		return status;
 	}
 
 	/*
-	 * If a duplicate, move to next sector.
+	 * Set media-specific offset to the sector number.  There is
+	 * nothing meaningful to set the "end" offset to.
 	 */
 
-	if(header.number <= filter->sector_number) {
+	GST_BUFFER_OFFSET(buffer) = header.sector_number;
+	GST_BUFFER_OFFSET_END(buffer) = GST_BUFFER_OFFSET_NONE;
+
+	/*
+	 * If sector is a duplicate, then we're done.
+	 */
+
+	if(header.sector_number <= filter->sector_number) {
 		filter->duplicate_runs += filter->not_underrunning;
 		filter->not_underrunning = 0;
-		return NULL;
+		status.sector_is_duplicate = 1;
+		return status;
 	}
-	/* FIXME: at this point, we have decoded a sector numbered
-	 * "decoded_number".  The last sector we successfully decoded
-	 * (passed on to the next element in the chain) was numbered
-	 * "sector_number".  If decoded_number = sector_number + 1, then
-	 * this is the next sector in the sequence, and the one we want.
-	 * If decoded_number <= sector_number then this is a duplicate
-	 * sector and should be discarded (we handle this correctly above).
-	 * If decoded_number > sector_number + 1, then we have skipped
-	 * sectors.  The old codec would return exactly 1 -ENODATA for each
-	 * skipped sector, which facilitated the implementation of the
-	 * secondary error correction codec.  I think the gstreamer way to
-	 * handle this is to define an event type for "skipped sector" and
-	 * push a number of those events onto the src pad equal to the
-	 * number of skipped sectors.  Anyway, the currect codec does not
-	 * handle skipped sectors.
+
+	/* 
+	 * At this point, we have decoded a sector whose number is recorded
+	 * in the buffer's offset.  The last sector we decoded was numbered
+	 * sector_number.  If offset = sector_number + 1, then this is the
+	 * next sector in the sequence, and the one we want.  If offset <=
+	 * sector_number then this is a duplicate (we have just handled
+	 * this above).  If offset > sector_number + 1, then we have
+	 * skipped some sectors
 	 */
-	filter->sector_number = filter->decoded_number;
+
+	status.sectors_skipped = header.sector_number - filter->sector_number - 1;
+	filter->sector_number = header.sector_number;
 
 	/*
 	 * Sector is the one we want.
@@ -376,9 +405,16 @@ static GstBuffer* decode_sector(BkrSPLPDec *filter, GstBuffer *buffer)
 		GST_BUFFER_SIZE(buffer) = decode_sector_length(*high_used(data, filter->format), header.low_used);
 	else
 		GST_BUFFER_SIZE(buffer) = filter->format->capacity;
-	bkr_splp_sector_randomize(data, GST_BUFFER_SIZE(buffer), header.number);
+	bkr_splp_sector_randomize(data, GST_BUFFER_SIZE(buffer), header.sector_number);
 
-	return buffer;
+	/*
+	 * Sector length = 0 --> EOR mark
+	 */
+
+	if(GST_BUFFER_SIZE(buffer) == 0)
+		status.sector_is_eor = 1;
+
+	return status;
 }
 
 
@@ -388,7 +424,7 @@ static GstBuffer* decode_sector(BkrSPLPDec *filter, GstBuffer *buffer)
  */
 
 
-static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
+static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer, int sector_number)
 {
 	guint8 *data = GST_BUFFER_DATA(buffer);
 	int size = GST_BUFFER_SIZE(buffer);
@@ -400,7 +436,7 @@ static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
 	 * allocated for the parity bytes).
 	 */
 
-	bkr_splp_sector_randomize(data, size, filter->sector_number);
+	bkr_splp_sector_randomize(data, size, sector_number);
 
 	/*
 	 * Pad unused space, encode the data length, insert the header.
@@ -410,9 +446,9 @@ static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
 		memset(data + size, BKR_FILLER, filter->format->capacity - size - 1);
 		size = encode_sector_length(size);
 		*high_used(data, filter->format) = size >> BKR_LOW_USED_BITS;
-		put_sector_header(data, filter->format, filter->sector_number, size);
+		put_sector_header(data, filter->format, sector_number, size);
 	} else
-		put_sector_header(data, filter->format, filter->sector_number, 0);
+		put_sector_header(data, filter->format, sector_number, 0);
 	GST_BUFFER_SIZE(buffer) = filter->format->data_size;
 
 	/*
@@ -422,12 +458,6 @@ static void encode_sector(BkrSPLPEnc *filter, GstBuffer *buffer)
 	for(block = 0; block < filter->format->interleave; block++)
 		reed_solomon_encode(data + filter->format->data_size + block, data + block, *filter->rs_format);
 	GST_BUFFER_SIZE(buffer) += filter->format->parity_size;
-
-	/*
-	 * Reset for the next sector.
-	 */
-	
-	filter->sector_number++;
 }
 
 
@@ -465,7 +495,11 @@ static GstFlowReturn write_empty_sectors(BkrSPLPEnc *filter, GstCaps *caps, int 
 		}
 
 		GST_BUFFER_SIZE(buf) = 0;
-		encode_sector(filter, buf);
+		/* note that sector_number is not incremented:  all BOR
+		 * sectors have the same sector number (-1), and all EOR
+		 * sectors have the same sector number (whatever it had
+		 * gotten upto when the recording ended */
+		encode_sector(filter, buf, filter->sector_number);
 
 		result = gst_pad_push(filter->srcpad, buf);
 		if(result != GST_FLOW_OK) {
@@ -481,9 +515,13 @@ done:
 
 static GstFlowReturn write_bor(BkrSPLPEnc *filter, GstCaps *caps)
 {
-	/* upon entry into this function, sector_number should be -1 * the
-	 * count of sectors to write for the BOR mark */
-	return write_empty_sectors(filter, caps, -filter->sector_number);
+	GstFlowReturn result;
+
+	filter->sector_number = -1;
+	result = write_empty_sectors(filter, caps, BOR_LENGTH * bkr_fields_per_second(filter->videomode));
+	filter->sector_number = 0;
+
+	return result;
 }
 
 
@@ -520,7 +558,7 @@ static GstFlowReturn write_sector(BkrSPLPEnc *filter, GstCaps *caps, size_t size
 	GST_BUFFER_SIZE(srcbuf) = size;
 
 	memcpy(GST_BUFFER_DATA(srcbuf), data, size);
-	encode_sector(filter, srcbuf);
+	encode_sector(filter, srcbuf, filter->sector_number++);
 
 	gst_adapter_flush(filter->adapter, size);
 
@@ -642,6 +680,38 @@ done:
  */
 
 
+static GstFlowReturn enc_flush(BkrSPLPEnc *filter, GstCaps *caps)
+{
+	GstFlowReturn result;
+
+	/*
+	 * write any remaining full sectors
+	 */
+
+	while(gst_adapter_available(filter->adapter) > filter->format->capacity) {
+		result = write_sector(filter, caps, filter->format->capacity);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("write_sector() failed");
+			return result;
+		}
+	}
+
+	/*
+	 * write the last sector, short if needed
+	 */
+
+	if(gst_adapter_available(filter->adapter)) {
+		result = write_sector(filter, caps, gst_adapter_available(filter->adapter));
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("write_sector() failed");
+			return result;
+		}
+	}
+
+	return GST_FLOW_OK;
+}
+
+
 static gboolean enc_event(GstPad *pad, GstEvent *event)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
@@ -650,8 +720,14 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 
 	switch(GST_EVENT_TYPE(event)) {
 	case GST_EVENT_NEWSEGMENT:
-		/* FIXME:  what if a recording is in progress?  write EOR
-		 * mark first? */
+		/*
+		 * FIXME:  what to do if a recording is in progress?
+		 */
+
+		/*
+		 * forward the new segment event
+		 */
+
 		result = gst_pad_push_event(filter->srcpad, event);
 		if(!result)
 			break;
@@ -661,11 +737,7 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 		 * to be written
 		 */
 
-		/* FIXME:  caps are not negotiated at this point, so this
-		 * can't be done here.  works ok because defaults to NTSC,
-		 * but this should be fixed. */
-
-		filter->sector_number = -BOR_LENGTH * bkr_fields_per_second(filter->videomode);
+		filter->sector_number = -1;
 		break;
 
 	case GST_EVENT_EOS:
@@ -673,25 +745,12 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 		 * flush the adapter.
 		 */
 
-		/* write any remaining full sectors */
-		while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
-			if(write_sector(filter, caps, filter->format->capacity) != GST_FLOW_OK) {
-				GST_DEBUG("write_sector() failed");
-				gst_event_unref(event);
-				result = FALSE;
-				goto done;
-			}
+		if(enc_flush(filter, caps) != GST_FLOW_OK) {
+			GST_DEBUG("enc_flush() failed");
+			gst_event_unref(event);
+			result = FALSE;
+			break;
 		}
-		/* write a short sector if needed */
-		if(gst_adapter_available(filter->adapter)) {
-			if(write_sector(filter, caps, gst_adapter_available(filter->adapter)) != GST_FLOW_OK) {
-				GST_DEBUG("write_sector() failed");
-				gst_event_unref(event);
-				result = FALSE;
-				goto done;
-			}
-		}
-
 
 		/*
 		 * write the end-of-record mark.  note that pushing an
@@ -706,15 +765,18 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 			result = FALSE;
 			break;
 		}
+
+		/*
+		 * forward the end-of-stream event.
+		 */
+
 		result = gst_pad_push_event(filter->srcpad, event);
 		break;
 
 	default:
-		result = gst_pad_event_default(pad, event);
+		result = gst_pad_event_default(filter->srcpad, event);
 		break;
 	}
-
-done:
 
 	gst_object_unref(filter);
 	return result;
@@ -1044,7 +1106,7 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 	BkrSPLPDec *filter = BKR_SPLPDEC(gst_pad_get_parent(pad));
 	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
 	GstPad *srcpad = filter->srcpad;
-	GstBuffer *srcbuf;
+	struct sector_decode_status status;
 	GstFlowReturn result;
 
 	if(!caps || (caps != GST_PAD_CAPS(pad))) {
@@ -1056,15 +1118,61 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 		goto done;
 	}
 
-	srcbuf = decode_sector(filter, sinkbuf);
-	if(!srcbuf) {
-		/* FIXME: is this enough error handling? */
-		GST_DEBUG("decode_sector() failed");
-		result = GST_FLOW_ERROR;
+	/*
+	 * perform an in-place decode of the sector
+	 */
+
+	status = decode_sector(filter, sinkbuf);
+
+	/*
+	 * ignore beginning-of-record and duplicate sectors.  can't
+	 * determine anything about a sector without a valid header, so
+	 * ignore those too.  NOTE:  it's normal to get some completely
+	 * hosed sectors at the start of a recording as the VCR seeks
+	 * around to lock onto the signal.
+	 */
+
+	if(!status.header_is_valid || status.sector_is_bor || status.sector_is_duplicate) {
+		gst_buffer_unref(sinkbuf);
+		result = GST_FLOW_OK;
 		goto done;
 	}
 
-	result = gst_pad_push(srcpad, srcbuf);
+	/*
+	 * generate "skipped sector" events if needed.
+	 */
+
+	for(; status.sectors_skipped; status.sectors_skipped--) {
+		/* FIXME */
+	}
+
+	/*
+	 * if sector is an end-of-record marker, generate an EOS event, and
+	 * discard sector.  NOTE:  because all end-of-record sectors have
+	 * the same sector number, we'll only see one of them:  the rest
+	 * will be treated as duplicates and discarded.
+	 */
+
+	if(status.sector_is_eor) {
+		gst_buffer_unref(sinkbuf);
+		result = gst_pad_push_event(srcpad, gst_event_new_eos());
+		goto done;
+	}
+
+	/*
+	 * if sector did not decode properly, generate a "next sector
+	 * invalid" event.
+	 */
+
+	if(!status.sector_is_valid) {
+		/* FIXME */
+	}
+
+	/*
+	 * transmit data
+	 */
+
+	result = gst_pad_push(srcpad, sinkbuf);
 	if(result != GST_FLOW_OK) {
 		GST_DEBUG("gst_pad_push() failed");
 		goto done;

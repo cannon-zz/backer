@@ -117,7 +117,6 @@ typedef struct {
 	gint bad_sectors;
 	gint lost_runs;
 	gint duplicate_runs;
-	gint decoded_number;
 	gint not_underrunning;
 	gint sector_number;
 } BkrSPLPDec;

@@ -276,26 +276,25 @@ static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data)
 {
 	GMainLoop *loop = (GMainLoop *) data;
 
-	switch (GST_MESSAGE_TYPE (msg)) {
+	switch(GST_MESSAGE_TYPE(msg)) {
 	case GST_MESSAGE_EOS:
-		g_print ("End-of-stream\n");
-		g_main_loop_quit (loop);
+		g_main_loop_quit(loop);
 		break;
 
 	case GST_MESSAGE_ERROR: {
 		gchar *debug;
 		GError *err;
 
-		gst_message_parse_error (msg, &err, &debug);
-		g_free (debug);
+		gst_message_parse_error(msg, &err, &debug);
+		g_free(debug);
 
-		g_print ("Error: %s\n", err->message);
-		g_error_free (err);
+		fprintf(stderr, "%s: error: %s\n", PROGRAM_NAME, err->message);
+		g_error_free(err);
 
-		g_main_loop_quit (loop);
+		g_main_loop_quit(loop);
 		break;
-
 	}
+
 	default:
 		break;
 	}

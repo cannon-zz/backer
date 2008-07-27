@@ -3,14 +3,15 @@ INCLUDES = -I../drivers -I../codecs
 bin_SCRIPTS = bkrvideo
 
 #bin_PROGRAMS = bkrencode bkrcheck
+bin_PROGRAMS = bkrencode
 
 #bkrcheck_SOURCES = bkrcheck.c bkr_disp_mode.h bkr_disp_mode.c bkr_puts.h bkr_puts.c ../codecs/bkr_splp_randomize.h ../codecs/bkr_splp_randomize.c
 #bkrcheck_CFLAGS = $(AM_CFLAGS) $(GST_CFLAGS)
 
-#bkrencode_SOURCES = bkrencode.c bkr_disp_mode.h bkr_disp_mode.c
-#bkrencode_CFLAGS = $(AM_CFLAGS) $(GST_CFLAGS)
-#bkrencode_LDADD = $(GST_LIBS) -ltapefile
-#bkrencode_LDFLAGS = -L../codecs/
+bkrencode_SOURCES = bkrencode.c bkr_disp_mode.h bkr_disp_mode.c
+bkrencode_CFLAGS = $(AM_CFLAGS) $(GST_CFLAGS)
+bkrencode_LDADD = $(GST_LIBS)
+bkrencode_LDFLAGS = -L../codecs/
 
 #if COND_GTK
 #bin_PROGRAMS += bkrmonitor

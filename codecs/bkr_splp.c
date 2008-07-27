@@ -279,7 +279,7 @@ static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *da
 {
 	guint8 *parity = data + filter->format->data_size;
 	int block, bytes_corrected;
-	struct sector_decode_status result = {
+	struct sector_decode_status status = {
 		.sector_is_valid = 1,
 		.header_is_valid = 1,
 		.sector_is_bor = 0,
@@ -288,17 +288,22 @@ static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *da
 		.sectors_skipped = 0
 	};
 
-	/* FIXME: remove this to enable error correction */
-	return result;
+	/* This disables error correction.  Useful for confirming that the
+	 * decoding pipeline is, infact, the inverse of the encoding
+	 * pipeline (the error corrector could be hiding off-by-one
+	 * problems by just fixing the data). */
+#if 1
+	return status;
+#endif
 
 	for(block = 0; block < filter->format->interleave; block++) {
 		bytes_corrected = reed_solomon_decode(parity + block, data + block, 0, *filter->rs_format);
 		/* block is uncorrectable? */
 		if(bytes_corrected < 0) {
-			result.sector_is_valid = 0;
+			status.sector_is_valid = 0;
 			/* block contains header? */
 			if(block >= filter->format->interleave - sizeof(bkr_sector_header_t))
-				result.header_is_valid = 0;
+				status.header_is_valid = 0;
 			continue;
 		}
 		filter->bytes_corrected += bytes_corrected;
@@ -308,7 +313,7 @@ static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *da
 			filter->recent_block = bytes_corrected;
 	}
 
-	return result;
+	return status;
 }
 
 

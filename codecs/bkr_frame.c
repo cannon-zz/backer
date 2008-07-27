@@ -22,6 +22,7 @@
  */
 
 
+#include <stdlib.h>
 #include <string.h>
 
 
@@ -301,10 +302,77 @@ static struct bkr_frame_format *compute_format(enum bkr_videomode v, enum bkr_bi
 /*
  * ============================================================================
  *
+ *                               Noise Injector
+ *
+ * ============================================================================
+ */
+
+
+#define  bkr_random()  (random() >> 12)
+#define  BKR_RAND_MAX  (RAND_MAX >> 12)
+
+
+static GstFlowReturn inject_noise(GstBuffer *buffer, int bytes_per_line)
+{
+	guint8 *data = GST_BUFFER_DATA(buffer);
+	int num_glitches;
+	int glitch_length;
+
+	for(num_glitches = bkr_random() * 4 / BKR_RAND_MAX; num_glitches; num_glitches--) {
+		int glitch_start = bkr_random() * (GST_BUFFER_SIZE(buffer) - 1 - 2 * bytes_per_line) / BKR_RAND_MAX;
+		for(glitch_length = bkr_random() * (2 * bytes_per_line) / BKR_RAND_MAX; glitch_length; glitch_length--)
+			data[glitch_start + glitch_length] = bkr_random() >> 8;
+	}
+
+	GST_BUFFER_SIZE(buffer) -= (bkr_random() * 6 / BKR_RAND_MAX) * bytes_per_line;
+
+	return GST_FLOW_OK;
+}
+
+
+/*
+ * ============================================================================
+ *
  *                       GStreamer Encoder Support Code
  *
  * ============================================================================
  */
+
+
+/*
+ * Properties
+ */
+
+
+enum enc_property {
+	ARG_ENC_INJECT_NOISE = 1
+};
+
+
+static void enc_set_property(GObject *object, enum enc_property id, const GValue *value, GParamSpec *pspec)
+{
+	BkrFrameEnc *filter = BKR_FRAMEENC(object);
+
+	switch(id) {
+	case ARG_ENC_INJECT_NOISE:
+		filter->inject_noise = g_value_get_boolean(value);
+		break;
+	}
+}
+
+
+static void enc_get_property(GObject *object, enum enc_property id, GValue *value, GParamSpec *pspec)
+{
+	BkrFrameEnc *filter = BKR_FRAMEENC(object);
+
+	switch(id) {
+	case ARG_ENC_INJECT_NOISE:
+		g_value_set_boolean(value, filter->inject_noise);
+		break;
+	}
+}
+
+
 
 
 /*
@@ -428,6 +496,14 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 
 	encode_field(filter->format, GST_BUFFER_DATA(srcbuf), GST_BUFFER_DATA(sinkbuf), sector_key, filter->odd_field);
 
+	if(filter->inject_noise) {
+		result = inject_noise(srcbuf, filter->bitdensity == BKR_HIGH ? 10 : 4);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("inject_noise() failed");
+			goto done;
+		}
+	}
+
 	result = gst_pad_push(srcpad, srcbuf);
 	if(result != GST_FLOW_OK) {
 		GST_DEBUG("gst_pad_push() failed");
@@ -502,6 +578,8 @@ static void enc_base_init(gpointer class)
 
 	gst_element_class_set_details(element_class, &plugin_details);
 
+	object_class->set_property = enc_set_property;
+	object_class->get_property = enc_get_property;
 	object_class->finalize = enc_finalize;
 
 	gst_element_class_add_pad_template(element_class, sinkpad_template);
@@ -518,6 +596,10 @@ static void enc_base_init(gpointer class)
 
 static void enc_class_init(gpointer class, gpointer class_data)
 {
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_ENC_INJECT_NOISE, g_param_spec_boolean("inject_noise", "Inject noise", "Inject noise", FALSE, G_PARAM_READWRITE));
+
 	enc_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
 
@@ -553,6 +635,7 @@ static void enc_instance_init(GTypeInstance *object, gpointer class)
 	/* internal state */
 	filter->odd_field = 1;
 	filter->format = NULL;
+	filter->inject_noise = FALSE;
 }
 
 

@@ -73,6 +73,12 @@ typedef struct {
 		gint key_interval;
 		gint key_length;
 	} *format;
+
+	/*
+	 * Flags
+	 */
+
+	gboolean inject_noise;
 } BkrFrameEnc;
 
 

@@ -90,6 +90,7 @@ struct options {
 	int ignore_bad;
 	int dump_status;
 	int dump_status_async;
+	int inject_noise;
 	enum direction direction;
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
@@ -105,6 +106,7 @@ static struct options default_options(void)
 		.ignore_bad = 0,
 		.dump_status = 0,
 		.dump_status_async = 1,
+		.inject_noise = 0,
 		.direction = ENCODING,
 		.videomode = BKR_NTSC,
 		.bitdensity = BKR_HIGH,
@@ -130,6 +132,7 @@ static void usage(void)
 	"	-d[s]    Dump status info to stderr [synchronously]\n" \
 	"	-h       Display this usage message\n" \
 	"	-s       Skip bad sectors\n" \
+	"	-n       Inject simulated tape noise (only during encode)\n" \
 	"	-t       Compute time only (do not encode or decode data)\n" \
 	"	-u       Unencode tape data (default is to encode)\n" \
 	"	-v       Be verbose\n", stderr);
@@ -145,6 +148,7 @@ static struct options parse_command_line(int *argc, char **argv[])
 		{"sector-format",	required_argument,	NULL,	'F'},
 		{"help",	no_argument,	NULL,	'h'},
 		{"skip-bad-sectors",	no_argument,	NULL,	's'},
+		{"inject-noise",	no_argument,	NULL,	'n'},
 		{"time-only",	no_argument,	NULL,	't'},
 		{"unencode",	no_argument,	NULL,	'u'},
 		{"video-mode",	required_argument,	NULL,	'V'},
@@ -169,6 +173,10 @@ static struct options parse_command_line(int *argc, char **argv[])
 	case 'h':
 		usage();
 		exit(1);
+
+	case 'n':
+		options.inject_noise = 1;
+		break;
 
 	case 's':
 		options.ignore_bad = 1;
@@ -259,6 +267,13 @@ static struct options parse_command_line(int *argc, char **argv[])
 	*argc -= optind;
 	*argv += optind;
 
+	/* validation */
+	if(options.inject_noise && (options.direction != ENCODING)) {
+		fprintf(stderr, "%s: error: cannot inject noise when decoding\n\n", PROGRAM_NAME);
+		usage();
+		exit(1);
+	}
+
 	return options;
 }
 
@@ -303,7 +318,7 @@ static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data)
 }
 
 
-static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat)
+static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat, int inject_noise)
 {
 	/* FIXME: in EP mode, an ecc2 encoder goes between the source and splp
 	 * elements. */
@@ -321,7 +336,7 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		NULL
 	);
 
-	if(!pipeline || !source || !splp || (!rll && sectorformat == BKR_EP) || !frame || !sink || !caps) {
+	if(!pipeline || !source || !splp || (!rll && (sectorformat == BKR_EP)) || !frame || !sink || !caps) {
 		/* don't bother unref()ing things, because we're going to
 		 * exit now anyway */
 		return NULL;
@@ -329,6 +344,7 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 
 	g_object_set(G_OBJECT(source), "fd", STDIN_FILENO, NULL);
 	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
+	g_object_set(G_OBJECT(frame), "inject_noise", inject_noise, NULL);
 
 	if(sectorformat == BKR_EP) {
 		gst_bin_add_many(GST_BIN(pipeline), source, splp, rll, frame, sink, NULL);
@@ -362,7 +378,7 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		NULL
 	);
 
-	if(!pipeline || !source || !frame || (!rll && sectorformat == BKR_EP) || !splp || !sink || !caps) {
+	if(!pipeline || !source || !frame || (!rll && (sectorformat == BKR_EP)) || !splp || !sink || !caps) {
 		/* don't bother unref()ing things, because we're going to
 		 * exit now anyway */
 		return NULL;
@@ -431,7 +447,7 @@ int main(int argc, char *argv[])
 
 	loop = g_main_loop_new(NULL, FALSE);
 	if(options.direction == ENCODING)
-		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
+		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat, options.inject_noise);
 	else
 		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
 	if(!pipeline) {

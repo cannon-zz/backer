@@ -40,7 +40,7 @@ GType bkr_videomode_get_type(void);
 GType bkr_bitdensity_get_type(void);
 GType bkr_sectorformat_get_type(void);
 GstCaps *bkr_get_template_caps(void);
-int bkr_fields_per_second(enum bkr_videomode);
+double bkr_fields_per_second(enum bkr_videomode);
 int bkr_parse_caps(GstCaps *, enum bkr_videomode *, enum bkr_bitdensity *, enum bkr_sectorformat *);
 
 

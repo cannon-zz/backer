@@ -154,14 +154,14 @@ GstCaps *bkr_get_template_caps(void)
  */
 
 
-int bkr_fields_per_second(enum bkr_videomode videomode)
+double bkr_fields_per_second(enum bkr_videomode videomode)
 {
 	switch(videomode) {
 	default:
 	case BKR_NTSC:
-		return 60;
+		return 60.0 / 1.001;
 	case BKR_PAL:
-		return 50;
+		return 50.0;
 	}
 }
 

@@ -3,7 +3,7 @@
  *
  * Tape data encoder/decoder for the Backer tape device.
  *
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002,2008  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,16 @@
  */
 
 
+/*
+ * ============================================================================
+ *
+ *                                  Preamble
+ *
+ * ============================================================================
+ */
+
+
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -32,26 +42,10 @@
 #include <gst/gst.h>
 
 
-#include <backer.h>
-#include <bkr_splp.h>
+#include <bkr_disp_mode.h>
 
 
 #define  PROGRAM_NAME    "bkrencode"
-
-
-/*
- * ============================================================================
- *
- *                                 Parameters
- *
- * ============================================================================
- */
-
-
-enum direction {
-	ENCODING,
-	DECODING
-};
 
 
 /*
@@ -81,6 +75,12 @@ static void sigint_handler(int num)
  *
  * ============================================================================
  */
+
+
+enum direction {
+	ENCODING,
+	DECODING
+};
 
 
 struct options {
@@ -157,12 +157,11 @@ static struct options parse_command_line(int *argc, char **argv[])
 	case 'd':
 		options.dump_status = 1;
 		if(optarg) {
-			if(tolower(optarg[0]) == 's')
-				options.dump_status_async = 0;
-			else {
+			if(tolower(optarg[0]) != 's') {
 				usage();
 				exit(1);
 			}
+			options.dump_status_async = 0;
 		}
 		break;
 
@@ -265,11 +264,12 @@ static struct options parse_command_line(int *argc, char **argv[])
 
 static const char *gstversionstring(void)
 {
-	static char s[] = "xxx.xxx.xxx";	/* big enough? */
-	guint major, minor, micro;
+	static char *s = NULL;
 
-	gst_version(&major, &minor, &micro);
-	sprintf(s, "%d.%d.%d", major, minor, micro);
+	if(!s) {
+		s = malloc(sizeof("xxx.xxx.xxx"));	/* big enough? */
+		sprintf(s, "%d.%d.%d", GST_VERSION_MAJOR, GST_VERSION_MINOR, GST_VERSION_MICRO);
+	}
 
 	return s;
 }
@@ -284,80 +284,82 @@ static const char *gstversionstring(void)
  */
 
 
-static GstElement *encoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
+static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat)
 {
 	/* FIXME: in EP mode, an ecc2 encoder goes between the source and splp
 	 * elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", "source");
 	GstElement *splp = gst_element_factory_make("bkr_splpenc", "splp");
-	GstElement *gcr = (f == BKR_EP) ? gst_element_factory_make("bkr_gcrenc", "gcr") : NULL;
+	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rllenc", "rll") : NULL;
 	GstElement *frame = gst_element_factory_make("bkr_frameenc", "frame");
 	GstElement *sink = gst_element_factory_make("fdsink", "sink");
+	GstCaps *caps = gst_caps_new_simple(
+		"application/x-backer",
+		"videomode", G_TYPE_INT, videomode,
+		"bitdensity", G_TYPE_INT, bitdensity,
+		"sectorformat", G_TYPE_INT, sectorformat
+	);
+
+	if(!pipeline || !source || !splp || (!rll && sectorformat == BKR_EP) || !frame || !sink || !caps) {
+		/* don't bother unref()ing things, because we're going to
+		 * exit now anyway */
+		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
+		return NULL;
+	}
 
 	g_object_set(G_OBJECT(source), "fd", 0, NULL);
 	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
 
-	g_object_set(G_OBJECT(frame), "videomode", v, NULL);
-	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
-	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
-
-	if(gcr) {
-		g_object_set(G_OBJECT(gcr), "videomode", v, NULL);
-		g_object_set(G_OBJECT(gcr), "bitdensity", d, NULL);
-	}
-
-	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
-	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
-	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
-
-	g_object_set(G_OBJECT(source), "blocksize", BKR_SPLPENC(splp)->format.capacity, NULL);
-
-	if(f == BKR_EP) {
-		gst_element_link_many(source, splp, gcr, frame, sink, NULL);
-		gst_bin_add_many(GST_BIN(pipeline), source, splp, gcr, frame, sink, NULL);
+	if(sectorformat == BKR_EP) {
+		gst_bin_add_many(GST_BIN(pipeline), source, splp, rll, frame, sink, NULL);
+		gst_element_link_filtered(source, splp, caps);
+		gst_element_link_many(splp, rll, frame, sink, NULL);
 	} else {
-		gst_element_link_many(source, splp, frame, sink, NULL);
 		gst_bin_add_many(GST_BIN(pipeline), source, splp, frame, sink, NULL);
+		gst_element_link_filtered(source, splp, caps);
+		gst_element_link_many(splp, frame, sink, NULL);
 	}
 
 	return pipeline;
 }
 
 
-static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
+static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat)
 {
-	/* FIXME: in EP mode, an ecc2 encoder goes between the splp and sink
-	 * elements. */
+	/* FIXME: in EP mode, an ecc2 decoder goes between the splp and
+	 * sink elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", "source");
 	GstElement *frame = gst_element_factory_make("bkr_framedec", "frame");
-	GstElement *gcr = (f == BKR_EP) ? gst_element_factory_make("bkr_gcrdec", "gcr") : NULL;
+	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rlldec", "rll") : NULL;
 	GstElement *splp = gst_element_factory_make("bkr_splpdec", "splp");
 	GstElement *sink = gst_element_factory_make("fdsink", "sink");
+	GstCaps *caps = gst_caps_new_simple(
+		"application/x-backer",
+		"videomode", G_TYPE_INT, videomode,
+		"bitdensity", G_TYPE_INT, bitdensity,
+		"sectorformat", G_TYPE_INT, sectorformat
+	);
+
+	if(!pipeline || !source || !frame || (!rll && sectorformat == BKR_EP) || !splp || !sink || !caps) {
+		/* don't bother unref()ing things, because we're going to
+		 * exit now anyway */
+		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
+		return NULL;
+	}
 
 	g_object_set(G_OBJECT(source), "fd", 0, NULL);
 	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
 
-	g_object_set(G_OBJECT(frame), "videomode", v, NULL);
-	g_object_set(G_OBJECT(frame), "bitdensity", d, NULL);
-	g_object_set(G_OBJECT(frame), "sectorformat", f, NULL);
-
-	if(f == BKR_EP) {
-		g_object_set(G_OBJECT(gcr), "videomode", v, NULL);
-		g_object_set(G_OBJECT(gcr), "bitdensity", d, NULL);
-	}
-
-	g_object_set(G_OBJECT(splp), "videomode", v, NULL);
-	g_object_set(G_OBJECT(splp), "bitdensity", d, NULL);
-	g_object_set(G_OBJECT(splp), "sectorformat", f, NULL);
-
-	if(f == BKR_EP) {
-		gst_element_link_many(source, frame, gcr, splp, sink, NULL);
-		gst_bin_add_many(GST_BIN(pipeline), source, frame, gcr, splp, sink, NULL);
+	if(sectorformat == BKR_EP) {
+		gst_bin_add_many(GST_BIN(pipeline), source, frame, rll, splp, sink, NULL);
+		gst_element_link_filtered(source, frame, caps);
+		gst_element_link_many(frame, rll, splp, sink, NULL);
 	} else {
-		gst_element_link_many(source, frame, splp, sink, NULL);
 		gst_bin_add_many(GST_BIN(pipeline), source, frame, splp, sink, NULL);
+		gst_element_link_filtered(source, frame, caps);
+		gst_element_link_many(frame, splp, sink, NULL);
 	}
 
 	return pipeline;
@@ -376,6 +378,7 @@ static GstElement *decoder_pipeline(enum bkr_videomode v, enum bkr_bitdensity d,
 int main(int argc, char *argv[])
 {
 	struct options options;
+	GMainLoop *loop;
 	GstElement *pipeline;
 
 
@@ -385,6 +388,7 @@ int main(int argc, char *argv[])
 
 
 	gst_init(&argc, &argv);
+	loop = g_main_loop_new(NULL, FALSE);
 	options = parse_command_line(&argc, &argv);
 
 	if(options.direction == ENCODING)
@@ -410,6 +414,8 @@ int main(int argc, char *argv[])
 	} else {
 		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
 	}
+	if(!pipeline)
+		exit(1);
 
 
 	/*
@@ -418,12 +424,15 @@ int main(int argc, char *argv[])
 
 
 	gst_element_set_state(pipeline, GST_STATE_PLAYING);
+	g_main_loop_run(loop);
+#if 0
 	while(gst_bin_iterate(GST_BIN(pipeline)) && !got_sigint);
 	if(options.direction == ENCODING) {
 		/* FIXME: this doesn't work.  How do we send EOS down the
-		 * pipeline?  Why does fdsrc do it for crying out loud? */
+		 * pipeline? */
 		gst_element_send_event(pipeline, gst_event_new(GST_EVENT_EOS));
 	}
+#endif
 
 
 	/*

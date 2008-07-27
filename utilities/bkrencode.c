@@ -42,6 +42,7 @@
 #include <gst/gst.h>
 
 
+#include <backer.h>
 #include <bkr_disp_mode.h>
 
 

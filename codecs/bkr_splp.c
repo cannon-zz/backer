@@ -292,7 +292,7 @@ static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *da
 	 * decoding pipeline is, infact, the inverse of the encoding
 	 * pipeline (the error corrector could be hiding off-by-one
 	 * problems by just fixing the data). */
-#if 1
+#if 0
 	return status;
 #endif
 

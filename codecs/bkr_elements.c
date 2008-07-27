@@ -230,8 +230,8 @@ static gboolean plugin_init(GstPlugin *plugin)
 		const gchar *name;
 		GType (*type)(void);
 	} *element, elements[] = {
-		{"bkr_rllenc", bkr_rlldec_get_type},
-		{"bkr_rlldec", bkr_rllenc_get_type},
+		{"bkr_rllenc", bkr_rllenc_get_type},
+		{"bkr_rlldec", bkr_rlldec_get_type},
 		{"bkr_splpenc", bkr_splpenc_get_type},
 		{"bkr_splpdec", bkr_splpdec_get_type},
 		{"bkr_frameenc", bkr_frameenc_get_type},

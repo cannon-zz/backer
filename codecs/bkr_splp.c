@@ -494,6 +494,47 @@ static GstFlowReturn write_eor(BkrSPLPEnc *filter, GstCaps *caps)
 
 
 /*
+ * Write a regular (possibly short) data sector.  The size is the count of
+ * bytes to take from the adapter to build the sector.  There must be that
+ * much data in the adapter, and it must not exceed the maximum sector
+ * capacity.
+ */
+
+
+static GstFlowReturn write_sector(BkrSPLPEnc *filter, GstCaps *caps, size_t size)
+{
+	GstBuffer *srcbuf;
+	const guint8 *data;
+	GstFlowReturn result;
+
+	data = gst_adapter_peek(filter->adapter, size);
+
+	/* buffer is allocated to be large enough to hold the encoded
+	 * sector, then its size is reduced to tell encode_sector() how
+	 * much data is really there */
+	result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, filter->format->data_size + filter->format->parity_size, caps, &srcbuf);
+	if(result != GST_FLOW_OK) {
+		GST_DEBUG("gst_pad_alloc_buffer() failed");
+		return result;
+	}
+	GST_BUFFER_SIZE(srcbuf) = size;
+
+	memcpy(GST_BUFFER_DATA(srcbuf), data, size);
+	encode_sector(filter, srcbuf);
+
+	gst_adapter_flush(filter->adapter, size);
+
+	result = gst_pad_push(filter->srcpad, srcbuf);
+	if(result != GST_FLOW_OK) {
+		GST_DEBUG("gst_pad_push() failed");
+		return result;
+	}
+
+	return GST_FLOW_OK;
+}
+
+
+/*
  * ============================================================================
  *
  *                       GStreamer Encoder Support Code
@@ -629,9 +670,34 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 
 	case GST_EVENT_EOS:
 		/*
+		 * flush the adapter.
+		 */
+
+		/* write any remaining full sectors */
+		while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
+			if(write_sector(filter, caps, filter->format->capacity) != GST_FLOW_OK) {
+				GST_DEBUG("write_sector() failed");
+				gst_event_unref(event);
+				result = FALSE;
+				goto done;
+			}
+		}
+		/* write a short sector if needed */
+		if(gst_adapter_available(filter->adapter)) {
+			if(write_sector(filter, caps, gst_adapter_available(filter->adapter)) != GST_FLOW_OK) {
+				GST_DEBUG("write_sector() failed");
+				gst_event_unref(event);
+				result = FALSE;
+				goto done;
+			}
+		}
+
+
+		/*
 		 * write the end-of-record mark.  note that pushing an
 		 * event on a pad cannot change its caps, so we don't have
-		 * to check that filter's format matches the pad's caps.
+		 * to check that filter's format still matches the pad's
+		 * caps.
 		 */
 
 		if(write_eor(filter, caps) != GST_FLOW_OK) {
@@ -648,6 +714,8 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 		break;
 	}
 
+done:
+
 	gst_object_unref(filter);
 	return result;
 }
@@ -663,9 +731,7 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 {
 	BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
-	GstPad *srcpad = filter->srcpad;
 	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
-	const guint8 *data;
 	GstFlowReturn result;
 
 	if(!caps || (caps != GST_PAD_CAPS(pad))) {
@@ -687,24 +753,10 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		}
 	}
 
-	while((data = gst_adapter_peek(filter->adapter, filter->format->capacity))) {
-		GstBuffer *srcbuf;
-
-		result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->data_size + filter->format->parity_size, caps, &srcbuf);
+	while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
+		result = write_sector(filter, caps, filter->format->capacity);
 		if(result != GST_FLOW_OK) {
-			GST_DEBUG("gst_pad_alloc_buffer() failed");
-			goto done;
-		}
-
-		memcpy(GST_BUFFER_DATA(srcbuf), data, filter->format->capacity * sizeof(*data));
-		GST_BUFFER_SIZE(srcbuf) = filter->format->capacity;
-		encode_sector(filter, srcbuf);
-
-		gst_adapter_flush(filter->adapter, filter->format->capacity);
-
-		result = gst_pad_push(filter->srcpad, srcbuf);
-		if(result != GST_FLOW_OK) {
-			GST_DEBUG("gst_pad_push() failed");
+			GST_DEBUG("write_sector() failed");
 			goto done;
 		}
 	}

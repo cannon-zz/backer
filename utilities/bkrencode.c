@@ -262,19 +262,6 @@ static struct options parse_command_line(int *argc, char **argv[])
 }
 
 
-static const char *gstversionstring(void)
-{
-	static char *s = NULL;
-
-	if(!s) {
-		s = malloc(sizeof("xxx.xxx.xxx"));	/* big enough? */
-		sprintf(s, "%d.%d.%d", GST_VERSION_MAJOR, GST_VERSION_MINOR, GST_VERSION_MICRO);
-	}
-
-	return s;
-}
-
-
 /*
  * ============================================================================
  *
@@ -289,16 +276,17 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	/* FIXME: in EP mode, an ecc2 encoder goes between the source and splp
 	 * elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
-	GstElement *source = gst_element_factory_make("fdsrc", "source");
-	GstElement *splp = gst_element_factory_make("bkr_splpenc", "splp");
-	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rllenc", "rll") : NULL;
-	GstElement *frame = gst_element_factory_make("bkr_frameenc", "frame");
-	GstElement *sink = gst_element_factory_make("fdsink", "sink");
+	GstElement *source = gst_element_factory_make("fdsrc", NULL);
+	GstElement *splp = gst_element_factory_make("bkr_splpenc", NULL);
+	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rllenc", NULL) : NULL;
+	GstElement *frame = gst_element_factory_make("bkr_frameenc", NULL);
+	GstElement *sink = gst_element_factory_make("fdsink", NULL);
 	GstCaps *caps = gst_caps_new_simple(
 		"application/x-backer",
 		"videomode", G_TYPE_INT, videomode,
 		"bitdensity", G_TYPE_INT, bitdensity,
-		"sectorformat", G_TYPE_INT, sectorformat
+		"sectorformat", G_TYPE_INT, sectorformat,
+		NULL
 	);
 
 	if(!pipeline || !source || !splp || (!rll && sectorformat == BKR_EP) || !frame || !sink || !caps) {
@@ -308,8 +296,8 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		return NULL;
 	}
 
-	g_object_set(G_OBJECT(source), "fd", 0, NULL);
-	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
+	g_object_set(G_OBJECT(source), "fd", STDIN_FILENO, NULL);
+	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
 
 	if(sectorformat == BKR_EP) {
 		gst_bin_add_many(GST_BIN(pipeline), source, splp, rll, frame, sink, NULL);
@@ -330,16 +318,17 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	/* FIXME: in EP mode, an ecc2 decoder goes between the splp and
 	 * sink elements. */
 	GstElement *pipeline = gst_pipeline_new("pipeline");
-	GstElement *source = gst_element_factory_make("fdsrc", "source");
-	GstElement *frame = gst_element_factory_make("bkr_framedec", "frame");
-	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rlldec", "rll") : NULL;
-	GstElement *splp = gst_element_factory_make("bkr_splpdec", "splp");
-	GstElement *sink = gst_element_factory_make("fdsink", "sink");
+	GstElement *source = gst_element_factory_make("fdsrc", NULL);
+	GstElement *frame = gst_element_factory_make("bkr_framedec", NULL);
+	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rlldec", NULL) : NULL;
+	GstElement *splp = gst_element_factory_make("bkr_splpdec", NULL);
+	GstElement *sink = gst_element_factory_make("fdsink", NULL);
 	GstCaps *caps = gst_caps_new_simple(
 		"application/x-backer",
 		"videomode", G_TYPE_INT, videomode,
 		"bitdensity", G_TYPE_INT, bitdensity,
-		"sectorformat", G_TYPE_INT, sectorformat
+		"sectorformat", G_TYPE_INT, sectorformat,
+		NULL
 	);
 
 	if(!pipeline || !source || !frame || (!rll && sectorformat == BKR_EP) || !splp || !sink || !caps) {
@@ -387,8 +376,9 @@ int main(int argc, char *argv[])
 	 */
 
 
+	/* FIXME: gst_init() intercepts --help, how do I get my own usage
+	 * message displayed? */
 	gst_init(&argc, &argv);
-	loop = g_main_loop_new(NULL, FALSE);
 	options = parse_command_line(&argc, &argv);
 
 	if(options.direction == ENCODING)
@@ -398,7 +388,6 @@ int main(int argc, char *argv[])
 		fcntl(STDERR_FILENO, F_SETFL, O_NONBLOCK);
 
 	if(options.verbose) {
-		fprintf(stderr, PROGRAM_NAME ": linked against GStreamer %s\n", gstversionstring());
 		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", (options.direction == DECODING) ? "DECODING" : "ENCODING");
 		bkr_display_mode(stderr, options.videomode, options.bitdensity, options.sectorformat);
 	}
@@ -424,6 +413,7 @@ int main(int argc, char *argv[])
 
 
 	gst_element_set_state(pipeline, GST_STATE_PLAYING);
+	loop = g_main_loop_new(NULL, FALSE);
 	g_main_loop_run(loop);
 #if 0
 	while(gst_bin_iterate(GST_BIN(pipeline)) && !got_sigint);

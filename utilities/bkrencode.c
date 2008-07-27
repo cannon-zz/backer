@@ -293,7 +293,6 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	if(!pipeline || !source || !splp || (!rll && sectorformat == BKR_EP) || !frame || !sink || !caps) {
 		/* don't bother unref()ing things, because we're going to
 		 * exit now anyway */
-		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
 		return NULL;
 	}
 
@@ -335,7 +334,6 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	if(!pipeline || !source || !frame || (!rll && sectorformat == BKR_EP) || !splp || !sink || !caps) {
 		/* don't bother unref()ing things, because we're going to
 		 * exit now anyway */
-		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
 		return NULL;
 	}
 
@@ -404,8 +402,10 @@ int main(int argc, char *argv[])
 	} else {
 		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
 	}
-	if(!pipeline)
+	if(!pipeline) {
+		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
 		exit(1);
+	}
 
 
 	/*

@@ -520,13 +520,16 @@ GType bkr_rllenc_get_type(void)
 static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 {
 	BkrRLLDec *filter = BKR_RLLDEC(gst_pad_get_parent(pad));
+	gboolean result;
 
 	free(filter->format);
 	filter->format = caps_to_format(caps);
 
+	result = filter->format ? TRUE : FALSE;
+
 	gst_object_unref(filter);
 
-	return filter->format ? TRUE : FALSE;
+	return result;
 }
 
 

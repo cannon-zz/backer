@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002,2008  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the
@@ -16,6 +16,7 @@
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include <string.h>
 #include <backer.h>
 #include <bkr_puts.h>
@@ -30,6 +31,7 @@
  * ============================================================================
  */
 
+
 struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
 	switch(d) {
@@ -41,8 +43,9 @@ struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitden
 				return (struct bkr_puts_format) { 40,  720,  44, 22,  4};
 			case BKR_SP:
 				return (struct bkr_puts_format) { 32,  830,  45, 22,  4};
-			case BKR_RAW:
-				return (struct bkr_puts_format) {  0, 1012,   0,  0,  4};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 1012,   0,  0,  4};*/
 			}
 		case BKR_PAL:
 			switch(f) {
@@ -50,8 +53,9 @@ struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitden
 				return (struct bkr_puts_format) { 48,  888,  40, 29,  4};
 			case BKR_SP:
 				return (struct bkr_puts_format) { 40,  980,  49, 24,  4};
-			case BKR_RAW:
-				return (struct bkr_puts_format) {  0, 1220,   0,  0,  4};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 1220,   0,  0,  4};*/
 			}
 		}
 	case BKR_HIGH:
@@ -62,8 +66,9 @@ struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitden
 				return (struct bkr_puts_format) {100, 1848,  84, 29, 10};
 			case BKR_SP:
 				return (struct bkr_puts_format) { 80, 2160, 125, 20, 10};
-			case BKR_RAW:
-				return (struct bkr_puts_format) {  0, 2530,   0,  0, 10};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 2530,   0,  0, 10};*/
 			}
 		case BKR_PAL:
 			switch(f) {
@@ -71,8 +76,9 @@ struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitden
 				return (struct bkr_puts_format) {120, 2288,  91, 32, 10};
 			case BKR_SP:
 				return (struct bkr_puts_format) {100, 2618, 136, 22, 10};
-			case BKR_RAW:
-				return (struct bkr_puts_format) {  0, 3050,   0,  0, 10};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct bkr_puts_format) {  0, 3050,   0,  0, 10};*/
 			}
 		}
 	}
@@ -89,9 +95,11 @@ struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitden
  * ============================================================================
  */
 
+
 /*
  * Return the minimum of two values.
  */
+
 
 #ifndef min
 #define min(x,y) ({ \
@@ -107,6 +115,7 @@ struct bkr_puts_format bkr_puts_get_format(enum bkr_videomode v, enum bkr_bitden
  * mapped to ' ').
  */
 
+
 static int ascii_to_glyph(char code)
 {
 	if((code < ' ') || (code > '~'))
@@ -118,6 +127,7 @@ static int ascii_to_glyph(char code)
 /*
  * Return true iff offset is in a key byte.
  */
+
 
 static int is_key_byte(int offset, const struct bkr_puts_format *format)
 {
@@ -131,6 +141,7 @@ static int is_key_byte(int offset, const struct bkr_puts_format *format)
  * does not contain a data byte (i.e. it's occupied by part of the tape
  * format itself --- "meta-data"?).
  */
+
 
 static int screen_to_sector(int offset, const struct bkr_puts_format *format)
 {
@@ -158,6 +169,7 @@ static int screen_to_sector(int offset, const struct bkr_puts_format *format)
  * ============================================================================
  */
 
+
 /*
  * This function modifies the contents of sector so that when written to
  * tape, the null-terminated string s will be visible as human-readable
@@ -170,7 +182,7 @@ static int screen_to_sector(int offset, const struct bkr_puts_format *format)
  * boundary prior to the right-hand side of the video image.  The actual
  * number of characters placed in the video image is returned or < 0 on
  * error.  Possible errors:  the sector format does not support bit-by-bit
- * data manipulation (it is a GCR-modulated mode).
+ * data manipulation (it is a RLL-modulated mode).
  *
  * Extra Info: The font is a fixed-space 5x14 font.  In low density modes
  * there is a maximum of 6 characters across the screen while in high
@@ -188,24 +200,28 @@ static int screen_to_sector(int offset, const struct bkr_puts_format *format)
  * that one wishes to eventually retrieve unless the text is placed AFTER
  * that data in the sector (thus lower on the screen).
  *
- * Before actually being written to tape, the data in the sector will pass
- * through the tape data formater (eg. the device driver).  Among other
- * things, the formater randomizes the data in the sector to address the
- * issue raised above of poor PLL stability when decoding a low entropy bit
- * stream.  This means that your nice text message will be scrambled unless
- * you "pre-unrandomize" it.  This can be accomplished by using the
- * randomizer found in the device driver source tree and an example of this
- * process can be found in bkrcheck.c
+ * Before being written to tape, the data in the sector will pass through a
+ * variety of formating and conditiong stages.  Among other things, this
+ * involvse randomizing the data to help ensure a bit state transitions
+ * occur frequently enough.  This means that your nice text message will be
+ * scrambled.  The randomizer function is its own inverse, however, so if
+ * you apply the randomizer to your rendered text frames before sending
+ * them through the data formatter, the formatter will in effect
+ * "unrandomize" the text and it will be displayed properly.  This can be
+ * accomplished by using the randomizer found in the codec source and an
+ * example of this process can be found in bkrcheck.c.
  *
  * Due to the complex mapping between sector offsets and screen locations
  * it is, effectively, impossible for the calling routine to determine
  * ahead of time which specific bytes in the sector buffer will be
  * modified.  The easiest and most reliable way to determine this
  * information is to generate a "test" sector:  fill a sector buffer with
- * 0xff, with bkr_puts() print as many ' 's at the desired screen location
- * as there are characters in the string to eventually be written then
- * check to see which bytes in the sector buffer no longer contain 0xff.
+ * 0xff, then with bkr_puts() print as many ' 's at the desired screen
+ * location as there are characters in the string to eventually be written,
+ * then check to see which bytes in the sector buffer no longer contain
+ * 0xff.
  */
+
 
 int bkr_puts(const char *s, unsigned char *sector, int line, int bit, const struct bkr_puts_format *format)
 {
@@ -256,5 +272,5 @@ int bkr_puts(const char *s, unsigned char *sector, int line, int bit, const stru
 		}
 	}
 
-	return(length/BKR_FONT_WIDTH);
+	return length / BKR_FONT_WIDTH;
 }

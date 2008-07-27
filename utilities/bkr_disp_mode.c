@@ -51,10 +51,10 @@ void  bkr_display_mode(FILE *file, enum bkr_videomode v, enum bkr_bitdensity d, 
 	}
 	switch(f) {
 	case BKR_SP:
-		fputs("\tData format:  [ ] RAW   [*] SP/LP  [ ] EP\n", file);
+		fputs("\tData format:  [*] SP/LP [ ] EP\n", file);
 		break;
 	case BKR_EP:
-		fputs("\tData format:  [ ] RAW   [ ] SP/LP  [*] EP\n", file);
+		fputs("\tData format:  [ ] SP/LP [*] EP\n", file);
 	default:
 		break;
 	}

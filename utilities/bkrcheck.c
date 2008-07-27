@@ -20,6 +20,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include <getopt.h>
 #include <string.h>
 #include <termios.h>
@@ -27,11 +28,13 @@
 #include <sys/ioctl.h>
 #include <sys/timeb.h>
 
+
 #include <backer.h>
 #include <bkr_disp_mode.h>
 #include <bkr_puts.h>
 #include <bkr_splp.h>
 #include <bkr_splp_randomize.h>
+
 
 #define  PROGRAM_NAME  "bkrcheck"
 
@@ -44,12 +47,14 @@
  * ============================================================================
  */
 
+
 struct format {
 	int field_size;
 	int interlace;
 	int sector_capacity;
 	int bytes_per_line;
 };
+
 
 static struct format get_format(enum bkr_videomode v, enum bkr_bitdensity d, enum bkr_sectorformat f)
 {
@@ -62,8 +67,9 @@ static struct format get_format(enum bkr_videomode v, enum bkr_bitdensity d, enu
 				return (struct format) {1012,  4,  712,  4};
 			case BKR_SP:
 				return (struct format) {1012,  4,  826,  4};
-			case BKR_RAW:
-				return (struct format) {1012,  4, 1012,  4};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct format) {1012,  4, 1012,  4};*/
 			}
 		case BKR_PAL:
 			switch(f) {
@@ -71,8 +77,9 @@ static struct format get_format(enum bkr_videomode v, enum bkr_bitdensity d, enu
 				return (struct format) {1220,  0,  884,  4};
 			case BKR_SP:
 				return (struct format) {1220,  0,  976,  4};
-			case BKR_RAW:
-				return (struct format) {1220,  0, 1220,  4};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct format) {1220,  0, 1220,  4};*/
 			}
 		}
 	case BKR_HIGH:
@@ -83,8 +90,9 @@ static struct format get_format(enum bkr_videomode v, enum bkr_bitdensity d, enu
 				return (struct format) {2530, 10, 1844, 10};
 			case BKR_SP:
 				return (struct format) {2530, 10, 2156, 10};
-			case BKR_RAW:
-				return (struct format) {2530, 10, 2530, 10};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct format) {2530, 10, 2530, 10};*/
 			}
 		case BKR_PAL:
 			switch(f) {
@@ -92,8 +100,9 @@ static struct format get_format(enum bkr_videomode v, enum bkr_bitdensity d, enu
 				return (struct format) {3050,  0, 2284, 10};
 			case BKR_SP:
 				return (struct format) {3050,  0, 2614, 10};
-			case BKR_RAW:
-				return (struct format) {3050,  0, 3050, 10};
+			/* FIXME:  what to do about this? */
+			/*case BKR_RAW:
+				return (struct format) {3050,  0, 3050, 10};*/
 			}
 		}
 	}
@@ -109,6 +118,7 @@ static struct format get_format(enum bkr_videomode v, enum bkr_bitdensity d, enu
  *
  * ============================================================================
  */
+
 
 struct options {
 	int verbose;
@@ -182,9 +192,10 @@ static struct options parse_command_line(int *argc, char **argv[])
 		case 'e':
 			options.sectorformat = BKR_EP;
 			break;
-		case 'r':
+		/* FIXME:  what to do about this? */
+		/*case 'r':
 			options.sectorformat = BKR_RAW;
-			break;
+			break;*/
 		case 's':
 			options.sectorformat = BKR_SP;
 			break;
@@ -255,6 +266,7 @@ static struct options parse_command_line(int *argc, char **argv[])
  * ============================================================================
  */
 
+
 static void generate_message(struct options options, unsigned char *data, struct format format)
 {
 	struct bkr_puts_format puts_fmt = bkr_puts_get_format(options.videomode, options.bitdensity, options.sectorformat);
@@ -277,6 +289,7 @@ static void generate_message(struct options options, unsigned char *data, struct
  *
  * ============================================================================
  */
+
 
 static unsigned char *gen_formated(struct options options, struct format format, int *length)
 {
@@ -325,6 +338,7 @@ static int write_formated_frame(FILE *file, const unsigned char *data, int lengt
  *
  * ============================================================================
  */
+
 
 static unsigned char *gen_raw(struct options options, struct format format, int *length)
 {
@@ -378,7 +392,9 @@ static int write_raw_frame(FILE *file, const unsigned char *data, int length, in
  * ============================================================================
  */
 
+
 static struct termios oldterm;
+
 
 static void adjust_terminal(void)
 {
@@ -390,6 +406,7 @@ static void adjust_terminal(void)
 	newterm.c_cc[VMIN] = newterm.c_cc[VTIME] = 0;
 	ioctl(STDIN_FILENO, TCSETS, &newterm);
 }
+
 
 static void restore_terminal(void)
 {
@@ -405,6 +422,7 @@ static void restore_terminal(void)
  * ============================================================================
  */
 
+
 int main(int argc, char *argv[])
 {
 	struct options options;
@@ -418,8 +436,9 @@ int main(int argc, char *argv[])
 
 
 	/*
-	 * Init.
+	 * Init
 	 */
+
 
 	options = parse_command_line(&argc, &argv);
 	format = get_format(options.videomode, options.bitdensity, options.sectorformat);
@@ -429,11 +448,14 @@ int main(int argc, char *argv[])
 		bkr_display_mode(stderr, options.videomode, options.bitdensity, options.sectorformat);
 	}
 
+
 	/*
 	 * Generate test pattern
 	 */
 
-	if(options.sectorformat == BKR_RAW) {
+
+	/* FIXME: what to do about this? */
+	if(/*options.sectorformat == BKR_RAW*/ 0) {
 		data = gen_raw(options, format, &length);
 		write_func = write_raw_frame;
 	} else {
@@ -441,9 +463,11 @@ int main(int argc, char *argv[])
 		write_func = write_formated_frame;
 	}
 
+
 	/*
 	 * Dump data until 'q' is pressed.
 	 */
+
 
 	fputs(PROGRAM_NAME ": writing test pattern...  press 'q' to quit.\n", stderr);
 	adjust_terminal();
@@ -459,11 +483,14 @@ int main(int argc, char *argv[])
 
 	framerate = field/2 / (stop.time - start.time + (stop.millitm - start.millitm)*1e-3);
 
+
 	/*
 	 * Clean up and quit
 	 */
 
-	if(options.verbose && (options.sectorformat == BKR_RAW))
+
+	/* FIXME:  what to do about this? */
+	if(options.verbose /*&& (options.sectorformat == BKR_RAW)*/)
 		fprintf(stderr, PROGRAM_NAME ": device frame rate was %.1f frames/second\n", framerate);
 	free(data);
 	exit(0);

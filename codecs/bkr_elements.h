@@ -36,6 +36,13 @@ G_BEGIN_DECLS
 #define BKR_TYPE_SECTORFORMAT	(bkr_sectorformat_get_type())
 
 
+enum BkrEventType {
+	BKR_EVENT_UNKNOWN = 0,
+	BKR_EVENT_SKIPPED_SECTOR,
+	BKR_EVENT_NEXT_SECTOR_INVALID
+};
+
+
 GType bkr_videomode_get_type(void);
 GType bkr_bitdensity_get_type(void);
 GType bkr_sectorformat_get_type(void);
@@ -44,6 +51,7 @@ GstEvent *bkr_event_new_skipped_sector(void);
 GstEvent *bkr_event_new_next_sector_invalid(void);
 double bkr_fields_per_second(enum bkr_videomode);
 int bkr_parse_caps(GstCaps *, enum bkr_videomode *, enum bkr_bitdensity *, enum bkr_sectorformat *);
+enum BkrEventType bkr_event_parse(GstEvent *);
 
 
 #define DEFAULT_VIDEOMODE	BKR_NTSC

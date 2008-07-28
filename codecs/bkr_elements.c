@@ -21,6 +21,7 @@
  */
 
 
+#include <string.h>
 #include <gst/gst.h>
 
 
@@ -238,6 +239,29 @@ int bkr_parse_caps(GstCaps *caps, enum bkr_videomode *videomode, enum bkr_bitden
 	}
 
 	return TRUE;
+}
+
+
+/*
+ * Parse the contents of a custom backer event.  Returns BKR_EVENT_UNKOWN
+ * if the event is not a custom backer event.
+ */
+
+
+enum BkrEventType bkr_event_parse(GstEvent *event)
+{
+	const char *name;
+
+	if(GST_EVENT_TYPE(event) != GST_EVENT_CUSTOM_DOWNSTREAM)
+		return BKR_EVENT_UNKNOWN;
+
+	name = gst_structure_get_name(gst_event_get_structure(event));
+
+	if(!strcmp(name, "bkr_skipped_sector"))
+		return BKR_EVENT_SKIPPED_SECTOR;
+	if(!strcmp(name, "bkr_next_sector_invalid"))
+		return BKR_EVENT_NEXT_SECTOR_INVALID;
+	return BKR_EVENT_UNKNOWN;
 }
 
 

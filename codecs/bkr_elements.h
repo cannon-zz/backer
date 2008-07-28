@@ -26,6 +26,7 @@
 
 
 #include <gst/gst.h>
+#include <backer.h>
 
 
 G_BEGIN_DECLS
@@ -34,6 +35,11 @@ G_BEGIN_DECLS
 #define BKR_TYPE_VIDEOMODE	(bkr_videomode_get_type())
 #define BKR_TYPE_BITDENSITY	(bkr_bitdensity_get_type())
 #define BKR_TYPE_SECTORFORMAT	(bkr_sectorformat_get_type())
+
+
+#define DEFAULT_VIDEOMODE	BKR_NTSC
+#define DEFAULT_BITDENSITY	BKR_HIGH
+#define DEFAULT_SECTORFORMAT	BKR_SP
 
 
 enum BkrEventType {
@@ -52,11 +58,6 @@ GstEvent *bkr_event_new_next_sector_invalid(void);
 double bkr_fields_per_second(enum bkr_videomode);
 int bkr_parse_caps(GstCaps *, enum bkr_videomode *, enum bkr_bitdensity *, enum bkr_sectorformat *);
 enum BkrEventType bkr_event_parse(GstEvent *);
-
-
-#define DEFAULT_VIDEOMODE	BKR_NTSC
-#define DEFAULT_BITDENSITY	BKR_HIGH
-#define DEFAULT_SECTORFORMAT	BKR_SP
 
 
 G_END_DECLS

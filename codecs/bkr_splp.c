@@ -1154,7 +1154,12 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 	 */
 
 	for(; status.sectors_skipped; status.sectors_skipped--) {
-		/* FIXME */
+		result = gst_pad_push_event(srcpad, bkr_event_new_skipped_sector());
+		if(result != GST_FLOW_OK) {
+			gst_buffer_unref(sinkbuf);
+			GST_DEBUG("gst_pad_push_event() failed");
+			goto done;
+		}
 	}
 
 	/*
@@ -1176,7 +1181,12 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 	 */
 
 	if(!status.sector_is_valid) {
-		/* FIXME */
+		result = gst_pad_push_event(srcpad, bkr_event_new_next_sector_invalid());
+		if(result != GST_FLOW_OK) {
+			gst_buffer_unref(sinkbuf);
+			GST_DEBUG("gst_pad_push_event() failed");
+			goto done;
+		}
 	}
 
 	/*

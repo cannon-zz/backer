@@ -124,7 +124,7 @@ GstCaps *bkr_get_template_caps(void)
 {
 	static GstCaps *caps = NULL;
 
-	if(!caps) {
+	if(!caps)
 		/* FIXME:  figure out how to write the caps as enums */
 		caps = gst_caps_from_string(
 			"application/x-backer, " \
@@ -132,10 +132,36 @@ GstCaps *bkr_get_template_caps(void)
 			"bitdensity=(int){ 4, 8 }, " \
 			"sectorformat=(int){ 16, 32 }"
 		);
-	} else
-		gst_caps_ref(caps);
+
+	gst_caps_ref(caps);
 
 	return caps;
+}
+
+
+GstEvent *bkr_event_new_skipped_sector(void)
+{
+	static GstEvent *event = NULL;
+
+	if(!event)
+		event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, gst_structure_empty_new("bkr_skipped_sector"));
+
+	gst_event_ref(event);
+
+	return event;
+}
+
+
+GstEvent *bkr_event_new_next_sector_invalid(void)
+{
+	static GstEvent *event = NULL;
+
+	if(!event)
+		event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, gst_structure_empty_new("bkr_next_sector_invalid"));
+
+	gst_event_ref(event);
+
+	return event;
 }
 
 

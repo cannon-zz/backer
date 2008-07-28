@@ -336,6 +336,12 @@ static struct sector_decode_status decode_sector(BkrSPLPDec *filter, GstBuffer *
 	struct sector_decode_status status;
 
 	/*
+	 * Incase something goes wrong.
+	 */
+
+	GST_BUFFER_OFFSET(buffer) = GST_BUFFER_OFFSET_END(buffer) = GST_BUFFER_OFFSET_NONE;
+
+	/*
 	 * Perform error correction.
 	 */
 
@@ -358,7 +364,6 @@ static struct sector_decode_status decode_sector(BkrSPLPDec *filter, GstBuffer *
 
 	if(header.sector_number < 0) {
 		status.sector_is_bor = 1;
-		GST_BUFFER_OFFSET(buffer) = GST_BUFFER_OFFSET_END(buffer) = GST_BUFFER_OFFSET_NONE;
 		reset_statistics(filter);
 		return status;
 	}
@@ -369,7 +374,6 @@ static struct sector_decode_status decode_sector(BkrSPLPDec *filter, GstBuffer *
 	 */
 
 	GST_BUFFER_OFFSET(buffer) = header.sector_number;
-	GST_BUFFER_OFFSET_END(buffer) = GST_BUFFER_OFFSET_NONE;
 
 	/*
 	 * If sector is a duplicate, then we're done.
@@ -537,15 +541,31 @@ static GstFlowReturn write_eor(BkrSPLPEnc *filter, GstCaps *caps)
 
 
 /*
- * Write a regular (possibly short) data sector.  The size is the count of
- * bytes to take from the adapter to build the sector.  There must be that
- * much data in the adapter, and it must not exceed the maximum sector
- * capacity.
+ * Write a regular (possibly short) data sector.  Takes as much data as
+ * will fit into a sector from the filter's adapter, encodes it, and pushes
+ * it out the srcpad.  If there isn't enough data in the adapter to fill a
+ * sector then a short sector is encoded.  This is a waste of tape if this
+ * is not the end of the input stream.  Note, also, that if the adapter is
+ * empty the result will be a sector containing 0 bytes, which will be
+ * interpreted as the end-of-record marker on decode.  You must check that
+ * there is infact data (and enough data) in the adapter before calling
+ * this function.
  */
 
 
-static GstFlowReturn write_sector(BkrSPLPEnc *filter, GstCaps *caps, size_t size)
+#ifndef min
+#define min(x,y) ({ \
+	const typeof(x) _x = (x); \
+	const typeof(y) _y = (y); \
+	(void) (&_x == &_y); \
+	_x < _y ? _x : _y ; \
+})
+#endif
+
+
+static GstFlowReturn write_sector(BkrSPLPEnc *filter, GstCaps *caps)
 {
+	size_t size = min(gst_adapter_available(filter->adapter), (unsigned) filter->format->capacity);
 	GstBuffer *srcbuf;
 	const guint8 *data;
 	GstFlowReturn result;
@@ -690,26 +710,13 @@ done:
 
 static GstFlowReturn enc_flush(BkrSPLPEnc *filter, GstCaps *caps)
 {
-	GstFlowReturn result;
-
 	/*
-	 * write any remaining full sectors
+	 * write any remaining sectors (including a final, short, sector if
+	 * needed)
 	 */
 
-	while(gst_adapter_available(filter->adapter) > filter->format->capacity) {
-		result = write_sector(filter, caps, filter->format->capacity);
-		if(result != GST_FLOW_OK) {
-			GST_DEBUG("write_sector() failed");
-			return result;
-		}
-	}
-
-	/*
-	 * write the last sector, short if needed
-	 */
-
-	if(gst_adapter_available(filter->adapter)) {
-		result = write_sector(filter, caps, gst_adapter_available(filter->adapter));
+	while(gst_adapter_available(filter->adapter)) {
+		GstFlowReturn result = write_sector(filter, caps);
 		if(result != GST_FLOW_OK) {
 			GST_DEBUG("write_sector() failed");
 			return result;
@@ -824,7 +831,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 	}
 
 	while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
-		result = write_sector(filter, caps, filter->format->capacity);
+		result = write_sector(filter, caps);
 		if(result != GST_FLOW_OK) {
 			GST_DEBUG("write_sector() failed");
 			goto done;

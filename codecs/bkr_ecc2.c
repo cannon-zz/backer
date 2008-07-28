@@ -19,17 +19,10 @@
  */
 
 
-#ifdef __KERNEL__
-#include <linux/errno.h>
-#include <linux/slab.h>
-#include <linux/string.h>
-static void *malloc(size_t size)  { return(kmalloc(size, GFP_KERNEL)); }
-static void free(void *ptr) { kfree(ptr); }
-#else
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#endif /* __KERNEL__ */
+
 
 #include <backer.h>
 #include <bkr_bytes.h>
@@ -37,6 +30,7 @@ static void free(void *ptr) { kfree(ptr); }
 #include <bkr_ring_buffer.h>
 #include <bkr_stream.h>
 #include <rs.h>
+
 
 #ifndef min
 #define min(x,y) ({ \
@@ -56,10 +50,12 @@ static void free(void *ptr) { kfree(ptr); }
  * ========================================================================
  */
 
+
 #define  ECC2_TIMEOUT_MULT  1
 #define  BLOCK_SIZE         255
 #define  PARITY             20
 #define  ECC2_FILLER        0x33
+
 
 /*
  * ========================================================================
@@ -69,7 +65,9 @@ static void free(void *ptr) { kfree(ptr); }
  * ========================================================================
  */
 
+
 typedef u_int32_t data_length_t;
+
 
 typedef struct {
 	rs_format_t  rs_format;
@@ -93,6 +91,7 @@ typedef struct {
  *
  * ========================================================================
  */
+
 
 static data_length_t get_data_length(const struct bkr_stream_t *stream)
 {
@@ -243,6 +242,7 @@ static int flush(struct bkr_stream_t *stream)
  * ========================================================================
  */
 
+
 static void read_callback(struct bkr_stream_t *stream)
 {
 	while(get_group(stream) >= 0)
@@ -250,6 +250,7 @@ static void read_callback(struct bkr_stream_t *stream)
 
 	bkr_stream_do_callback(stream);
 }
+
 
 static void write_callback(struct bkr_stream_t *stream)
 {
@@ -280,6 +281,7 @@ static void write_callback(struct bkr_stream_t *stream)
  *
  * ========================================================================
  */
+
 
 static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 {
@@ -383,6 +385,7 @@ static const struct bkr_stream_ops_t stream_ops = {
 	.write = write,
 };
 
+
 static struct bkr_stream_t *new(struct bkr_stream_t *source, int mode, const bkr_format_info_t *fmt)
 {
 	struct bkr_stream_t  *stream;
@@ -448,6 +451,7 @@ no_source:
  *
  * ========================================================================
  */
+
 
 const struct bkr_stream_ops_t *bkr_ecc2_codec_init(void)
 {

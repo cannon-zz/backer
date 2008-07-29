@@ -1,7 +1,9 @@
 /*
  * Driver for Danmere's Backer 16/32 video tape backup cards.
  *
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
+ *                   Sector Drop-Out Error Correction Codec
+ *
+ * Copyright (C) 2000,2001,2002,2008  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,27 +21,24 @@
  */
 
 
-#include <errno.h>
-#include <stdlib.h>
+/*
+ * ========================================================================
+ *
+ *                                  Preamble
+ *
+ * ========================================================================
+ */
+
+
 #include <string.h>
 
 
+#include <gst/gst.h>
 #include <backer.h>
+#include <bkr_elements.h>
 #include <bkr_bytes.h>
 #include <bkr_ecc2.h>
-#include <bkr_ring_buffer.h>
-#include <bkr_stream.h>
 #include <rs.h>
-
-
-#ifndef min
-#define min(x,y) ({ \
-	const typeof(x) _x = (x); \
-	const typeof(y) _y = (y); \
-	(void) (&_x == &_y); \
-	_x < _y ? _x : _y ; \
-})
-#endif
 
 
 /*
@@ -54,34 +53,106 @@
 #define  ECC2_TIMEOUT_MULT  1
 #define  BLOCK_SIZE         255
 #define  PARITY             20
-#define  ECC2_FILLER        0x33
+#define  ECC2_FILLER        0x00
+
+
+/*
+ * Header definition
+ */
+
+
+struct bkr_ecc2_header {
+	guint32 length;
+};
+
+
+/*
+ * Format info.
+ */
+
+
+static struct bkr_ecc2_format *compute_format(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity)
+{
+	int sector_capacity;
+	struct bkr_ecc2_format *format;
+
+	switch(bitdensity) {
+	case BKR_LOW:
+		switch(videomode) {
+		case BKR_NTSC:
+			sector_capacity = 716;
+			break;
+		case BKR_PAL:
+			sector_capacity = 884;
+			break;
+		default:
+			GST_DEBUG("unrecognized videomode");
+			return NULL;
+		}
+		break;
+	case BKR_HIGH:
+		switch(videomode) {
+		case BKR_NTSC:
+			sector_capacity = 1844;
+			break;
+		case BKR_PAL:
+			sector_capacity = 2284;
+			break;
+		default:
+			GST_DEBUG("unrecognized videomode");
+			return NULL;
+		}
+		break;
+	default:
+		GST_DEBUG("unrecognized bitdensity");
+		return NULL;
+	}
+
+	format = malloc(sizeof(*format));
+	if(!format) {
+		GST_DEBUG("memory allocation failure");
+		return NULL;
+	}
+
+	*format = (struct bkr_ecc2_format) {
+		BLOCK_SIZE * sector_capacity,
+		(BLOCK_SIZE - PARITY) * sector_capacity,
+		PARITY * sector_capacity,
+		(BLOCK_SIZE - PARITY) * sector_capacity - sizeof(struct bkr_ecc2_header),
+		sector_capacity
+	};
+
+	return format;
+}
 
 
 /*
  * ========================================================================
  *
- *                              Global Data
+ *                                   Header
  *
  * ========================================================================
  */
 
 
-typedef u_int32_t data_length_t;
+static struct bkr_ecc2_header get_header(const guint8 *data, const struct bkr_ecc2_format *format)
+{
+	struct bkr_ecc2_header header;
+
+	memcpy(&header, data + format->capacity, sizeof(header));
+	header.length = __le32_to_cpu(header.length);
+
+	return header;
+}
 
 
-typedef struct {
-	rs_format_t  rs_format;
-	gf  *erasure;
-	int  num_erasure;
-	int  worst_group;
-	unsigned long  extra_errors;
-	int  group_size;
-	int  data_size;
-	int  parity_size;
-	size_t  decode_head;
-	int  eof;
-	int  sector;
-} bkr_ecc2_private_t;
+static void put_header(guint8 *data, const struct bkr_ecc2_format *format, int length)
+{
+	struct bkr_ecc2_header header = {.length = length};
+
+	header.length = __cpu_to_le32(header.length);
+	memcpy(data + format->capacity, &header, sizeof(header));
+}
 
 
 /*
@@ -93,369 +164,808 @@ typedef struct {
  */
 
 
-static data_length_t get_data_length(const struct bkr_stream_t *stream)
+/*
+ * Decode a sector from the adapter.  Note that the buffer returned by this
+ * function does not have any metadata set on it except its size.
+ */
+
+
+static GstFlowReturn decode_group(BkrECC2Dec *filter, GstBuffer **srcbuf)
 {
-	struct ring ring = *stream->ring;
-	data_length_t  data_length;
-
-	_ring_drain(&ring, stream->capacity);
-	memcpy_from_ring(&data_length, &ring, sizeof(data_length));
-
-	return(__le32_to_cpu(data_length));
-}
-
-
-static void put_data_length(struct bkr_stream_t *stream, data_length_t data_length)
-{
-	data_length = __cpu_to_le32(data_length);
-	memcpy_to_ring(stream->ring, &data_length, sizeof(data_length));
-}
-
-
-static int get_group(struct bkr_stream_t *stream)
-{
-	bkr_ecc2_private_t  *private = stream->private;
-	struct bkr_stream_t  *source = stream->source;
-	struct ring  *ring = stream->ring;
-	struct ring  *source_ring = source->ring;
-	int  result;
-
-	for(; private->sector < BLOCK_SIZE; private->sector++) {
-		if(space_in_ring(ring) < source->capacity)
-			return(-EAGAIN);
-		result = source->ops.read(source);
-		if(result > 0) {
-			ring_lock(ring);
-			ring_lock(source_ring);
-			memcpy_to_ring_from_ring(ring, source_ring, source->capacity);
-			ring_unlock(source_ring);
-			ring_unlock(ring);
-			continue;
-		} else if(result == -ENODATA) {
-			ring_lock(ring);
-			memset_ring(ring, ECC2_FILLER, source->capacity);
-			ring_unlock(ring);
-			if(private->num_erasure < PARITY)
-				private->erasure[private->num_erasure++] = private->sector;
-			continue;
-		}
-		if(result == 0)
-			private->eof = 1;
-		return(-EAGAIN);
-	}
-
-	private->sector = 0;
-	return(0);
-}
-
-
-static void correct_group(struct bkr_stream_t *stream)
-{
-	bkr_ecc2_private_t  *private = stream->private;
-	struct ring  *ring = stream->ring;
-	int  num_blocks = stream->source->capacity;
-	int  block;
+	guint8 *data;
+	int block;
 	int corrections;
-	unsigned char  *data, *parity;
+	struct bkr_ecc2_header header;
 
-	ring_lock(ring);
-	data = ring->buffer + ring_offset_sub(ring, ring->head, private->group_size);
-	parity = data + private->data_size;
-	ring_unlock(ring);
+	/*
+	 * Extract the data from the adapter as a new buffer.
+	 */
 
-	for(block = 0; block < num_blocks; block++) {
-		memcpy(private->rs_format.erasure, private->erasure, private->num_erasure * sizeof(gf));
-		corrections = reed_solomon_decode(parity++, data++, private->num_erasure, private->rs_format);
+	*srcbuf = gst_adapter_take_buffer(filter->adapter, filter->format->group_size);
+	if(!*srcbuf) {
+		GST_DEBUG("gst_adapter_take_buffer() failed");
+		return GST_FLOW_ERROR;
+	}
+	data = GST_BUFFER_DATA(*srcbuf);
+
+	/*
+	 * Do error correction.
+	 */
+
+	/* This pre-processor conditional disables error correction.
+	 * Useful for confirming that the decoding pipeline is, infact, the
+	 * inverse of the encoding pipeline (the error corrector could be
+	 * hiding off-by-one problems by just fixing the data). */
+#if 1
+	for(block = 0; block < filter->format->interleave; block++) {
+		memcpy(filter->rs_format->erasure, filter->erasure, filter->num_erasure * sizeof(gf));
+		corrections = reed_solomon_decode(data + filter->format->data_size + block, data + block, filter->num_erasure, *filter->rs_format);
 		if(corrections < 0) {
-			/* uncorrectable block */
+			/* uncorrectable block.  ignore, there's nothing we
+			 * can do at this point anyway. */
 			continue;
 		}
-		if(corrections > private->worst_group)
-			private->worst_group = corrections;
-		if(corrections <= private->num_erasure)
-			continue;
-		private->extra_errors += corrections - private->num_erasure;
-		memcpy(private->erasure, private->rs_format.erasure, corrections * sizeof(gf));
-		private->num_erasure = corrections;
+		if(corrections > filter->worst_group)
+			filter->worst_group = corrections;
+		if(corrections > filter->num_erasure) {
+			/* error corrector identified additional corrupt
+			 * sectors, beyond what the sector decoder told us
+			 * about.  add them to our list, and pass them in
+			 * as erasures for the next block.  */
+			filter->extra_errors += corrections - filter->num_erasure;
+			memcpy(filter->erasure, filter->rs_format->erasure, corrections * sizeof(gf));
+			filter->num_erasure = corrections;
+		}
 	}
-	private->num_erasure = 0;
-}
+#endif
+	filter->num_erasure = 0;
 
+	/*
+	 * Retrieve header, and resize the buffer.
+	 */
 
-static int finish_group(struct bkr_stream_t *stream)
-{
-	bkr_ecc2_private_t  *private = stream->private;
-	struct ring  *ring = stream->ring;
-	int  num_blocks = stream->source->capacity;
-	int  block;
-	unsigned char  *data, *parity;
-	data_length_t  data_length;
+	header = get_header(data, filter->format);
+	GST_BUFFER_SIZE(*srcbuf) = header.length;
 
-	ring_lock(ring);
+	/*
+	 * Done
+	 */
 
-	data_length = ring->head % private->group_size;
-	data = ring->buffer + ring_offset_sub(ring, ring->head, data_length);
-	parity = data + private->data_size;
-
-	if(_space_in_ring(ring) < private->group_size - data_length) {
-		ring_unlock(ring);
-		return(-EAGAIN);
-	}
-
-	memset_ring(stream->ring, ECC2_FILLER, stream->capacity - data_length);
-	put_data_length(stream, data_length);
-
-	ring_unlock(ring);
-
-	for(block = 0; block < num_blocks; block++)
-		reed_solomon_encode(parity++, data++, private->rs_format);
-
-	ring_fill(ring, private->parity_size);
-	
-	return(stream->capacity);
-}
-
-
-static int flush(struct bkr_stream_t *stream)
-{
-	bkr_ecc2_private_t  *private = stream->private;
-	struct ring  *ring = stream->ring;
-	int  head;
-
-	ring_lock(ring);
-	head = ring->head;
-	ring_unlock(ring);
-
-	if(head % private->group_size)
-		if(finish_group(stream) == -EAGAIN)
-			return(-EAGAIN);
-
-	return(bytes_in_ring(ring) ? bkr_source_write_status(stream) : 0);
+	return GST_FLOW_OK;
 }
 
 
 /*
- * ========================================================================
- *
- *                        I/O Activity Callbacks
- *
- * ========================================================================
+ * Write a (possibly short) sector group.  Takes as much data as will fit
+ * into a sector group from the filter's adapter, encodes it, and pushes it
+ * out the srcpad.  If there isn't enough data in the adapter to fill a
+ * sector group then a short sector is encoded.  This is a waste of tape if
+ * this is not the end of the input stream.
  */
 
 
-static void read_callback(struct bkr_stream_t *stream)
-{
-	while(get_group(stream) >= 0)
-		correct_group(stream);
+#ifndef min
+#define min(x,y) ({ \
+	const typeof(x) _x = (x); \
+	const typeof(y) _y = (y); \
+	(void) (&_x == &_y); \
+	_x < _y ? _x : _y ; \
+})
+#endif
 
-	bkr_stream_do_callback(stream);
+
+static GstFlowReturn write_group(BkrECC2Enc *filter, GstCaps *caps)
+{
+	size_t size = min(gst_adapter_available(filter->adapter), (unsigned) filter->format->capacity);
+	GstBuffer *srcbuf;
+	const guint8 *data;
+	int block;
+	GstFlowReturn result;
+
+	data = gst_adapter_peek(filter->adapter, size);
+
+	result = gst_pad_alloc_buffer(filter->srcpad, GST_BUFFER_OFFSET_NONE, filter->format->group_size, caps, &srcbuf);
+	if(result != GST_FLOW_OK) {
+		GST_DEBUG("gst_pad_alloc_buffer() failed");
+		return result;
+	}
+
+	/* copy data from adapter into buffer */
+	memcpy(GST_BUFFER_DATA(srcbuf), data, size);
+
+	/* pad with 0 if short */
+	memset(GST_BUFFER_DATA(srcbuf) + size, 0, filter->format->capacity - size);
+
+	/* insert the header */
+	put_header(GST_BUFFER_DATA(srcbuf), filter->format, size);
+
+	/* compute parity */
+	for(block = 0; block < filter->format->interleave; block++)
+		reed_solomon_encode(GST_BUFFER_DATA(srcbuf) + filter->format->data_size + block, GST_BUFFER_DATA(srcbuf) + block, *filter->rs_format);
+
+	gst_adapter_flush(filter->adapter, size);
+
+	/* transmit buffer */
+	result = gst_pad_push(filter->srcpad, srcbuf);
+	if(result != GST_FLOW_OK) {
+		GST_DEBUG("gst_pad_push() failed");
+		return result;
+	}
+
+	return GST_FLOW_OK;
 }
 
 
-static void write_callback(struct bkr_stream_t *stream)
-{
-	struct bkr_stream_t  *source = stream->source;
-	struct ring  *ring = stream->ring;
-	struct ring  *source_ring = source->ring;
-	int  count;
+/*
+ * ============================================================================
+ *
+ *                       GStreamer Encoder Support Code
+ *
+ * ============================================================================
+ */
 
-	while(bytes_in_ring(ring)) {
-		count = source->ops.write(source);
-		if(count < 1)
+
+/*
+ * Sink pad setcaps function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.10-doc/gstreamer-0.10/GstPad.html#GstPadBufferAllocFunction
+ */
+
+
+static struct bkr_ecc2_format *caps_to_format(GstCaps *caps)
+{
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+	enum bkr_sectorformat sectorformat;
+
+	if(!bkr_parse_caps(caps, &videomode, &bitdensity, &sectorformat)) {
+		GST_DEBUG("failure parsing caps");
+		return NULL;
+	}
+
+	if(sectorformat != BKR_EP) {
+		GST_DEBUG("sectorformat != BKR_EP");
+		return NULL;
+	}
+
+	return compute_format(videomode, bitdensity);
+}
+
+
+static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
+{
+	BkrECC2Enc *filter = BKR_ECC2ENC(gst_pad_get_parent(pad));
+	gboolean result;
+
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+
+	free(filter->format);
+	filter->format = caps_to_format(caps);
+	if(filter->format) {
+		filter->rs_format = reed_solomon_codec_new((filter->format->data_size + filter->format->parity_size) / filter->format->interleave, filter->format->data_size / filter->format->interleave, filter->format->interleave);
+		if(!filter->rs_format) {
+			GST_DEBUG("reed_solomon_codec_new() failed");
+			free(filter->format);
+			filter->format = NULL;
+		}
+	}
+
+	result = filter->format ? TRUE : FALSE;
+
+	gst_object_unref(filter);
+
+	return result;
+}
+
+
+/*
+ * Event function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.10-doc/gstreamer-0.10/GstPad.html#GstPadEventFunction
+ */
+
+
+static GstFlowReturn enc_flush(BkrECC2Enc *filter, GstCaps *caps)
+{
+	/*
+	 * write any unfinished group
+	 */
+
+	while(gst_adapter_available(filter->adapter)) {
+		GstFlowReturn result = write_group(filter, caps);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("write_group() failed");
+			return result;
+		}
+	}
+
+	return GST_FLOW_OK;
+}
+
+
+static gboolean enc_event(GstPad *pad, GstEvent *event)
+{
+	BkrECC2Enc *filter = BKR_ECC2ENC(gst_pad_get_parent(pad));
+	GstCaps *caps = GST_PAD_CAPS(pad);
+	gboolean result;
+
+	switch(GST_EVENT_TYPE(event)) {
+	case GST_EVENT_EOS:
+		/*
+		 * there is no special end-of-record mark, the data simply
+		 * ends.  just flush the adapter.
+		 */
+
+		if(enc_flush(filter, caps) != GST_FLOW_OK) {
+			GST_DEBUG("enc_flush() failed");
+			gst_event_unref(event);
+			result = FALSE;
 			break;
-		ring_lock(ring);
-		ring_lock(source_ring);
-		memcpy_to_ring_from_ring(source_ring, ring, min((unsigned) count, _bytes_in_ring(ring)));
-		ring_unlock(source_ring);
-		ring_unlock(ring);
+		}
+
+		/*
+		 * forward the end-of-stream event.
+		 */
+
+		result = gst_pad_push_event(filter->srcpad, event);
+		break;
+
+	default:
+		/*
+		 * FIXME:  if GST_EVENT_NEWSEGMENT comes, do something
+		 * special if a recording is in progress?
+		 */
+		result = gst_pad_event_default(pad, event);
+		break;
 	}
 
-	bkr_stream_do_callback(stream);
+	gst_object_unref(filter);
+	return result;
 }
 
 
 /*
- * ========================================================================
+ * Chain function.  See
  *
- *                              Stream API
- *
- * ========================================================================
+ * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
  */
 
 
-static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
+static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 {
-	bkr_ecc2_private_t  *private = stream->private;
-	struct bkr_stream_t  *source = stream->source;
-	int  result;
+	BkrECC2Enc *filter = BKR_ECC2ENC(gst_pad_get_parent(pad));
+	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
+	GstFlowReturn result;
 
-	if(direction == BKR_READING) {
-		bkr_stream_set_callback(source, (void (*)(void *)) read_callback, stream);
-		ring_offset_dec(stream->ring, stream->ring->tail, 1);
-		ring_offset_dec(stream->ring, private->decode_head, 1);
-	} else
-		bkr_stream_set_callback(source, (void (*)(void *)) write_callback, stream);
+	if(!caps || (caps != GST_PAD_CAPS(pad))) {
+		if(!caps)
+			GST_DEBUG("caps not set on buffer");
+		else if(caps != GST_PAD_CAPS(pad))
+			GST_DEBUG("buffer's caps don't match pad's caps");
+		result = GST_FLOW_NOT_NEGOTIATED;
+		goto done;
+	}
 
-	result = source->ops.start(source, direction);
-	if(result >= 0)
-		stream->direction = direction;
+	gst_adapter_push(filter->adapter, sinkbuf);
 
-	return(result);
-}
-
-
-static int read(struct bkr_stream_t *stream)
-{
-	bkr_ecc2_private_t  *private = stream->private;
-	struct ring  *ring = stream->ring;
-	int  count;
-
-	ring_lock(ring);
-
-	count = ring_offset_sub(ring, private->decode_head, ring->tail);
-	if(!count) {
-		count = private->group_size - ring->tail % private->group_size;
-		if(_bytes_in_ring(ring) < count + private->group_size) {
-			ring_unlock(ring);
-			if(private->eof)
-				return(0);
-			return(-EAGAIN);
+	while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
+		result = write_group(filter, caps);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("write_group() failed");
+			goto done;
 		}
-		_ring_drain(ring, count);
-		private->decode_head = ring_offset_add(ring, ring->tail, get_data_length(stream));
 	}
 
-	ring_unlock(ring);
-	return(count);
+	result = GST_FLOW_OK;
+
+done:
+	gst_caps_unref(caps);
+	gst_object_unref(filter);
+	return result;
 }
 
 
-static int write(struct bkr_stream_t *stream)
+/*
+ * Parent class.
+ */
+
+
+static GstElementClass *enc_parent_class = NULL;
+
+
+/*
+ * Instance finalize function.  See ???
+ */
+
+
+static void enc_finalize(GObject *object)
 {
-	bkr_ecc2_private_t  *private = stream->private;
-	struct ring  *ring = stream->ring;
-	int  result;
-	
-	ring_lock(ring);
-	result = stream->capacity - ring->head % private->group_size;
-	ring_unlock(ring);
-	if(!result) {
-		result = finish_group(stream);
-		if(result < 0)
-			result = bkr_source_write_status(stream);
-	}
+	BkrECC2Enc *filter = BKR_ECC2ENC(object);
 
-	return(space_in_ring(ring) < result ? -EAGAIN : result);
+	g_object_unref(filter->adapter);
+	filter->adapter = NULL;
+	gst_object_unref(filter->srcpad);
+	filter->srcpad = NULL;
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+	free(filter->format);
+	filter->format = NULL;
+
+	G_OBJECT_CLASS(enc_parent_class)->finalize(object);
 }
 
 
-static int release(struct bkr_stream_t *stream)
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+
+static void enc_base_init(gpointer class)
 {
-	bkr_ecc2_private_t  *private = stream->private;
-	int  result;
+	static GstElementDetails plugin_details = {
+		"Backer ECC2 Encoder",
+		"Filter",
+		"Backer sector drop-out error correction encoder",
+		"Kipp Cannon <kcannon@ligo.caltech.edu>"
+	};
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	GstPadTemplate *sinkpad_template = gst_pad_template_new(
+		"sink",
+		GST_PAD_SINK,
+		GST_PAD_ALWAYS,
+		bkr_get_template_caps()
+	);
+	GstPadTemplate *srcpad_template = gst_pad_template_new(
+		"src",
+		GST_PAD_SRC,
+		GST_PAD_ALWAYS,
+		bkr_get_template_caps()
+	);
 
-	if(stream->direction == BKR_WRITING) {
-		result = flush(stream);
-		if(result < 0)
-			return(result);
-	}
-	stream->direction = BKR_STOPPED;
+	gst_element_class_set_details(element_class, &plugin_details);
 
-	result = stream->source->ops.release(stream->source);
-	if(result < 0)
-		return(result);
+	object_class->finalize = enc_finalize;
 
-	reed_solomon_codec_free(&private->rs_format);
-	ring_free(stream->ring);
-	free(private->erasure);
-	free(stream->ring);
-	free(stream->private);
-	free(stream);
-	return(0);
+	gst_element_class_add_pad_template(element_class, sinkpad_template);
+	gst_element_class_add_pad_template(element_class, srcpad_template);
 }
 
 
-static struct bkr_stream_t *new(struct bkr_stream_t *, int, const bkr_format_info_t *);
+/*
+ * Class init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
+ */
 
-static const struct bkr_stream_ops_t stream_ops = {
-	.new = new,
-	.start = start,
-	.release = release,
-	.read = read,
-	.write = write,
+
+static void enc_class_init(gpointer class, gpointer class_data)
+{
+	enc_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
+}
+
+
+/*
+ * Instance init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
+ */
+
+
+static void enc_instance_init(GTypeInstance *object, gpointer class)
+{
+	GstElement *element = GST_ELEMENT(object);
+	BkrECC2Enc *filter = BKR_ECC2ENC(object);
+	GstPad *pad;
+
+	gst_element_create_all_pads(element);
+
+	/* configure sink pad */
+	pad = gst_element_get_static_pad(element, "sink");
+	gst_pad_set_setcaps_function(pad, enc_setcaps);
+	gst_pad_set_event_function(pad, enc_event);
+	gst_pad_set_chain_function(pad, enc_chain);
+	gst_object_unref(pad);
+
+	/* configure src pad */
+	pad = gst_element_get_static_pad(element, "src");
+
+	/* consider this to consume the reference */
+	filter->srcpad = pad;
+
+	/* internal state */
+	filter->adapter = gst_adapter_new();
+	filter->rs_format = NULL;
+	filter->format = NULL;
+}
+
+
+/*
+ * bkr_ecc2enc_get_type().
+ */
+
+
+GType bkr_ecc2enc_get_type(void)
+{
+	static GType type = 0;
+
+	if (!type) {
+		static const GTypeInfo info = {
+			.class_size = sizeof(BkrECC2EncClass),
+			.class_init = enc_class_init,
+			.base_init = enc_base_init,
+			.instance_size = sizeof(BkrECC2Enc),
+			.instance_init = enc_instance_init,
+		};
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrECC2Enc", &info, 0);
+	}
+	return type;
+}
+
+
+/*
+ * ============================================================================
+ *
+ *                       GStreamer Decoder Support Code
+ *
+ * ============================================================================
+ */
+
+
+/*
+ * Properties
+ */
+
+
+enum property {
+	ARG_DEC_WORST_GROUP = 1,
+	ARG_DEC_EXTRA_ERRORS
 };
 
 
-static struct bkr_stream_t *new(struct bkr_stream_t *source, int mode, const bkr_format_info_t *fmt)
+static void dec_set_property(GObject *object, enum property id, const GValue *value, GParamSpec *pspec)
 {
-	struct bkr_stream_t  *stream;
-	bkr_ecc2_private_t  *private;
+	BkrECC2Dec *filter = BKR_ECC2DEC(object);
 
-	if(!source)
-		goto no_source;
+	switch(id) {
+	case ARG_DEC_WORST_GROUP:
+		filter->worst_group = g_value_get_int(value);
+		break;
 
-	stream = malloc(sizeof(*stream));
-	private = malloc(sizeof(*private));
-	if(!stream || !private)
-		goto no_stream;
-	stream->ring = malloc(sizeof(*stream->ring));
-	private->erasure = malloc(PARITY * sizeof(*private->erasure));
-	if(!stream->ring || !private->erasure)
-		goto no_buffers;
+	case ARG_DEC_EXTRA_ERRORS:
+		filter->extra_errors = g_value_get_int(value);
+		break;
+	}
+}
 
-	private->num_erasure = 0;
-	private->worst_group = 0;
-	private->extra_errors = 0;
-	private->group_size = BLOCK_SIZE * source->capacity;
-	private->parity_size = PARITY * source->capacity;
-	private->data_size = private->group_size - private->parity_size;
-	private->decode_head = 0;
-	private->eof = 0;
-	private->sector = 0;
 
-	if(!ring_alloc(stream->ring, 3 * private->group_size))
-		goto no_buffers;
+static void dec_get_property(GObject *object, enum property id, GValue *value, GParamSpec *pspec)
+{
+	BkrECC2Dec *filter = BKR_ECC2DEC(object);
 
-	if(reed_solomon_codec_new(BLOCK_SIZE, BLOCK_SIZE - PARITY, source->capacity, &private->rs_format) < 0)
-		goto no_rs_codec;
+	switch(id) {
+	case ARG_DEC_WORST_GROUP:
+		g_value_set_int(value, filter->worst_group);
+		break;
 
-	stream->fmt = *fmt;
-	stream->source = source;
-	bkr_stream_set_callback(stream, NULL, NULL);
-	stream->mode = mode;
-	stream->direction = BKR_STOPPED;
-	stream->ops = stream_ops;
-	stream->capacity = private->data_size - sizeof(data_length_t);
-	stream->timeout = ECC2_TIMEOUT_MULT * source->timeout;
-	stream->private = private;
-
-	return(stream);
-
-no_rs_codec:
-	ring_free(stream->ring);
-no_buffers:
-	free(stream->ring);
-	free(private->erasure);
-no_stream:
-	free(private);
-	free(stream);
-no_source:
-	return(NULL);
+	case ARG_DEC_EXTRA_ERRORS:
+		g_value_set_int(value, filter->extra_errors);
+		break;
+	}
 }
 
 
 /*
- * ========================================================================
+ * Sink pad setcaps function.  See
  *
- *                               CODEC API
- *
- * ========================================================================
+ * file:///usr/share/doc/gstreamer0.10-doc/gstreamer-0.10/GstPad.html#GstPadBufferAllocFunction
  */
 
 
-const struct bkr_stream_ops_t *bkr_ecc2_codec_init(void)
+static void reset_statistics(BkrECC2Dec *filter)
 {
-	galois_field_init(GF00256);
+	filter->worst_group = 0;
+	filter->extra_errors = 0;
+}
 
-	return(&stream_ops);
+
+static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
+{
+	BkrECC2Dec *filter = BKR_ECC2DEC(gst_pad_get_parent(pad));
+	gboolean result;
+
+	gst_adapter_clear(filter->adapter);
+
+	filter->sector_number = 0;
+	reset_statistics(filter);
+
+	reed_solomon_codec_free(filter->rs_format);
+
+	free(filter->erasure);
+	filter->erasure = NULL;
+	filter->num_erasure = 0;
+
+	free(filter->format);
+	filter->format = caps_to_format(caps);
+
+	if(filter->format) {
+		filter->rs_format = reed_solomon_codec_new((filter->format->data_size + filter->format->parity_size) / filter->format->interleave, filter->format->data_size / filter->format->interleave, filter->format->interleave);
+		filter->erasure = malloc(PARITY * sizeof(*filter->erasure));
+		if(!filter->rs_format || !filter->erasure) {
+			GST_DEBUG("reed_solomon_codec_new() or malloc() failed");
+			free(filter->format);
+			filter->format = NULL;
+			reed_solomon_codec_free(filter->rs_format);
+			filter->rs_format = NULL;
+			free(filter->erasure);
+			filter->erasure = NULL;
+		}
+	}
+
+	result = filter->format ? TRUE : FALSE;
+
+	gst_object_unref(filter);
+
+	return result;
+}
+
+
+/*
+ * Event function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.10-doc/gstreamer-0.10/GstPad.html#GstPadEventFunction
+ */
+
+
+static gboolean dec_event(GstPad *pad, GstEvent *event)
+{
+	BkrECC2Dec *filter = BKR_ECC2DEC(gst_pad_get_parent(pad));
+	GstBuffer *zero_padding;
+	gboolean result;
+
+	switch(GST_EVENT_TYPE(event)) {
+	case GST_EVENT_CUSTOM_DOWNSTREAM:
+		switch(bkr_event_parse(event)) {
+		case BKR_EVENT_SKIPPED_SECTOR:
+			zero_padding = gst_buffer_new_and_alloc(filter->format->interleave);
+			memset(GST_BUFFER_DATA(zero_padding), 0, GST_BUFFER_SIZE(zero_padding));
+			gst_adapter_push(filter->adapter, zero_padding);
+			filter->erasure[filter->num_erasure++] = filter->sector_number++;
+			result = TRUE;
+			break;
+
+		case BKR_EVENT_NEXT_SECTOR_INVALID:
+			filter->erasure[filter->num_erasure++] = filter->sector_number;
+			result = TRUE;
+			break;
+
+		default:
+			/* not one of our custom events, pass it along */
+			result = gst_pad_push_event(filter->srcpad, event);
+			break;
+		}
+		break;
+
+	default:
+		result = gst_pad_event_default(pad, event);
+		break;
+	}
+
+	gst_object_unref(filter);
+	return result;
+}
+
+
+/*
+ * Chain function.  See
+ *
+ * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadChainFunction
+ */
+
+
+static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
+{
+	BkrECC2Dec *filter = BKR_ECC2DEC(gst_pad_get_parent(pad));
+	GstCaps *caps = gst_buffer_get_caps(sinkbuf);
+	GstPad *srcpad = filter->srcpad;
+	GstFlowReturn result;
+
+	if(!caps || (caps != GST_PAD_CAPS(pad))) {
+		if(!caps)
+			GST_DEBUG("caps not set on buffer");
+		else if(caps != GST_PAD_CAPS(pad))
+			GST_DEBUG("buffer's caps don't match pad's caps");
+		result = GST_FLOW_NOT_NEGOTIATED;
+		goto done;
+	}
+
+	if(GST_BUFFER_SIZE(sinkbuf) != filter->format->interleave) {
+		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("recieved incorrect buffer size, got %d bytes expected %d bytes", GST_BUFFER_SIZE(sinkbuf), filter->format->interleave), (NULL));
+		gst_buffer_unref(sinkbuf);
+		result = GST_FLOW_ERROR;
+		goto done;
+	}
+
+	gst_adapter_push(filter->adapter, sinkbuf);
+
+	filter->sector_number++;
+
+	if(gst_adapter_available(filter->adapter) >= filter->format->group_size) {
+		GstBuffer *srcbuf;
+		result = decode_group(filter, &srcbuf);
+		filter->sector_number = 0;
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("decode_group() failed");
+			goto done;
+		}
+		gst_buffer_set_caps(srcbuf, caps);
+		result = gst_pad_push(srcpad, srcbuf);
+		if(result != GST_FLOW_OK) {
+			GST_DEBUG("gst_pad_push() failed");
+			goto done;
+		}
+	}
+
+	result = GST_FLOW_OK;
+
+done:
+	gst_caps_unref(caps);
+	gst_object_unref(filter);
+	return result;
+}
+
+
+/*
+ * Parent class.
+ */
+
+
+static GstElementClass *dec_parent_class = NULL;
+
+
+/*
+ * Instance finalize function.  See ???
+ */
+
+
+static void dec_finalize(GObject *object)
+{
+	BkrECC2Dec *filter = BKR_ECC2DEC(object);
+
+	g_object_unref(filter->adapter);
+	filter->adapter = NULL;
+	gst_object_unref(filter->srcpad);
+	filter->srcpad = NULL;
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+	free(filter->erasure);
+	filter->erasure = NULL;
+	free(filter->format);
+	filter->format = NULL;
+
+	G_OBJECT_CLASS(dec_parent_class)->finalize(object);
+}
+
+
+/*
+ * Base init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GBaseInitFunc
+ */
+
+
+static void dec_base_init(gpointer class)
+{
+	static GstElementDetails plugin_details = {
+		"Backer ECC2 Decoder",
+		"Filter",
+		"Backer sector drop-out error correction decoder",
+		"Kipp Cannon <kcannon@ligo.caltech.edu>"
+	};
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+	GstElementClass *element_class = GST_ELEMENT_CLASS(class);
+	GstPadTemplate *sinkpad_template = gst_pad_template_new(
+		"sink",
+		GST_PAD_SINK,
+		GST_PAD_ALWAYS,
+		bkr_get_template_caps()
+	);
+	GstPadTemplate *srcpad_template = gst_pad_template_new(
+		"src",
+		GST_PAD_SRC,
+		GST_PAD_ALWAYS,
+		bkr_get_template_caps()
+	);
+
+	gst_element_class_set_details(element_class, &plugin_details);
+
+	object_class->set_property = dec_set_property;
+	object_class->get_property = dec_get_property;
+	object_class->finalize = dec_finalize;
+
+	gst_element_class_add_pad_template(element_class, sinkpad_template);
+	gst_element_class_add_pad_template(element_class, srcpad_template);
+}
+
+
+/*
+ * Class init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GClassInitFunc
+ */
+
+
+static void dec_class_init(gpointer class, gpointer class_data)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS(class);
+
+	g_object_class_install_property(object_class, ARG_DEC_WORST_GROUP, g_param_spec_int("worst_group", "Worst group", "Worst group", 0, INT_MAX, 0, G_PARAM_READWRITE));
+	g_object_class_install_property(object_class, ARG_DEC_EXTRA_ERRORS, g_param_spec_int("extra_errors", "Extra errors", "Extra errors", 0, INT_MAX, 0, G_PARAM_READWRITE));
+
+	dec_parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
+}
+
+
+/*
+ * Instance init function.  See
+ *
+ * http://developer.gnome.org/doc/API/2.0/gobject/gobject-Type-Information.html#GInstanceInitFunc
+ */
+
+
+static void dec_instance_init(GTypeInstance *object, gpointer class)
+{
+	GstElement *element = GST_ELEMENT(object);
+	BkrECC2Dec *filter = BKR_ECC2DEC(object);
+	GstPad *pad;
+
+	gst_element_create_all_pads(element);
+
+	/* configure sink pad */
+	pad = gst_element_get_static_pad(element, "sink");
+	gst_pad_set_setcaps_function(pad, dec_setcaps);
+	gst_pad_set_event_function(pad, dec_event);
+	gst_pad_set_chain_function(pad, dec_chain);
+	gst_object_unref(pad);
+
+	/* configure src pad */
+	pad = gst_element_get_static_pad(element, "src");
+
+	/* consider this to consume the reference */
+	filter->srcpad = pad;
+
+	/* internal state */
+	filter->adapter = gst_adapter_new();
+	filter->rs_format = NULL;
+	filter->format = NULL;
+	filter->erasure = NULL;
+	filter->num_erasure = 0;
+	filter->sector_number = 0;
+	reset_statistics(filter);
+}
+
+
+/*
+ * bkr_ecc2dec_get_type().
+ */
+
+
+GType bkr_ecc2dec_get_type(void)
+{
+	static GType type = 0;
+
+	if (!type) {
+		static const GTypeInfo info = {
+			.class_size = sizeof(BkrECC2DecClass),
+			.class_init = dec_class_init,
+			.base_init = dec_base_init,
+			.instance_size = sizeof(BkrECC2Dec),
+			.instance_init = dec_instance_init,
+		};
+		type = g_type_register_static(GST_TYPE_ELEMENT, "BkrECC2Dec", &info, 0);
+	}
+	return type;
 }

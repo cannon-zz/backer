@@ -322,9 +322,9 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 {
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", NULL);
-	GstElement *ecc2 = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_ecc2enc", NULL) : NULL;
+	GstElement *ecc2 = gst_element_factory_make("bkr_ecc2enc", NULL);
 	GstElement *splp = gst_element_factory_make("bkr_splpenc", NULL);
-	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rllenc", NULL) : NULL;
+	GstElement *rll = gst_element_factory_make("bkr_rllenc", NULL);
 	GstElement *frame = gst_element_factory_make("bkr_frameenc", NULL);
 	GstElement *sink = gst_element_factory_make("fdsink", NULL);
 	GstCaps *caps = gst_caps_new_simple(
@@ -335,7 +335,7 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		NULL
 	);
 
-	if(!pipeline || !source || (!ecc2 && (sectorformat == BKR_EP)) || !splp || (!rll && (sectorformat == BKR_EP)) || !frame || !sink || !caps) {
+	if(!pipeline || !source || !ecc2 || !splp || !rll || !frame || !sink || !caps) {
 		/* don't bother unref()ing things, because we're going to
 		 * exit now anyway */
 		return NULL;
@@ -345,16 +345,16 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
 	g_object_set(G_OBJECT(frame), "inject_noise", inject_noise, NULL);
 
+	gst_bin_add_many(GST_BIN(pipeline), source, ecc2, splp, rll, frame, sink, NULL);
 	if(sectorformat == BKR_EP) {
-		gst_bin_add_many(GST_BIN(pipeline), source, ecc2, splp, rll, frame, sink, NULL);
 		gst_element_link_filtered(source, ecc2, caps);
 		gst_element_link_many(ecc2, splp, rll, frame, sink, NULL);
 	} else {
-		gst_bin_add_many(GST_BIN(pipeline), source, splp, frame, sink, NULL);
 		gst_element_link_filtered(source, splp, caps);
 		gst_element_link_many(splp, frame, sink, NULL);
 	}
 
+	gst_caps_unref(caps);
 	return pipeline;
 }
 
@@ -364,9 +364,9 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	GstElement *pipeline = gst_pipeline_new("pipeline");
 	GstElement *source = gst_element_factory_make("fdsrc", NULL);
 	GstElement *frame = gst_element_factory_make("bkr_framedec", NULL);
-	GstElement *rll = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_rlldec", NULL) : NULL;
+	GstElement *rll = gst_element_factory_make("bkr_rlldec", NULL);
 	GstElement *splp = gst_element_factory_make("bkr_splpdec", NULL);
-	GstElement *ecc2 = (sectorformat == BKR_EP) ? gst_element_factory_make("bkr_ecc2dec", NULL) : NULL;
+	GstElement *ecc2 = gst_element_factory_make("bkr_ecc2dec", NULL);
 	GstElement *sink = gst_element_factory_make("fdsink", NULL);
 	GstCaps *caps = gst_caps_new_simple(
 		"application/x-backer",
@@ -376,7 +376,7 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		NULL
 	);
 
-	if(!pipeline || !source || !frame || (!rll && (sectorformat == BKR_EP)) || !splp || (!ecc2 && (sectorformat == BKR_EP)) || !sink || !caps) {
+	if(!pipeline || !source || !frame || !rll || !splp || !ecc2 || !sink || !caps) {
 		/* don't bother unref()ing things, because we're going to
 		 * exit now anyway */
 		return NULL;
@@ -385,16 +385,14 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	g_object_set(G_OBJECT(source), "fd", 0, NULL);
 	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
 
-	if(sectorformat == BKR_EP) {
-		gst_bin_add_many(GST_BIN(pipeline), source, frame, rll, splp, ecc2, sink, NULL);
-		gst_element_link_filtered(source, frame, caps);
+	gst_bin_add_many(GST_BIN(pipeline), source, frame, rll, splp, ecc2, sink, NULL);
+	gst_element_link_filtered(source, frame, caps);
+	if(sectorformat == BKR_EP)
 		gst_element_link_many(frame, rll, splp, ecc2, sink, NULL);
-	} else {
-		gst_bin_add_many(GST_BIN(pipeline), source, frame, splp, sink, NULL);
-		gst_element_link_filtered(source, frame, caps);
+	else
 		gst_element_link_many(frame, splp, sink, NULL);
-	}
 
+	gst_caps_unref(caps);
 	return pipeline;
 }
 

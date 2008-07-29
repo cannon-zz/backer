@@ -184,7 +184,7 @@ typedef struct {
  * know what they are... */
 
 
-static bkr_sector_header_t get_sector_header(guint8 *data, const struct bkr_splp_format *format)
+static bkr_sector_header_t get_sector_header(const guint8 *data, const struct bkr_splp_format *format)
 {
 	union {
 		guint32 as_int;
@@ -288,10 +288,10 @@ static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *da
 		.sectors_skipped = 0
 	};
 
-	/* This disables error correction.  Useful for confirming that the
-	 * decoding pipeline is, infact, the inverse of the encoding
-	 * pipeline (the error corrector could be hiding off-by-one
-	 * problems by just fixing the data). */
+	/* This pre-processor conditional disables error correction.
+	 * Useful for confirming that the decoding pipeline is, infact, the
+	 * inverse of the encoding pipeline (the error corrector could be
+	 * hiding off-by-one problems by just fixing the data). */
 #if 0
 	return status;
 #endif
@@ -789,7 +789,7 @@ static gboolean enc_event(GstPad *pad, GstEvent *event)
 		break;
 
 	default:
-		result = gst_pad_event_default(filter->srcpad, event);
+		result = gst_pad_event_default(pad, event);
 		break;
 	}
 
@@ -887,9 +887,9 @@ static void enc_finalize(GObject *object)
 static void enc_base_init(gpointer class)
 {
 	static GstElementDetails plugin_details = {
-		"Backer SP/LP Encoder",
+		"Backer Sector Encoder",
 		"Filter",
-		"Backer SP/LP error correction and record encoder",
+		"Backer sector and record encoder",
 		"Kipp Cannon <kcannon@ligo.caltech.edu>"
 	};
 	GObjectClass *object_class = G_OBJECT_CLASS(class);
@@ -1251,9 +1251,9 @@ static void dec_finalize(GObject *object)
 static void dec_base_init(gpointer class)
 {
 	static GstElementDetails plugin_details = {
-		"Backer SP/LP Decoder",
+		"Backer Sector Decoder",
 		"Filter",
-		"Backer SP/LP error correction and record decoder",
+		"Backer sector and record decoder",
 		"Kipp Cannon <kcannon@ligo.caltech.edu>"
 	};
 	GObjectClass *object_class = G_OBJECT_CLASS(class);

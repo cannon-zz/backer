@@ -18,6 +18,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 /*
  * The meaning of some of the variables used in sector formating is as
  * follows.  The diagram shows the layout for a complete frame (two
@@ -136,12 +137,15 @@
  *             --  +-------------+
  */
 
+
 #ifndef  _BACKER_H
 #define  _BACKER_H
+
 
 /*
  * Hardware stuff
  */
+
 
 #define  BKR_BIT_HIGH_DENSITY   0x01
 #define  BKR_BIT_DMA_REQUEST    0x02
@@ -151,6 +155,7 @@
 #define  BKR_BIT_TRANSMIT       0x20
 #define  BKR_BIT_RECEIVE        0x40
 #define  BKR_BIT_NTSC_VIDEO     0x80
+
 
 #define  BKR_MIN_FRAME_FREQ     20      /* min frame rate in Hz */
 #define  BKR_LINE_PERIOD        64      /* microseconds (NTSC and PAL) */
@@ -166,6 +171,7 @@
  * in the /proc file system.
  */
 
+
 #define  BKR_VIDEOMODE_MASK    0x0003
 #define  BKR_DENSITY_MASK      0x000c
 #define  BKR_CODEC_MASK        0x0030
@@ -173,14 +179,20 @@
 #define  BKR_VIDEOMODE(x)      ((x) & BKR_VIDEOMODE_MASK)
 #define  BKR_DENSITY(x)        ((x) & BKR_DENSITY_MASK)
 #define  BKR_CODEC(x)          ((x) & BKR_CODEC_MASK)
+
+
 enum bkr_videomode {
 	BKR_NTSC = 0x0001,     /* NTSC video mode */
 	BKR_PAL = 0x0002       /* PAL video mode */
 };
+
+
 enum bkr_bitdensity {
 	BKR_LOW = 0x0004,      /* Low density */
 	BKR_HIGH = 0x0008      /* High density */
 };
+
+
 enum bkr_sectorformat {
 	BKR_SP = 0x0010,       /* read/write SP/LP format */
 	BKR_EP = 0x0020        /* read/write EP format */
@@ -190,11 +202,9 @@ enum bkr_sectorformat {
 /*
  * Convert a mode (as above) to an index into the format array (below).
  * Return < 0 if the mode is invalid.
- *
- * FIXME:  is this needed anymore?
  */
 
-#if 0
+
 static int bkr_mode_to_format(int mode)
 {
 	int  format = 0;
@@ -209,19 +219,19 @@ static int bkr_mode_to_format(int mode)
 		return(-1);
 	if(BKR_CODEC(mode) == BKR_SP)
 		format += 2;
-	else if(BKR_CODEC(mode) == BKR_RAW)
-		format += 1;
+	/*else if(BKR_CODEC(mode) == BKR_RAW)
+		format += 1;*/
 	else if(BKR_CODEC(mode) != BKR_EP)
 		return(-1);
 
 	return(format);
 }
-#endif
 
 
 /*
  * Format information.
  */
+
 
 typedef struct {
 	unsigned int  bytes_per_line;   /* width of one line of video */
@@ -230,6 +240,7 @@ typedef struct {
 	unsigned int  frame_size;       /* bytes in a full video frame */
 	unsigned int  modulation_pad;   /* modulation overhead */
 } bkr_format_info_t;
+
 
 #define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t [])                        \
 { {  4, 1012,  4, 2028, 102 },     /* nle */ \
@@ -245,6 +256,7 @@ typedef struct {
   { 10, 3050,  0, 6100,   0 },     /* phr */ \
   { 10, 3050,  0, 6100,   0 } }    /* phs */
 
+
 #define BKR_NUM_FORMATS (sizeof(BKR_FORMAT_INFO_INITIALIZER)/sizeof(bkr_format_info_t))
 #define BKR_NUM_FORMAT_PARMS (sizeof(bkr_format_info_t)/sizeof(unsigned int))
 
@@ -253,13 +265,16 @@ typedef struct {
  * _sysctl() interface
  */
 
+
 enum {
 	DEV_BACKER=31	/* FIXME:  get a number (from LANANA?) */
 };
+
 
 enum {
 	BACKER_STATUS=1,
 	BACKER_FORMAT=2
 };
+
 
 #endif /* _BACKER_H */

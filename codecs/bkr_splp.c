@@ -633,10 +633,12 @@ static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 	BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
 	gboolean result;
 
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+
 	free(filter->format);
 	filter->format = caps_to_format(caps);
 
-	reed_solomon_codec_free(filter->rs_format);
 	if(filter->format) {
 		filter->rs_format = reed_solomon_codec_new((filter->format->data_size + filter->format->parity_size) / filter->format->interleave, filter->format->data_size / filter->format->interleave, filter->format->interleave);
 		if(!filter->rs_format) {
@@ -644,59 +646,12 @@ static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 			free(filter->format);
 			filter->format = NULL;
 		}
-	} else
-		filter->rs_format = NULL;
+	}
 
 	result = filter->format ? TRUE : FALSE;
 
 	gst_object_unref(filter);
 
-	return result;
-}
-
-
-
-/*
- * Buffer alloc function.  See
- *
- * file:///usr/share/doc/gstreamer0.8-doc/gstreamer-0.8/GstPad.html#GstPadBufferAllocFunction
- */
-
-
-static GstFlowReturn enc_bufferalloc(GstPad *pad, guint64 offset, guint size, GstCaps *caps, GstBuffer **buf)
-{
-	size_t buffer_size;
-	GstFlowReturn result;
-
-	/* incase something goes wrong */
-	*buf = NULL;
-
-	/* avoid computing the format if we already know what it is */
-	if(caps == GST_PAD_CAPS(pad)) {
-		BkrSPLPEnc *filter = BKR_SPLPENC(gst_pad_get_parent(pad));
-		buffer_size = filter->format->data_size + filter->format->parity_size;
-		gst_object_unref(filter);
-	} else {
-		struct bkr_splp_format *format = caps_to_format(caps);
-		if(!format) {
-			/* FIXME:  is this enough error handling? */
-			result = GST_FLOW_ERROR;
-			goto done;
-		}
-		buffer_size = format->data_size + format->parity_size;
-		free(format);
-	}
-
-	*buf = gst_buffer_new_and_alloc(buffer_size);
-	if(!*buf) {
-		result = GST_FLOW_ERROR;
-		goto done;
-	}
-
-	gst_buffer_set_caps(*buf, caps);
-	result = GST_FLOW_OK;
-
-done:
 	return result;
 }
 
@@ -947,7 +902,6 @@ static void enc_instance_init(GTypeInstance *object, gpointer class)
 	/* configure sink pad */
 	pad = gst_element_get_static_pad(element, "sink");
 	gst_pad_set_setcaps_function(pad, enc_setcaps);
-	gst_pad_set_bufferalloc_function(pad, enc_bufferalloc);
 	gst_pad_set_event_function(pad, enc_event);
 	gst_pad_set_chain_function(pad, enc_chain);
 	gst_object_unref(pad);
@@ -1089,10 +1043,11 @@ static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 	BkrSPLPDec *filter = BKR_SPLPDEC(gst_pad_get_parent(pad));
 	gboolean result;
 
+	reed_solomon_codec_free(filter->rs_format);
+	filter->rs_format = NULL;
+
 	free(filter->format);
 	filter->format = caps_to_format(caps);
-
-	reed_solomon_codec_free(filter->rs_format);
 	if(filter->format) {
 		reset_statistics(filter);
 		filter->rs_format = reed_solomon_codec_new((filter->format->data_size + filter->format->parity_size) / filter->format->interleave, filter->format->data_size / filter->format->interleave, filter->format->interleave);
@@ -1101,8 +1056,7 @@ static gboolean dec_setcaps(GstPad *pad, GstCaps *caps)
 			free(filter->format);
 			filter->format = NULL;
 		}
-	} else
-		filter->rs_format = NULL;
+	}
 
 	result = filter->format ? TRUE : FALSE;
 

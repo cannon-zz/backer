@@ -50,6 +50,47 @@
  */
 
 
+/*
+ * Tests show the mean sector loss rate to be 36/107015 ~= 3*10^-3.  If
+ * it's a Poisson process (which it probably isn't, but bear with me), then
+ * the probability of observing exactly n bad sectors in a group of 255 is
+ *
+ * P(n) = 255! / n! / (255 - n)! * (36/107015)^n * (106979/107015)^(255 - n)
+ *
+ * P(0) = 0.9177807063            P(>0) = 0.8221929363e-1
+ * P(1) = 0.7875589493e-1         P(>1) = 0.3463398695e-2
+ * P(2) = 0.3365819008e-2         P(>2) = 0.9757968701e-4
+ * P(3) = 0.9551992922e-4         P(>3) = 0.2059757784e-5
+ * P(4) = 0.2025062857e-5         P(>4) = 0.3469492608e-7
+ * P(5) = 0.342094579e-7          P(>5) = 0.4854681841e-9
+ * P(6) = 0.4796659797e-9         P(>6) = 0.5802204293e-11
+ * P(7) = 0.5741748838e-11        P(>7) = 0.6045545561e-13
+ * P(8) = 0.5989765938e-13        P(>8) = 0.5577962293e-15
+ * P(9) = 0.5531822832e-15        P(>9) = 0.4613946186e-17
+ * P(10) = 0.4579386889e-17       P(>10) = 0.3455929702e-19
+ *      ...                             ...
+ * P(20) = 0.8228609676e-40       P(>20) = 0.3109825249e-42
+ *
+ * I tested a 545 MB recording, consisting of 321045 sectors, or 1259
+ * groups.  Of those, I observed 1 group to have 3 sectors requiring
+ * correction, no group required more than that.  According to the table
+ * above, there is a 12% chance of that occuring:  P(>2) * 1259 = 0.12.
+ * That's a little low considering that I saw it happen, but then sector
+ * failures are probably not a Poisson process (one probably finds bad
+ * sectors clustered together), and so the cumulative probabilities listed
+ * above are likely underestimates but also aparently not far off.
+ *
+ * A T-120 tape in EP mode (6 hours) has about 1296000 sectors, or about
+ * 5100 ~= 10^4 sector groups.  Therefore, with 10 parity sectors per group
+ * of 255 we expect something like 1 tape in 10^13 to have at least one
+ * uncorrectable sector group.
+ *
+ * Therefore, 20 parity sectors per group of 255 is probably a huge
+ * over-kill.  One could probably reduce it to 10 or even fewer quite
+ * safely, thereby increasing the tape capacity by 4% or more.
+ */
+
+
 #define  ECC2_TIMEOUT_MULT  1
 #define  BLOCK_SIZE         255
 #define  PARITY             20

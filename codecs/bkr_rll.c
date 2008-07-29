@@ -336,7 +336,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 	}
 
 	if(GST_BUFFER_SIZE(sinkbuf) != filter->format->capacity) {
-		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("received incorrect buffer size, got %d bytes expected %d bytes.", GST_BUFFER_SIZE(sinkbuf), filter->format->capacity), (NULL));
+		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("received incorrect buffer size, got %d bytes expected %d bytes", GST_BUFFER_SIZE(sinkbuf), filter->format->capacity), (NULL));
 		result = GST_FLOW_ERROR;
 		goto done;
 	}
@@ -556,6 +556,8 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 		result = GST_FLOW_NOT_NEGOTIATED;
 		goto done;
 	}
+
+	/* FIXME:  add buffer size check */
 
 	result = gst_pad_alloc_buffer(srcpad, GST_BUFFER_OFFSET_NONE, filter->format->capacity, caps, &srcbuf);
 	if(result != GST_FLOW_OK) {

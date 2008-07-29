@@ -382,8 +382,8 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		return NULL;
 	}
 
-	g_object_set(G_OBJECT(source), "fd", 0, NULL);
-	g_object_set(G_OBJECT(sink), "fd", 1, NULL);
+	g_object_set(G_OBJECT(source), "fd", STDIN_FILENO, NULL);
+	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
 
 	gst_bin_add_many(GST_BIN(pipeline), source, frame, rll, splp, ecc2, sink, NULL);
 	gst_element_link_filtered(source, frame, caps);
@@ -455,7 +455,7 @@ int main(int argc, char *argv[])
 
 
 	/*
-	 * Transfer data one sector at a time until EOF is reached.
+	 * Transcode data.
 	 */
 
 

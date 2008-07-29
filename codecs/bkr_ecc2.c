@@ -82,7 +82,7 @@
  *
  * A T-120 tape in EP mode (6 hours) has about 1296000 sectors, or about
  * 5100 ~= 10^4 sector groups.  Therefore, with 10 parity sectors per group
- * of 255 we expect something like 1 tape in 10^13 to have at least one
+ * of 255 we expect something like 1 tape in 10^14 to have at least one
  * uncorrectable sector group.
  *
  * Therefore, 20 parity sectors per group of 255 is probably a huge
@@ -91,10 +91,8 @@
  */
 
 
-#define  ECC2_TIMEOUT_MULT  1
 #define  BLOCK_SIZE         255
 #define  PARITY             20
-#define  ECC2_FILLER        0x00
 
 
 /*
@@ -170,9 +168,14 @@ static struct bkr_ecc2_format *compute_format(enum bkr_videomode videomode, enum
 /*
  * ========================================================================
  *
- *                                   Header
+ *              Multi-Sector Forward Error Correction CODEC
  *
  * ========================================================================
+ */
+
+
+/*
+ * Header
  */
 
 
@@ -194,15 +197,6 @@ static void put_header(guint8 *data, const struct bkr_ecc2_format *format, int l
 	header.length = __cpu_to_le32(header.length);
 	memcpy(data + format->capacity, &header, sizeof(header));
 }
-
-
-/*
- * ========================================================================
- *
- *              Multi-Sector Forward Error Correction CODEC
- *
- * ========================================================================
- */
 
 
 /*
@@ -280,8 +274,8 @@ static GstFlowReturn decode_group(BkrECC2Dec *filter, GstBuffer **srcbuf)
  * Write a (possibly short) sector group.  Takes as much data as will fit
  * into a sector group from the filter's adapter, encodes it, and pushes it
  * out the srcpad.  If there isn't enough data in the adapter to fill a
- * sector group then a short sector is encoded.  This is a waste of tape if
- * this is not the end of the input stream.
+ * sector group then the data is padded to fill one.  This is a waste of
+ * tape if this is not the end of the input stream.
  */
 
 
@@ -410,7 +404,7 @@ static gboolean enc_setcaps(GstPad *pad, GstCaps *caps)
 static GstFlowReturn enc_flush(BkrECC2Enc *filter, GstCaps *caps)
 {
 	/*
-	 * write any unfinished group
+	 * write the last group if there's any data
 	 */
 
 	while(gst_adapter_available(filter->adapter)) {

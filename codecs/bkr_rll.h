@@ -37,7 +37,7 @@ G_BEGIN_DECLS
 
 #define BKR_RLLENC_TYPE			(bkr_rllenc_get_type())
 #define BKR_RLLENC(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_RLLENC_TYPE, BkrRLLEnc))
-#define BKR_RLLENC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_RLLENC_TYPE, BkrRLLEnc))
+#define BKR_RLLENC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_RLLENC_TYPE, BkrRLLEncClass))
 #define GST_IS_BKR_RLLENC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_RLLENC_TYPE))
 #define GST_IS_BKR_RLLENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_RLLENC_TYPE))
 
@@ -78,7 +78,7 @@ GType bkr_rllenc_get_type(void);
 
 #define BKR_RLLDEC_TYPE			(bkr_rlldec_get_type())
 #define BKR_RLLDEC(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_RLLDEC_TYPE, BkrRLLDec))
-#define BKR_RLLDEC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_RLLDEC_TYPE, BkrRLLDec))
+#define BKR_RLLDEC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_RLLDEC_TYPE, BkrRLLDecClass))
 #define GST_IS_BKR_RLLDEC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_RLLDEC_TYPE))
 #define GST_IS_BKR_RLLDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_RLLDEC_TYPE))
 

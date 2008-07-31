@@ -38,7 +38,7 @@ G_BEGIN_DECLS
 
 #define BKR_FRAMEENC_TYPE			(bkr_frameenc_get_type())
 #define BKR_FRAMEENC(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_FRAMEENC_TYPE, BkrFrameEnc))
-#define BKR_FRAMEENC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_FRAMEENC_TYPE, BkrFrameEnc))
+#define BKR_FRAMEENC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_FRAMEENC_TYPE, BkrFrameEncClass))
 #define GST_IS_BKR_FRAMEENC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_FRAMEENC_TYPE))
 #define GST_IS_BKR_FRAMEENC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_FRAMEENC_TYPE))
 
@@ -92,7 +92,7 @@ GType bkr_frameenc_get_type(void);
 
 #define BKR_FRAMEDEC_TYPE			(bkr_framedec_get_type())
 #define BKR_FRAMEDEC(obj)			(G_TYPE_CHECK_INSTANCE_CAST((obj), BKR_FRAMEDEC_TYPE, BkrFrameDec))
-#define BKR_FRAMEDEC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_FRAMEDEC_TYPE, BkrFrameDec))
+#define BKR_FRAMEDEC_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST((klass), BKR_FRAMEDEC_TYPE, BkrFrameDecClass))
 #define GST_IS_BKR_FRAMEDEC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj), BKR_FRAMEDEC_TYPE))
 #define GST_IS_BKR_FRAMEDEC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass), BKR_FRAMEDEC_TYPE))
 

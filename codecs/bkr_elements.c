@@ -290,7 +290,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 		{"bkr_frameenc", bkr_frameenc_get_type},
 		{"bkr_framedec", bkr_framedec_get_type},
 		{"bkr_video_out", bkr_video_out_get_type},
-		{NULL, 0},
+		{NULL, NULL},
 	};
 
 	/* initialize Reed-Solomon coder/decoder */

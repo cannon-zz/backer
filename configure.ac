@@ -23,7 +23,7 @@ LATEXRULES=$srcdir/docs/LaTeX.Rules
 AC_SUBST_FILE([LATEXRULES])
 
 # Check for programs
-AC_PROG_CC
+AC_PROG_CC_STDC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 PKG_PROG_PKG_CONFIG()
@@ -33,7 +33,9 @@ AX_KERNEL_VERSION
 AX_CHECK_KERNEL_SOURCE
 
 # CFLAGS
-AC_SUBST([AM_CFLAGS], [-Wall])
+AX_CFLAGS_WARN_ALL([AM_CFLAGS])
+AM_CFLAGS="$AM_CFLAGS -Wextra -Wno-missing-field-initializers -Wno-unused-parameter"    # extra gcc-specific stuff
+AC_SUBST([AM_CFLAGS])
 
 # Check for GTK+ 2
 AC_SUBST([HAVE_GTK], [no])

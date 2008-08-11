@@ -302,7 +302,7 @@ static struct sector_decode_status correct_sector(BkrSPLPDec *filter, guint8 *da
 		if(bytes_corrected < 0) {
 			status.sector_is_valid = 0;
 			/* block contains header? */
-			if(block >= filter->format->interleave - sizeof(bkr_sector_header_t))
+			if((unsigned) block >= filter->format->interleave - sizeof(bkr_sector_header_t))
 				status.header_is_valid = 0;
 			continue;
 		}
@@ -785,7 +785,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		}
 	}
 
-	while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
+	while((int) gst_adapter_available(filter->adapter) >= filter->format->capacity) {
 		result = write_sector(filter, caps);
 		if(result != GST_FLOW_OK) {
 			GST_DEBUG("write_sector() failed");

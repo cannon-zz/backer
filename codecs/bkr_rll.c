@@ -335,7 +335,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 		goto done;
 	}
 
-	if(GST_BUFFER_SIZE(sinkbuf) != filter->format->capacity) {
+	if((int) GST_BUFFER_SIZE(sinkbuf) != filter->format->capacity) {
 		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("received incorrect buffer size, got %d bytes expected %d bytes", GST_BUFFER_SIZE(sinkbuf), filter->format->capacity), (NULL));
 		result = GST_FLOW_ERROR;
 		goto done;

@@ -484,7 +484,7 @@ static GstFlowReturn enc_chain(GstPad *pad, GstBuffer *sinkbuf)
 
 	gst_adapter_push(filter->adapter, sinkbuf);
 
-	while(gst_adapter_available(filter->adapter) >= filter->format->capacity) {
+	while((int) gst_adapter_available(filter->adapter) >= filter->format->capacity) {
 		result = write_group(filter, caps);
 		if(result != GST_FLOW_OK) {
 			GST_DEBUG("write_group() failed");
@@ -817,7 +817,7 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 		goto done;
 	}
 
-	if(GST_BUFFER_SIZE(sinkbuf) != filter->format->interleave) {
+	if((int) GST_BUFFER_SIZE(sinkbuf) != filter->format->interleave) {
 		GST_ELEMENT_ERROR(filter, STREAM, FAILED, ("recieved incorrect buffer size, got %d bytes expected %d bytes", GST_BUFFER_SIZE(sinkbuf), filter->format->interleave), (NULL));
 		gst_buffer_unref(sinkbuf);
 		result = GST_FLOW_ERROR;
@@ -828,7 +828,7 @@ static GstFlowReturn dec_chain(GstPad *pad, GstBuffer *sinkbuf)
 
 	filter->sector_number++;
 
-	if(gst_adapter_available(filter->adapter) >= filter->format->group_size) {
+	if((int) gst_adapter_available(filter->adapter) >= filter->format->group_size) {
 		GstBuffer *srcbuf;
 		result = decode_group(filter, &srcbuf);
 		filter->sector_number = 0;

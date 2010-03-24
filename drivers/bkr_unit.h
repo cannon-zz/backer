@@ -21,7 +21,7 @@
 #ifndef  _BACKER_UNIT_H
 #define  _BACKER_UNIT_H
 
-#include <asm/semaphore.h>
+#include <linux/semaphore.h>
 
 #include <linux/list.h>
 #include <linux/sysctl.h>
@@ -43,10 +43,10 @@
 
 struct bkr_sysctl_table_t {
 	struct ctl_table_header  *header;
-	ctl_table  dev_dir[2];
-	ctl_table  driver_dir[2];
-	ctl_table  unit_dir[2];
-	ctl_table  entries[3];
+	struct ctl_table  dev_dir[2];
+	struct ctl_table  driver_dir[2];
+	struct ctl_table  unit_dir[2];
+	struct ctl_table  entries[3];
 };
 
 

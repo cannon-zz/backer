@@ -153,6 +153,7 @@ static struct workqueue_struct *detach_queue;
 typedef struct {
 	struct pardevice  *dev;         /* our parport device */
 	dma_addr_t  dma_addr;           /* DMA buffer's bus address */
+	struct bkr_unit_t *unit;        /* link back to unit for do_detach() */
 	struct work_struct detach;      /* detach work queue info */
 	struct parport_state  state;    /* Linux parport and Backers suck */
 	jiffies_t  last_io;             /* jiffies counter at last I/O */
@@ -183,7 +184,7 @@ static inline void write_ecr(struct parport *port, char byte)
  * the ring buffer and updates the hardware side of the ring.
  */
 
-static void bkr_parport_irq(int irq, void *handle, struct pt_regs *regs)
+static void bkr_parport_irq(void *handle)
 {
 	struct bkr_stream_t  *stream = handle;
 	struct ring  *ring = stream->ring;
@@ -192,7 +193,7 @@ static void bkr_parport_irq(int irq, void *handle, struct pt_regs *regs)
 	unsigned long  flags;
 
 	flags = claim_dma_lock();
-	ring_lock(ring);
+	ring_lock(ring);	/* FIXME:  ok in an interrupt? */
 	clear_dma_ff(port->dma);
 	switch(stream->direction) {
 		case BKR_READING:
@@ -206,12 +207,12 @@ static void bkr_parport_irq(int irq, void *handle, struct pt_regs *regs)
 		break;
 
 		default:
-		ring_unlock(ring);
+		ring_unlock(ring);	/* FIXME:  ok in an interrupt? */
 		release_dma_lock(flags);
 		return;
 	}
 	write_ecr(port, ECR_MODE);
-	ring_unlock(ring);
+	ring_unlock(ring);	/* FIXME:  ok in an interrupt? */
 	release_dma_lock(flags);
 	private->last_io = jiffies;
 
@@ -220,7 +221,7 @@ static void bkr_parport_irq(int irq, void *handle, struct pt_regs *regs)
 }
 
 
-static void bkr_parport_first_irq(int irq, void *handle, struct pt_regs *regs)
+static void bkr_parport_first_irq(void *handle)
 {
 	bkr_parport_private_t  *private = (bkr_parport_private_t *) ((struct bkr_stream_t *) handle)->private;
 	struct parport  *port = private->dev->port;
@@ -399,11 +400,11 @@ static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr
  * ========================================================================
  */
 
-static void do_detach(void *data)
+static void do_detach(struct work_struct *work)
 {
-	struct bkr_unit_t  *unit = data;
+	bkr_parport_private_t  *private = container_of(work, bkr_parport_private_t, detach);
+	struct bkr_unit_t  *unit = private->unit;
 	struct bkr_stream_t  *stream = unit->devstream;
-	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
 
 	down(&bkr_unit_list_lock);
 	bkr_unit_unregister(unit);
@@ -499,7 +500,8 @@ static void attach(struct parport *port)
 	unit = bkr_unit_register(stream);
 	if(!unit)
 		goto no_unit;
-	INIT_WORK(&private->detach, do_detach, unit);
+	private->unit = unit;	/* for do_detach() */
+	INIT_WORK(&private->detach, do_detach);
 	unit->owner = THIS_MODULE,
 	up(&bkr_unit_list_lock);
 

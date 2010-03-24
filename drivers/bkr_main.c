@@ -21,7 +21,6 @@
  *
  */
 
-#include <linux/config.h>
 #define EXPORT_SYMTAB
 #include <linux/module.h>
 #include <linux/init.h>
@@ -32,11 +31,13 @@
 #include <linux/list.h>
 #include <linux/mtio.h>
 #include <linux/poll.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/sysctl.h>
+#include <linux/wait.h>
 
-#include <asm/semaphore.h>
+#include <linux/semaphore.h>
 #include <asm/uaccess.h>
 
 #include <backer.h>
@@ -181,13 +182,13 @@ module_exit(bkr_exit);
 #define  MAX_PROC_MSG_LENGTH  1024      /* ASCII characters */
 
 /* FIXME: what's ppos for ? */
-static int bkr_do_status(ctl_table *table, int write, struct file *filp, void __user *buf, size_t *len, loff_t *ppos)
+static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, size_t *len, loff_t *ppos)
 {
 	char  message[MAX_PROC_MSG_LENGTH], *pos = message;
 	struct bkr_unit_t  *unit = table->data;
 	struct bkr_stream_t  *stream = unit->stream;
 
-	if(filp->f_pos || !stream) {
+	if(!stream) {
 		*len = 0;
 		return(0);
 	}
@@ -214,7 +215,6 @@ static int bkr_do_status(ctl_table *table, int write, struct file *filp, void __
 
 	if(pos - message < *len)
 		*len = pos - message;
-	filp->f_pos += *len;
 
 	return(copy_to_user(buf, message, *len) ? -EFAULT : 0);
 }
@@ -267,16 +267,27 @@ static void bkr_unit_release(struct bkr_unit_t *unit)
 
 static void bkr_unit_sysctl_init(struct bkr_unit_t *unit)
 {
-	unit->sysctl.dev_dir[0] = (ctl_table) { CTL_DEV, "dev", NULL, 0, 0555, unit->sysctl.driver_dir };
+	struct bkr_sysctl_table_t initializer = {
+		.dev_dir = {
+			{.procname = "dev", .mode = 0555, .child = unit->sysctl.driver_dir},
+			{0}
+		},
+		.driver_dir = {
+			{.procname = "backer", .mode = 0555, .child = unit->sysctl.unit_dir},
+			{0}
+		},
+		.unit_dir = {
+			{.procname = unit->name, .mode = 0555, .child = unit->sysctl.entries},
+			{0}
+		},
+		.entries = {
+			{.procname = "status", .mode = 0444, .proc_handler = bkr_do_status},
+			{.procname = "format_table", .mode = 0644, .data = unit->format_tbl, .maxlen = sizeof(unit->format_tbl), .proc_handler = proc_dointvec},
+			{0}
+		}
+	};
 
-	unit->sysctl.driver_dir[0] = (ctl_table) { DEV_BACKER, "backer", NULL, 0, 0555, unit->sysctl.unit_dir };
-
-	unit->sysctl.unit_dir[0] = (ctl_table) { unit->number + 1, unit->name, NULL, 0, 0555, unit->sysctl.entries };
-
-	unit->sysctl.entries[0] = (ctl_table) { BACKER_STATUS, "status", unit, 0, 0444, NULL, bkr_do_status };
-	unit->sysctl.entries[1] = (ctl_table) { BACKER_FORMAT, "format_table", unit->format_tbl, sizeof(unit->format_tbl), 0644, NULL, proc_dointvec };
-
-	unit->sysctl.dev_dir[1] = unit->sysctl.driver_dir[1] = unit->sysctl.unit_dir[1] = unit->sysctl.entries[2] = (ctl_table) { 0 };
+	unit->sysctl = initializer;
 }
 
 
@@ -325,7 +336,7 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *devstream)
 	unit->devstream = devstream;
 	unit->stream = NULL;
 	bkr_unit_sysctl_init(unit);
-	unit->sysctl.header = register_sysctl_table(unit->sysctl.dev_dir, 0);
+	unit->sysctl.header = register_sysctl_table(unit->sysctl.dev_dir);
 
 	/*
 	 * Success.
@@ -377,11 +388,12 @@ static void io_callback(void *data)
 static int open(struct inode *inode, struct file *filp)
 {
 	/* FIXME: put minor numbers in the same order as the format table */
-	int minor_to_mode[BKR_NUM_FORMATS] =
-		{ BKR_NTSC | BKR_HIGH,
-		  BKR_NTSC | BKR_LOW,
-		  BKR_PAL  | BKR_HIGH,
-		  BKR_PAL  | BKR_LOW};
+	static const int minor_to_mode[BKR_NUM_FORMATS] = {
+		BKR_NTSC | BKR_HIGH,
+		BKR_NTSC | BKR_LOW,
+		BKR_PAL  | BKR_HIGH,
+		BKR_PAL  | BKR_LOW
+	};
 	struct bkr_unit_t  *unit = NULL;
 	int  number = iminor(inode) / BKR_NUM_FORMATS;
 	int  mode = minor_to_mode[iminor(inode) % BKR_NUM_FORMATS];

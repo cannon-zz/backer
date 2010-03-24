@@ -404,7 +404,7 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 	unit->owner = THIS_MODULE;
 	up(&bkr_unit_list_lock);
 
-	printk(KERN_INFO MODULE_NAME ": unit %s: %s I/O port %#lx, DMA channel %u", unit->name, msg, private->ioresource.start, private->dma);
+	printk(KERN_INFO MODULE_NAME ": unit %s: %s I/O port %#x, DMA channel %u", unit->name, msg, (int) private->ioresource.start, private->dma);
 	if(private->adjust)
 		printk(", adjusted %+d µs", private->adjust);
 	printk("\n");

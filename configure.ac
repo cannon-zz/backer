@@ -29,10 +29,11 @@ AC_PROG_LIBTOOL
 PKG_PROG_PKG_CONFIG()
 
 # Check for kernel source
-AX_KERNEL_VERSION
-AX_CHECK_KERNEL_SOURCE
+AX_LINUX_KERNEL_VERSION
+AX_CHECK_LINUX_KERNEL_SOURCE
 
 # CFLAGS
+#AC_SUBST([AM_CFLAGS], ["-Wall -Wextra -pedantic"])
 AX_CFLAGS_WARN_ALL([AM_CFLAGS])
 AM_CFLAGS="$AM_CFLAGS -Wextra -Wno-missing-field-initializers -Wno-unused-parameter"    # extra gcc-specific stuff
 AC_SUBST([AM_CFLAGS])

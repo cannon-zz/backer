@@ -22,7 +22,7 @@ backer_parport-objs := bkr_parport.o bkr_stream.o bkr_ring_buffer.o
 ifeq ($(KERNELRELEASE),)
 
 modules modules_install clean :
-	$(MAKE) -C @KERNEL_SOURCE@ SUBDIRS=$(CURDIR) $@
+	$(MAKE) -C @LINUX_KERNEL_SOURCE@ SUBDIRS=$(CURDIR) $@
 
 prefix = @prefix@
 exec_prefx = @exec_prefix@

@@ -294,7 +294,7 @@ static void bkr_unit_sysctl_init(struct bkr_unit_t *unit)
  * list lock upon entry into both.
  */
 
-struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *devstream)
+struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *stream)
 {
 	struct list_head  *curr;
 	struct bkr_unit_t  *unit;
@@ -330,8 +330,7 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *devstream)
 	init_MUTEX(&unit->lock);
 	init_waitqueue_head(&unit->queue);
 	memcpy(unit->format_tbl, BKR_FORMAT_INFO_INITIALIZER, sizeof(BKR_FORMAT_INFO_INITIALIZER));
-	unit->devstream = devstream;
-	unit->stream = NULL;
+	unit->stream = stream;
 	bkr_unit_sysctl_init(unit);
 	unit->sysctl.header = register_sysctl_table(unit->sysctl.dev_dir);
 
@@ -417,8 +416,7 @@ static int open(struct inode *inode, struct file *filp)
 	/* FIXME: lock format table during copy */
 	format = unit->format_tbl[bkr_mode_to_format(mode)];
 
-	unit->stream = unit->devstream->ops.ready(unit->devstream, mode, &format);
-	if(!unit->stream) {
+	if(!unit->stream->ops.ready(unit->stream, mode, &format)) {
 		bkr_unit_release(unit);
 		return(-EBUSY);
 	}
@@ -459,7 +457,6 @@ static int release(struct inode *inode, struct file *filp)
 #endif
 	}
 
-	unit->stream = NULL;
 	bkr_unit_release(unit);
 
 	return(0);

@@ -421,7 +421,7 @@ static void do_detach(struct work_struct *work)
 {
 	bkr_parport_private_t  *private = container_of(work, bkr_parport_private_t, detach);
 	struct bkr_unit_t  *unit = private->unit;
-	struct bkr_stream_t  *stream = unit->devstream;
+	struct bkr_stream_t  *stream = unit->stream;
 
 	down(&bkr_unit_list_lock);
 	bkr_unit_unregister(unit);
@@ -445,7 +445,7 @@ static void detach(struct parport *port)
 		unit = list_entry(curr, struct bkr_unit_t, list);
 		if(unit->owner != THIS_MODULE)
 			continue;
-		private = (bkr_parport_private_t *) unit->devstream->private;
+		private = (bkr_parport_private_t *) unit->stream->private;
 		if(private->dev->port == port)
 			queue_work(detach_queue, &private->detach);
 	}

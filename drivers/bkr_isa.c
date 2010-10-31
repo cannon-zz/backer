@@ -565,7 +565,7 @@ static void __exit bkr_isa_exit(void)
 			unit = list_entry(curr, struct bkr_unit_t, list);
 			if(unit->owner != THIS_MODULE)
 				continue;
-			stream = unit->devstream;
+			stream = unit->stream;
 			private = (bkr_isa_private_t *) stream->private;
 			bkr_unit_unregister(unit);
 			dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);

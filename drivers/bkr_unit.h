@@ -57,7 +57,6 @@ struct bkr_unit_t {
 	struct semaphore  lock;         /* down == unit is claimed */
 	struct module  *owner;          /* module owning this unit */
 	wait_queue_head_t  queue;       /* I/O event queue */
-	struct bkr_stream_t  *devstream;  /* to preserve persistent hw stream */
 	struct bkr_stream_t  *stream;   /* this unit's data stream */
 	bkr_format_info_t format_tbl[BKR_NUM_FORMATS];  /* format parms */
 	struct bkr_sysctl_table_t  sysctl;     /* sysctl interface table */

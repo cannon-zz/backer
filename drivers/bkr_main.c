@@ -392,7 +392,6 @@ static int open(struct inode *inode, struct file *filp)
 	struct bkr_unit_t  *unit = NULL;
 	int  number = iminor(inode) / BKR_NUM_FORMATS;
 	int  mode = minor_to_mode[iminor(inode) % BKR_NUM_FORMATS];
-	bkr_format_info_t  format;
 	int  result;
 	struct list_head  *curr;
 
@@ -413,9 +412,7 @@ static int open(struct inode *inode, struct file *filp)
 		return(result);
 
 	/* FIXME: lock format table during copy */
-	format = unit->format_tbl[bkr_mode_to_format(mode)];
-
-	if(!unit->stream->ops.ready(unit->stream, mode, &format)) {
+	if(!unit->stream->ops.ready(unit->stream, mode, &unit->format_tbl[bkr_mode_to_format(mode)])) {
 		bkr_unit_release(unit);
 		return(-EBUSY);
 	}

@@ -49,22 +49,16 @@ typedef enum {
 } bkr_direction_t;
 
 
-struct bkr_stream_t;
-
-
-struct bkr_stream_ops_t {
-	struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
-	int  (*start)(struct bkr_stream_t *, bkr_direction_t);
-	int  (*release)(struct bkr_stream_t *);
-	int  (*read)(struct bkr_stream_t *);
-	int  (*write)(struct bkr_stream_t *);
-};
-
-
 struct bkr_stream_t {
 	struct ring  *ring;             /* this stream's I/O ring */
 	bkr_format_info_t  fmt;         /* stream format paramters */
-	struct bkr_stream_ops_t  ops;   /* stream control functions */
+	struct bkr_stream_ops_t {
+		struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
+		int  (*start)(struct bkr_stream_t *, bkr_direction_t);
+		int  (*release)(struct bkr_stream_t *);
+		int  (*read)(struct bkr_stream_t *);
+		int  (*write)(struct bkr_stream_t *);
+	} ops;                          /* stream control functions */
 	int  mode;                      /* stream settings */
 	volatile bkr_direction_t  direction;     /* stream state */
 	void  (*callback)(void *);      /* I/O activity call-back */
@@ -72,20 +66,6 @@ struct bkr_stream_t {
 	unsigned int  timeout;          /* I/O activity timeout */
 	void  *private;                 /* per-stream private data */
 };
-
-
-static void bkr_stream_set_callback(struct bkr_stream_t *stream, void (*callback)(void *), void *data)
-{
-	stream->callback_data = data;
-	stream->callback = callback;
-}
-
-
-static void bkr_stream_do_callback(struct bkr_stream_t *stream)
-{
-	if(stream->callback)
-		stream->callback(stream->callback_data);
-}
 
 
 /*
@@ -150,6 +130,25 @@ static unsigned char bkr_control(int mode, bkr_direction_t direction)
 		control |= BKR_BIT_RECEIVE;
 
 	return(control);
+}
+
+
+/*
+ * Stream callback manipulation
+ */
+
+
+static void bkr_stream_set_callback(struct bkr_stream_t *stream, void (*callback)(void *), void *data)
+{
+	stream->callback_data = data;
+	stream->callback = callback;
+}
+
+
+static void bkr_stream_do_callback(struct bkr_stream_t *stream)
+{
+	if(stream->callback)
+		stream->callback(stream->callback_data);
 }
 
 

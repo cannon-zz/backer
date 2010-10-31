@@ -41,9 +41,8 @@
 #include <asm/uaccess.h>
 
 #include <backer.h>
-#include <bkr_ring_buffer.h>
-#include <bkr_stream.h>
 #include <bkr_unit.h>
+#include <bkr_ring_buffer.h>
 
 #define  __STRINGIFY(x)  #x
 #define  STRINGIFY(x)    __STRINGIFY(x)

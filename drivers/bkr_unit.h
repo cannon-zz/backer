@@ -27,7 +27,65 @@
 #include <linux/sysctl.h>
 
 #include <backer.h>
-#include <bkr_stream.h>
+#include <bkr_ring_buffer.h>
+
+
+/*
+ * ========================================================================
+ *
+ *                            STREAM DESCRIPTIONS
+ *
+ * ========================================================================
+ */
+
+
+#define BKR_FILLER 0x33         /* Generic filler */
+
+
+typedef enum {
+	BKR_STOPPED = 0,
+	BKR_READING,
+	BKR_WRITING
+} bkr_direction_t;
+
+
+struct bkr_stream_t;
+
+
+struct bkr_stream_ops_t {
+	struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
+	int  (*start)(struct bkr_stream_t *, bkr_direction_t);
+	int  (*release)(struct bkr_stream_t *);
+	int  (*read)(struct bkr_stream_t *);
+	int  (*write)(struct bkr_stream_t *);
+};
+
+
+struct bkr_stream_t {
+	struct ring  *ring;             /* this stream's I/O ring */
+	bkr_format_info_t  fmt;         /* stream format paramters */
+	struct bkr_stream_ops_t  ops;   /* stream control functions */
+	int  mode;                      /* stream settings */
+	volatile bkr_direction_t  direction;     /* stream state */
+	void  (*callback)(void *);      /* I/O activity call-back */
+	void  *callback_data;           /* call-back data */
+	unsigned int  timeout;          /* I/O activity timeout */
+	void  *private;                 /* per-stream private data */
+};
+
+
+static void bkr_stream_set_callback(struct bkr_stream_t *stream, void (*callback)(void *), void *data)
+{
+	stream->callback_data = data;
+	stream->callback = callback;
+}
+
+
+static void bkr_stream_do_callback(struct bkr_stream_t *stream)
+{
+	if(stream->callback)
+		stream->callback(stream->callback_data);
+}
 
 
 /*
@@ -40,6 +98,7 @@
 
 
 #define  BKR_NAME_LENGTH  (sizeof("99"))        /* limits driver to 100 units */
+
 
 struct bkr_sysctl_table_t {
 	struct ctl_table_header  *header;
@@ -66,7 +125,6 @@ struct bkr_unit_t {
 
 extern struct list_head  bkr_unit_list;         /* list of installed units */
 extern struct semaphore  bkr_unit_list_lock;
-
 extern struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *);
 extern void bkr_unit_unregister(struct bkr_unit_t *);
 
@@ -75,6 +133,7 @@ extern void bkr_unit_unregister(struct bkr_unit_t *);
  * Generate the Backer device control byte from the given video mode,
  * density and transfer direction.
  */
+
 
 static unsigned char bkr_control(int mode, bkr_direction_t direction)
 {
@@ -92,5 +151,6 @@ static unsigned char bkr_control(int mode, bkr_direction_t direction)
 
 	return(control);
 }
+
 
 #endif /* _BACKER_UNIT_H */

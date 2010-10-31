@@ -37,13 +37,8 @@
 #ifndef _BKR_RING_BUFFER_H
 #define _BKR_RING_BUFFER_H
 
-#ifdef __KERNEL__
 #include <linux/spinlock.h>
 #include <linux/types.h>
-#else
-#include <sys/types.h>
-#include <pthread.h>
-#endif
 
 
 typedef unsigned char  ring_data_t;
@@ -54,12 +49,8 @@ struct ring {
 	size_t  size;
 	size_t  head;
 	size_t  tail;
-#ifdef __KERNEL__
 	unsigned long  flags;
 	spinlock_t  lock;
-#else
-	pthread_mutex_t  lock;
-#endif
 };
 
 
@@ -67,7 +58,6 @@ struct ring {
  * Aquire and release ring locks
  */
 
-#ifdef __KERNEL__
 
 static void ring_lock(struct ring *ring)
 {
@@ -78,20 +68,6 @@ static void ring_unlock(struct ring *ring)
 {
 	spin_unlock_irqrestore(&ring->lock, ring->flags);
 }
-
-#else
-
-static void ring_lock(struct ring *ring)
-{
-	pthread_mutex_lock(&ring->lock);
-}
-
-static void ring_unlock(struct ring *ring)
-{
-	pthread_mutex_unlock(&ring->lock);
-}
-
-#endif
 
 
 /*
@@ -265,9 +241,7 @@ size_t memset_ring(struct ring *, ring_data_t, size_t);
 size_t memcpy_to_ring(struct ring *, void *, size_t);
 size_t memcpy_from_ring(void *, struct ring *, size_t);
 size_t memcpy_to_ring_from_ring(struct ring *, struct ring *, size_t);
-#ifdef __KERNEL__
 size_t copy_to_user_from_ring(char *, struct ring *, size_t);
 size_t copy_to_ring_from_user(struct ring *, const char *, size_t);
-#endif /* __KERNEL__ */
 
 #endif /* _BKR_RING_BUFFER_H */

@@ -32,18 +32,12 @@
  * overflows will occur!
  */
 
-#ifdef __KERNEL__
 #include <asm/uaccess.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
 static void *malloc(size_t size)  { return(kmalloc((size), GFP_KERNEL)); }
 static void free(void *ptr) { kfree(ptr); }
-#else
-#include <pthread.h>
-#include <stdlib.h>
-#include <string.h>
-#endif  /* __KERNEL__ */
 
 #include <bkr_ring_buffer.h>
 
@@ -61,10 +55,7 @@ static void ring_init(struct ring *ring)
 		.head = 0,
 		.tail = 0,
 	};
-#ifdef __KERNEL__
 	spin_lock_init(&ring->lock);
-#else
-#endif
 }
 
 
@@ -78,13 +69,8 @@ void *ring_alloc(struct ring *ring, size_t size)
 {
 	ring_init(ring);
 	ring->buffer = malloc(size);
-	if(ring->buffer) {
+	if(ring->buffer)
 		ring->size = size;
-#ifdef __KERNEL__
-#else
-		pthread_mutex_init(&ring->lock, NULL);
-#endif
-	}
 	return(ring->buffer);
 }
 
@@ -97,11 +83,6 @@ void *ring_alloc(struct ring *ring, size_t size)
 
 void ring_free(struct ring *ring)
 {
-#ifdef __KERNEL__
-#else
-	if(ring->buffer)
-		pthread_mutex_destroy(&ring->lock);
-#endif
 	free(ring->buffer);
 	ring_init(ring);
 }
@@ -198,7 +179,6 @@ size_t memcpy_to_ring_from_ring(struct ring *dst, struct ring *src, size_t n)
  * Two additional functions for use in the kernel
  */
 
-#ifdef __KERNEL__
 
 size_t copy_to_user_from_ring(char *dst, struct ring *src, size_t n)
 {
@@ -232,5 +212,3 @@ size_t copy_to_ring_from_user(struct ring *dst, const char *src, size_t n)
 
 	return(n);
 }
-
-#endif /* __KERNEL__ */

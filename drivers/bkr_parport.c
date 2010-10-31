@@ -494,7 +494,6 @@ static void attach(struct parport *port)
 		.write = write,
 	};
 	stream->private = private;
-	stream->source = NULL;
 	bkr_stream_set_callback(stream, NULL, NULL);
 	stream->timeout = BKR_PARPORT_TIMEOUT;
 

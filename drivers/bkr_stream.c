@@ -36,65 +36,39 @@
 
 int bkr_stream_bytes(struct bkr_stream_t *stream)
 {
-	struct ring *ring = NULL;
-	int  bytes;
-
-	for(bytes = 0; stream; stream = stream->source)
-		if(ring != stream->ring)
-			bytes += bytes_in_ring(ring = stream->ring);
-
-	return(bytes);
+	if(stream->ring)
+		return bytes_in_ring(stream->ring);
+	return 0;
 }
 
 
 int bkr_stream_size(struct bkr_stream_t *stream)
 {
-	struct ring *ring = NULL;
-	int  size;
-
-	for(size = 0; stream; stream = stream->source)
-		if(ring != stream->ring)
-			size += (ring = stream->ring)->size;
-
-	return(size);
-}
-
-
-int bkr_source_read_status(struct bkr_stream_t *stream)
-{
-	int  result = stream->source ? stream->source->ops.read(stream->source) : -EAGAIN;
-
-	return(result <= 0 ? result : -EAGAIN);
-}
-
-
-int bkr_source_write_status(struct bkr_stream_t *stream)
-{
-	int  result = stream->source ? stream->source->ops.write(stream->source) : -EAGAIN;
-
-	return(result < 0 ? result : -EAGAIN);
+	if(stream->ring)
+		return stream->ring->size;
+	return 0;
 }
 
 
 int bkr_simple_stream_read(struct bkr_stream_t *stream)
 {
-	int  bytes = bytes_in_ring(stream->ring);
+	int bytes = bytes_in_ring(stream->ring);
 
-	return(bytes ? bytes : bkr_source_read_status(stream));
+	return bytes ? bytes : -EAGAIN;
 }
 
 
 int bkr_simple_stream_write(struct bkr_stream_t *stream)
 {
-	int  space = space_in_ring(stream->ring);
+	int space = space_in_ring(stream->ring);
 
-	return(space ? space : bkr_source_write_status(stream));
+	return space ? space : -EAGAIN;
 }
 
 
 static int _ring_fill_to(struct ring *ring, int interval, unsigned char data)
 {
-	int  count = ring->head % interval;
+	int count = ring->head % interval;
 
 	if(count) {
 		count = interval - count;
@@ -104,22 +78,22 @@ static int _ring_fill_to(struct ring *ring, int interval, unsigned char data)
 		}
 	}
 
-	return(count);
+	return count;
 }
 
 
 static int ring_fill_to(struct ring *ring, int interval, unsigned char data)
 {
-	int  result;
+	int result;
 
 	ring_lock(ring);
 	result = _ring_fill_to(ring, interval, data);
 	ring_unlock(ring);
-	return(result);
+	return result;
 }
 
 
 int bkr_stream_fill_to(struct bkr_stream_t *stream, int interval, unsigned char data)
 {
-	return(ring_fill_to(stream->ring, interval, data) ? -EAGAIN : 0);
+	return ring_fill_to(stream->ring, interval, data) ? -EAGAIN : 0;
 }

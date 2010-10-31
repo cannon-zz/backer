@@ -386,7 +386,6 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 		.write = bkr_simple_stream_write,
 	};
 	stream->private = private;
-	stream->source = NULL;
 	bkr_stream_set_callback(stream, NULL, NULL);
 	stream->timeout = BKR_ISA_TIMEOUT;
 

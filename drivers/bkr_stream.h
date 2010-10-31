@@ -27,7 +27,6 @@ struct bkr_stream_ops_t {
 
 
 struct bkr_stream_t {
-	struct bkr_stream_t  *source;   /* the stream from which this flows */
 	struct ring  *ring;             /* this stream's I/O ring */
 	bkr_format_info_t  fmt;         /* stream format paramters */
 	struct bkr_stream_ops_t  ops;   /* stream control functions */
@@ -54,8 +53,6 @@ static void bkr_stream_do_callback(struct bkr_stream_t *stream)
 
 int bkr_stream_bytes(struct bkr_stream_t *);
 int bkr_stream_size(struct bkr_stream_t *);
-int bkr_source_read_status(struct bkr_stream_t *);
-int bkr_source_write_status(struct bkr_stream_t *);
 int bkr_simple_stream_read(struct bkr_stream_t *);
 int bkr_simple_stream_write(struct bkr_stream_t *);
 int bkr_stream_fill_to(struct bkr_stream_t *, int, unsigned char);

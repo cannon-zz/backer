@@ -200,13 +200,13 @@ size_t copy_to_ring_from_user(struct ring *dst, const char *src, size_t n)
  */
 
 
-int _ring_fill_to(struct ring *ring, int interval, unsigned char data)
+int ring_fill_to(struct ring *ring, int interval, unsigned char data)
 {
 	int count = ring->head % interval;
 
 	if(count) {
 		count = interval - count;
-		if(_space_in_ring(ring) >= count) {
+		if(space_in_ring(ring) >= count) {
 			memset_ring(ring, data, count);
 			count = 0;
 		}

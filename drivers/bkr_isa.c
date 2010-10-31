@@ -211,7 +211,7 @@ static int flush(struct bkr_stream_t *stream)
 	int result;
 
 	ring_lock(stream->ring);
-	result = _ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : _bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0;
+	result = ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0;
 	ring_unlock(stream->ring);
 
 	return result;
@@ -310,7 +310,7 @@ static int release(struct bkr_stream_t *stream)
 
 static int read(struct bkr_stream_t *stream)
 {
-	int bytes = _bytes_in_ring(stream->ring);
+	int bytes = bytes_in_ring(stream->ring);
 
 	return bytes ? bytes : -EAGAIN;
 }
@@ -318,7 +318,7 @@ static int read(struct bkr_stream_t *stream)
 
 static int write(struct bkr_stream_t *stream)
 {
-	int space = _space_in_ring(stream->ring);
+	int space = space_in_ring(stream->ring);
 
 	return space ? space : -EAGAIN;
 }

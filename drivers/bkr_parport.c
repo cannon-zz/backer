@@ -198,12 +198,12 @@ static void bkr_parport_irq(void *handle)
 	clear_dma_ff(port->dma);
 	switch(stream->direction) {
 		case BKR_READING:
-		_ring_fill(ring, private->capacity);
+		ring_fill(ring, private->capacity);
 		set_dma_addr(port->dma, private->dma_addr + ring->head);
 		break;
 
 		case BKR_WRITING:
-		_ring_drain(ring, private->capacity);
+		ring_drain(ring, private->capacity);
 		set_dma_addr(port->dma, private->dma_addr + ring->tail);
 		break;
 
@@ -259,7 +259,7 @@ static int flush(struct bkr_stream_t *stream)
 	int result;
 
 	ring_lock(stream->ring);
-	result = _ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : _bytes_in_ring(stream->ring) ? -EAGAIN : 0;
+	result = ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) ? -EAGAIN : 0;
 	ring_unlock(stream->ring);
 
 	return result;
@@ -381,7 +381,7 @@ static int read(struct bkr_stream_t *stream)
 	if(check_for_timeout(stream->private))
 		return -ETIMEDOUT;
 
-	bytes = _bytes_in_ring(stream->ring);
+	bytes = bytes_in_ring(stream->ring);
 
 	return bytes ? bytes : -EAGAIN;
 }
@@ -394,7 +394,7 @@ static int write(struct bkr_stream_t *stream)
 	if(check_for_timeout(stream->private))
 		return -ETIMEDOUT;
 
-	space = _space_in_ring(stream->ring);
+	space = space_in_ring(stream->ring);
 
 	return space ? space : -EAGAIN;
 }

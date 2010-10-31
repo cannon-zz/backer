@@ -206,7 +206,7 @@ static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, s
 	pos += sprintf(pos, "\nCurrent Mode    : %u\nI/O Buffer      : ", stream->mode);
 	if(stream->ring) {
 		ring_lock(stream->ring);
-		pos += sprintf(pos, "%zu / %zu\n", _bytes_in_ring(stream->ring), stream->ring->size);
+		pos += sprintf(pos, "%zu / %zu\n", bytes_in_ring(stream->ring), stream->ring->size);
 		ring_unlock(stream->ring);
 	} else
 		pos += sprintf(pos, "0 / 0\n");
@@ -476,12 +476,12 @@ static unsigned int poll(struct file *filp, struct poll_table_struct *wait)
 	ring_lock(stream->ring);
 	switch(stream->direction) {
 		case BKR_READING:
-		if(_bytes_in_ring(stream->ring))
+		if(bytes_in_ring(stream->ring))
 			status |= POLLIN | POLLRDNORM;
 		break;
 
 		case BKR_WRITING:
-		if(_space_in_ring(stream->ring))
+		if(space_in_ring(stream->ring))
 			status |= POLLOUT | POLLWRNORM;
 		break;
 

@@ -131,13 +131,13 @@ static void ring_offset_dec(struct ring *ring, size_t *offset, int n)
 	do { if((ring_soffset_t)((offset) -= (n)) < 0) (offset) += (ring)->size; } while(0)
 #endif
 
-static void _ring_fill(struct ring *ring, size_t n)
+static void ring_fill(struct ring *ring, size_t n)
 {
 	ring_offset_inc(ring, ring->head, n);
 }
 
 
-static void _ring_drain(struct ring *ring, size_t n)
+static void ring_drain(struct ring *ring, size_t n)
 {
 	ring_offset_inc(ring, ring->tail, n);
 }
@@ -149,27 +149,27 @@ static void _ring_drain(struct ring *ring, size_t n)
  * without an additional wrap-around check for the computation of tail - 1.
  */
 
-static size_t _space_in_ring(struct ring *ring)
+static size_t space_in_ring(struct ring *ring)
 {
 	return ring_offset_sub(ring, ring->tail - 1, ring->head);
 }
 
 
-static size_t _bytes_in_ring(struct ring *ring)
+static size_t bytes_in_ring(struct ring *ring)
 {
 	return ring_offset_sub(ring, ring->head, ring->tail);
 }
 
 
-static int _ring_is_full(struct ring *ring)
+static int ring_is_full(struct ring *ring)
 {
-	return(ring_offset_add(ring, ring->head, 1) == ring->tail);
+	return ring_offset_add(ring, ring->head, 1) == ring->tail;
 }
 
 
-static int _ring_is_empty(struct ring *ring)
+static int ring_is_empty(struct ring *ring)
 {
-	return(ring->head == ring->tail);
+	return ring->head == ring->tail;
 }
 
 
@@ -185,6 +185,6 @@ size_t memcpy_from_ring(void *, struct ring *, size_t);
 size_t memcpy_to_ring_from_ring(struct ring *, struct ring *, size_t);
 size_t copy_to_user_from_ring(char *, struct ring *, size_t);
 size_t copy_to_ring_from_user(struct ring *, const char *, size_t);
-int _ring_fill_to(struct ring *, int, unsigned char);
+int ring_fill_to(struct ring *, int, unsigned char);
 
 #endif /* _BKR_RING_BUFFER_H */

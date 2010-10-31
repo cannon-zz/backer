@@ -18,7 +18,7 @@ typedef enum {
 struct bkr_stream_t;
 
 struct bkr_stream_ops_t {
-	struct bkr_stream_t  *(*new)(struct bkr_stream_t *, int, const bkr_format_info_t *);
+	struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
 	int  (*start)(struct bkr_stream_t *, bkr_direction_t);
 	int  (*release)(struct bkr_stream_t *);
 	int  (*read)(struct bkr_stream_t *);
@@ -51,7 +51,5 @@ static void bkr_stream_do_callback(struct bkr_stream_t *stream)
 		stream->callback(stream->callback_data);
 }
 
-int bkr_simple_stream_read(struct bkr_stream_t *);
-int bkr_simple_stream_write(struct bkr_stream_t *);
 
 #endif /* _BKR_STREAM_H */

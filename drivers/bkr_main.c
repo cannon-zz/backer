@@ -417,7 +417,7 @@ static int open(struct inode *inode, struct file *filp)
 	/* FIXME: lock format table during copy */
 	format = unit->format_tbl[bkr_mode_to_format(mode)];
 
-	unit->stream = unit->devstream->ops.new(unit->devstream, mode, &format);
+	unit->stream = unit->devstream->ops.ready(unit->devstream, mode, &format);
 	if(!unit->stream) {
 		bkr_unit_release(unit);
 		return(-EBUSY);

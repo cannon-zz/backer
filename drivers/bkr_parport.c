@@ -394,7 +394,7 @@ static int write(struct bkr_stream_t *stream)
 }
 
 
-static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
+static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
 {
 	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
 	stream->mode = mode;
@@ -405,7 +405,7 @@ static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr
 	ring_reset(stream->ring);
 	memset_ring(stream->ring, 0, stream->ring->size);
 
-	return(stream);
+	return stream;
 }
 
 
@@ -428,8 +428,8 @@ static void do_detach(struct work_struct *work)
 	parport_unregister_device(private->dev);
 	dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
 	ring_free(stream->ring);
-	kfree(private);
 	kfree(stream);
+	kfree(private);
 	up(&bkr_unit_list_lock);
 }
 
@@ -502,7 +502,7 @@ static void attach(struct parport *port)
 	private->adjust = adjust;	/* FIXME: allow per-device adjustment */
 
 	stream->ops = (struct bkr_stream_ops_t) {
-		.new = new,
+		.ready = ready,
 		.start = start,
 		.release = release,
 		.read = read,

@@ -318,7 +318,7 @@ static int write(struct bkr_stream_t *stream)
 }
 
 
-static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
+static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
 {
 	bkr_isa_private_t  *private = stream->private;
 	struct ring  *ring = stream->ring;
@@ -331,7 +331,7 @@ static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr
 	ring_reset(ring);
 	memset_ring(ring, 0, ring->size);
 
-	return(stream);
+	return stream;
 }
 
 
@@ -392,7 +392,7 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 	private->adjust = adjust;
 
 	stream->ops = (struct bkr_stream_ops_t) {
-		.new = new,
+		.ready = ready,
 		.start = start,
 		.release = release,
 		.read = read,
@@ -569,9 +569,9 @@ static void __exit bkr_isa_exit(void)
 			private = (bkr_isa_private_t *) stream->private;
 			bkr_unit_unregister(unit);
 			dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
-			isa_free_private(private);
 			ring_free(stream->ring);
 			kfree(stream);
+			isa_free_private(private);
 			break;
 		}
 	while(curr != &bkr_unit_list);

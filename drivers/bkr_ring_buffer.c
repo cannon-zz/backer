@@ -36,8 +36,6 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
-static void *malloc(size_t size)  { return(kmalloc((size), GFP_KERNEL)); }
-static void free(void *ptr) { kfree(ptr); }
 
 #include <bkr_ring_buffer.h>
 
@@ -68,7 +66,7 @@ static void ring_init(struct ring *ring)
 void *ring_alloc(struct ring *ring, size_t size)
 {
 	ring_init(ring);
-	ring->buffer = malloc(size);
+	ring->buffer = kmalloc((size), GFP_KERNEL);
 	if(ring->buffer)
 		ring->size = size;
 	return(ring->buffer);
@@ -83,7 +81,7 @@ void *ring_alloc(struct ring *ring, size_t size)
 
 void ring_free(struct ring *ring)
 {
-	free(ring->buffer);
+	kfree(ring->buffer);
 	ring_init(ring);
 }
 

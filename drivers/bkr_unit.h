@@ -1,7 +1,7 @@
 /*
  * Unit description for Backer device driver.
  *
- * Copyright (C) 2000,2001,2002  Kipp C. Cannon
+ * Copyright (C) 2000,2001,2002,2010  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by

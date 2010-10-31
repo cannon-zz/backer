@@ -5,7 +5,7 @@
  * thread and one "consumer" thread (i.e. if two treads try to write to the
  * buffer at once, there are problems).
  *
- * Copyright (C) 2002  Kipp C. Cannon
+ * Copyright (C) 2002,2010  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the

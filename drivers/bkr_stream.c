@@ -34,21 +34,6 @@
  * ========================================================================
  */
 
-int bkr_stream_bytes(struct bkr_stream_t *stream)
-{
-	if(stream->ring)
-		return bytes_in_ring(stream->ring);
-	return 0;
-}
-
-
-int bkr_stream_size(struct bkr_stream_t *stream)
-{
-	if(stream->ring)
-		return stream->ring->size;
-	return 0;
-}
-
 
 int bkr_simple_stream_read(struct bkr_stream_t *stream)
 {

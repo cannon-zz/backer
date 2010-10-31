@@ -209,9 +209,9 @@ static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, s
 	}
 	pos += sprintf(pos, "\n"
 	                    "Current Mode    : %u\n"
-	                    "I/O Buffer      : %u / %u\n",
+	                    "I/O Buffer      : %zu / %zu\n",
 	                    stream->mode,
-		            bkr_stream_bytes(stream), bkr_stream_size(stream));
+		            stream->ring ? bytes_in_ring(stream->ring) : 0, stream->ring ? stream->ring->size : 0);
 
 	if(pos - message < *len)
 		*len = pos - message;

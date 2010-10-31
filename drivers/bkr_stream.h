@@ -51,8 +51,6 @@ static void bkr_stream_do_callback(struct bkr_stream_t *stream)
 		stream->callback(stream->callback_data);
 }
 
-int bkr_stream_bytes(struct bkr_stream_t *);
-int bkr_stream_size(struct bkr_stream_t *);
 int bkr_simple_stream_read(struct bkr_stream_t *);
 int bkr_simple_stream_write(struct bkr_stream_t *);
 int bkr_stream_fill_to(struct bkr_stream_t *, int, unsigned char);

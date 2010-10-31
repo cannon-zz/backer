@@ -193,3 +193,35 @@ size_t copy_to_ring_from_user(struct ring *dst, const char *src, size_t n)
 
 	return(n);
 }
+
+
+/*
+ * Fill the ring buffer to a boundary
+ */
+
+
+int _ring_fill_to(struct ring *ring, int interval, unsigned char data)
+{
+	int count = ring->head % interval;
+
+	if(count) {
+		count = interval - count;
+		if(_space_in_ring(ring) >= count) {
+			memset_ring(ring, data, count);
+			count = 0;
+		}
+	}
+
+	return count;
+}
+
+
+int ring_fill_to(struct ring *ring, int interval, unsigned char data)
+{
+	int result;
+
+	ring_lock(ring);
+	result = _ring_fill_to(ring, interval, data);
+	ring_unlock(ring);
+	return result;
+}

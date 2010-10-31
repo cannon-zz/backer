@@ -51,33 +51,6 @@ int bkr_simple_stream_write(struct bkr_stream_t *stream)
 }
 
 
-static int _ring_fill_to(struct ring *ring, int interval, unsigned char data)
-{
-	int count = ring->head % interval;
-
-	if(count) {
-		count = interval - count;
-		if(_space_in_ring(ring) >= count) {
-			memset_ring(ring, data, count);
-			count = 0;
-		}
-	}
-
-	return count;
-}
-
-
-static int ring_fill_to(struct ring *ring, int interval, unsigned char data)
-{
-	int result;
-
-	ring_lock(ring);
-	result = _ring_fill_to(ring, interval, data);
-	ring_unlock(ring);
-	return result;
-}
-
-
 int bkr_stream_fill_to(struct bkr_stream_t *stream, int interval, unsigned char data)
 {
 	return ring_fill_to(stream->ring, interval, data) ? -EAGAIN : 0;

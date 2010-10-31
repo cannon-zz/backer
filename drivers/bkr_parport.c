@@ -370,13 +370,27 @@ static int release(struct bkr_stream_t *stream)
 
 static int read(struct bkr_stream_t *stream)
 {
-	return(check_for_timeout(stream->private) ? -ETIMEDOUT : bkr_simple_stream_read(stream));
+	int bytes;
+
+	if(check_for_timeout(stream->private))
+		return -ETIMEDOUT;
+
+	bytes = bytes_in_ring(stream->ring);
+
+	return bytes ? bytes : -EAGAIN;
 }
 
 
 static int write(struct bkr_stream_t *stream)
 {
-	return(check_for_timeout(stream->private) ? -ETIMEDOUT : bkr_simple_stream_write(stream));
+	int space;
+
+	if(check_for_timeout(stream->private))
+		return -ETIMEDOUT;
+
+	space = space_in_ring(stream->ring);
+
+	return space ? space : -EAGAIN;
 }
 
 

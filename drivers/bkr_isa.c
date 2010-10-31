@@ -302,6 +302,22 @@ static int release(struct bkr_stream_t *stream)
 }
 
 
+static int read(struct bkr_stream_t *stream)
+{
+	int bytes = bytes_in_ring(stream->ring);
+
+	return bytes ? bytes : -EAGAIN;
+}
+
+
+static int write(struct bkr_stream_t *stream)
+{
+	int space = space_in_ring(stream->ring);
+
+	return space ? space : -EAGAIN;
+}
+
+
 static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
 {
 	bkr_isa_private_t  *private = stream->private;
@@ -379,8 +395,8 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 		.new = new,
 		.start = start,
 		.release = release,
-		.read = bkr_simple_stream_read,
-		.write = bkr_simple_stream_write,
+		.read = read,
+		.write = write,
 	};
 	stream->private = private;
 	bkr_stream_set_callback(stream, NULL, NULL);

@@ -8,11 +8,11 @@ EXTRA_CFLAGS := -Wno-unused-function -I$(src) -I$(src)/../codecs -DBKR_VERSION=\
 
 obj-m += backer.o backer_isa.o backer_parport.o
 
-backer-objs := bkr_main.o bkr_stream.o bkr_ring_buffer.o
+backer-objs := bkr_main.o bkr_ring_buffer.o
 
-backer_isa-objs := bkr_isa.o bkr_stream.o bkr_ring_buffer.o
+backer_isa-objs := bkr_isa.o bkr_ring_buffer.o
 
-backer_parport-objs := bkr_parport.o bkr_stream.o bkr_ring_buffer.o
+backer_parport-objs := bkr_parport.o bkr_ring_buffer.o
 
 
 # The stuff inside the ifeq() is the non-kernel part of the Makefile,

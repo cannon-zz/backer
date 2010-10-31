@@ -36,7 +36,6 @@ struct bkr_stream_t {
 	void  (*callback)(void *);      /* I/O activity call-back */
 	void  *callback_data;           /* call-back data */
 	unsigned int  timeout;          /* I/O activity timeout */
-	int  capacity;                  /* sector capacity */
 	void  *private;                 /* per-stream private data */
 };
 

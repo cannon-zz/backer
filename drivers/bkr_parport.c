@@ -158,6 +158,7 @@ typedef struct {
 	struct parport_state  state;    /* Linux parport and Backers suck */
 	jiffies_t  last_io;             /* jiffies counter at last I/O */
 	int  adjust;                    /* adjustment to start-up pause */
+	int  capacity;                  /* sector capacity */
 } bkr_parport_private_t;
 
 
@@ -197,12 +198,12 @@ static void bkr_parport_irq(void *handle)
 	clear_dma_ff(port->dma);
 	switch(stream->direction) {
 		case BKR_READING:
-		_ring_fill(ring, stream->capacity);
+		_ring_fill(ring, private->capacity);
 		set_dma_addr(port->dma, private->dma_addr + ring->head);
 		break;
 
 		case BKR_WRITING:
-		_ring_drain(ring, stream->capacity);
+		_ring_drain(ring, private->capacity);
 		set_dma_addr(port->dma, private->dma_addr + ring->tail);
 		break;
 
@@ -254,7 +255,8 @@ static void transmit_control_byte(struct parport *port, unsigned char byte)
 
 static int flush(struct bkr_stream_t *stream)
 {
-	return(bkr_stream_fill_to(stream, stream->capacity, BKR_FILLER) < 0 ? -EAGAIN : bytes_in_ring(stream->ring) ? -EAGAIN : 0);
+	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
+	return(bkr_stream_fill_to(stream, private->capacity, BKR_FILLER) < 0 ? -EAGAIN : bytes_in_ring(stream->ring) ? -EAGAIN : 0);
 }
 
 
@@ -315,7 +317,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 	disable_dma(port->dma);
 	clear_dma_ff(port->dma);
 	set_dma_addr(port->dma, private->dma_addr);
-	set_dma_count(port->dma, stream->capacity);
+	set_dma_count(port->dma, private->capacity);
 	if(direction == BKR_WRITING) {
 		set_dma_mode(port->dma, DMA_MEM_TO_IO);
 		port->ops->data_forward(port);
@@ -380,11 +382,12 @@ static int write(struct bkr_stream_t *stream)
 
 static struct bkr_stream_t *new(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
 {
+	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
 	stream->mode = mode;
 	stream->direction = BKR_STOPPED;
 	stream->fmt = *fmt;
-	stream->capacity = fmt->frame_size;
-	stream->ring->size = DMA_BUFFER_SIZE - DMA_BUFFER_SIZE % stream->capacity;
+	private->capacity = fmt->frame_size;
+	stream->ring->size = DMA_BUFFER_SIZE - DMA_BUFFER_SIZE % private->capacity;
 	ring_reset(stream->ring);
 	memset_ring(stream->ring, 0, stream->ring->size);
 

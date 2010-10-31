@@ -203,11 +203,13 @@ static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, s
 		pos += sprintf(pos, "STOPPED");
 		break;
 	}
-	pos += sprintf(pos, "\n"
-	                    "Current Mode    : %u\n"
-	                    "I/O Buffer      : %zu / %zu\n",
-	                    stream->mode,
-		            stream->ring ? bytes_in_ring(stream->ring) : 0, stream->ring ? stream->ring->size : 0);
+	pos += sprintf(pos, "\nCurrent Mode    : %u\nI/O Buffer      : ", stream->mode);
+	if(stream->ring) {
+		ring_lock(stream->ring);
+		pos += sprintf(pos, "%zu / %zu\n", _bytes_in_ring(stream->ring), stream->ring->size);
+		ring_unlock(stream->ring);
+	} else
+		pos += sprintf(pos, "0 / 0\n");
 
 	if(pos - message < *len)
 		*len = pos - message;
@@ -471,20 +473,22 @@ static unsigned int poll(struct file *filp, struct poll_table_struct *wait)
 
 	poll_wait(filp, stream->callback_data, wait);
 
+	ring_lock(stream->ring);
 	switch(stream->direction) {
 		case BKR_READING:
-		if(bytes_in_ring(stream->ring))
+		if(_bytes_in_ring(stream->ring))
 			status |= POLLIN | POLLRDNORM;
 		break;
 
 		case BKR_WRITING:
-		if(space_in_ring(stream->ring))
+		if(_space_in_ring(stream->ring))
 			status |= POLLOUT | POLLWRNORM;
 		break;
 
 		default:
 		break;
 	}
+	ring_unlock(stream->ring);
 
 	if(unit->last_error)
 		status |= POLLERR;
@@ -597,7 +601,9 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 	unit->last_error = 0;
 	/* No, so move data */
 	if(!result) while(1) {
+		ring_lock(stream->ring);
 		result = stream->ops.read(stream);
+		ring_unlock(stream->ring);
 
 		if(result > 0) {
 			chunk_size = min(count, (size_t) result);
@@ -674,7 +680,9 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 	unit->last_error = 0;
 	/* No, so move data */
 	if(!result) while(1) {
+		ring_lock(stream->ring);
 		result = stream->ops.write(stream);
+		ring_unlock(stream->ring);
 
 		if(result >= 0) {
 			chunk_size = min(count, (size_t) result);

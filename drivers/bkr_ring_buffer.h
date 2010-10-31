@@ -165,35 +165,13 @@ static void ring_drain(struct ring *ring, size_t n)
 
 static size_t _space_in_ring(struct ring *ring)
 {
-	return(ring_offset_sub(ring, ring->tail - 1, ring->head));
-}
-
-static size_t space_in_ring(struct ring *ring)
-{
-	size_t  result;
-
-	ring_lock(ring);
-	result = _space_in_ring(ring);
-	ring_unlock(ring);
-
-	return(result);
+	return ring_offset_sub(ring, ring->tail - 1, ring->head);
 }
 
 
 static size_t _bytes_in_ring(struct ring *ring)
 {
-	return(ring_offset_sub(ring, ring->head, ring->tail));
-}
-
-static size_t bytes_in_ring(struct ring *ring)
-{
-	size_t  result;
-
-	ring_lock(ring);
-	result = _bytes_in_ring(ring);
-	ring_unlock(ring);
-
-	return(result);
+	return ring_offset_sub(ring, ring->head, ring->tail);
 }
 
 
@@ -244,6 +222,5 @@ size_t memcpy_to_ring_from_ring(struct ring *, struct ring *, size_t);
 size_t copy_to_user_from_ring(char *, struct ring *, size_t);
 size_t copy_to_ring_from_user(struct ring *, const char *, size_t);
 int _ring_fill_to(struct ring *, int, unsigned char);
-int ring_fill_to(struct ring *, int, unsigned char);
 
 #endif /* _BKR_RING_BUFFER_H */

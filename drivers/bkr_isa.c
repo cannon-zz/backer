@@ -208,7 +208,13 @@ static void timer_tick(unsigned long data)
 static int flush(struct bkr_stream_t *stream)
 {
 	bkr_isa_private_t  *private = (bkr_isa_private_t *) stream->private;
-	return ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0;
+	int result;
+
+	ring_lock(stream->ring);
+	result = _ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : _bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0;
+	ring_unlock(stream->ring);
+
+	return result;
 }
 
 
@@ -304,7 +310,7 @@ static int release(struct bkr_stream_t *stream)
 
 static int read(struct bkr_stream_t *stream)
 {
-	int bytes = bytes_in_ring(stream->ring);
+	int bytes = _bytes_in_ring(stream->ring);
 
 	return bytes ? bytes : -EAGAIN;
 }
@@ -312,7 +318,7 @@ static int read(struct bkr_stream_t *stream)
 
 static int write(struct bkr_stream_t *stream)
 {
-	int space = space_in_ring(stream->ring);
+	int space = _space_in_ring(stream->ring);
 
 	return space ? space : -EAGAIN;
 }

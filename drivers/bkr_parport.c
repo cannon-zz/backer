@@ -256,7 +256,13 @@ static void transmit_control_byte(struct parport *port, unsigned char byte)
 static int flush(struct bkr_stream_t *stream)
 {
 	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
-	return ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) ? -EAGAIN : 0;
+	int result;
+
+	ring_lock(stream->ring);
+	result = _ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : _bytes_in_ring(stream->ring) ? -EAGAIN : 0;
+	ring_unlock(stream->ring);
+
+	return result;
 }
 
 
@@ -375,7 +381,7 @@ static int read(struct bkr_stream_t *stream)
 	if(check_for_timeout(stream->private))
 		return -ETIMEDOUT;
 
-	bytes = bytes_in_ring(stream->ring);
+	bytes = _bytes_in_ring(stream->ring);
 
 	return bytes ? bytes : -EAGAIN;
 }
@@ -388,7 +394,7 @@ static int write(struct bkr_stream_t *stream)
 	if(check_for_timeout(stream->private))
 		return -ETIMEDOUT;
 
-	space = space_in_ring(stream->ring);
+	space = _space_in_ring(stream->ring);
 
 	return space ? space : -EAGAIN;
 }

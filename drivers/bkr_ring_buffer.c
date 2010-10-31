@@ -214,14 +214,3 @@ int _ring_fill_to(struct ring *ring, int interval, unsigned char data)
 
 	return count;
 }
-
-
-int ring_fill_to(struct ring *ring, int interval, unsigned char data)
-{
-	int result;
-
-	ring_lock(ring);
-	result = _ring_fill_to(ring, interval, data);
-	ring_unlock(ring);
-	return result;
-}

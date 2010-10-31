@@ -371,9 +371,6 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 	stream = kmalloc(sizeof(*stream), GFP_KERNEL);
 	if(!stream)
 		goto no_stream;
-	stream->ring = kmalloc(sizeof(*stream->ring), GFP_KERNEL);
-	if(!stream->ring)
-		goto no_stream;
 
 	private->dma = dma;
 	private->adjust = adjust;
@@ -389,8 +386,10 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 	bkr_stream_set_callback(stream, NULL, NULL);
 	stream->timeout = BKR_ISA_TIMEOUT;
 
-	stream->ring->size = DMA_BUFFER_SIZE;
-	stream->ring->buffer = dma_alloc_coherent(NULL, DMA_BUFFER_SIZE, &private->dma_addr, GFP_ATOMIC);
+	stream->ring = ring_new(NULL, DMA_BUFFER_SIZE);
+	if(!stream->ring);
+		goto no_stream;
+	stream->ring->buffer = dma_alloc_coherent(NULL, stream->ring->size, &private->dma_addr, GFP_ATOMIC);
 	if(!stream->ring->buffer) {
 		sprintf(err_msg, "can't allocate DMA buffer");
 		goto no_dma_buffer;
@@ -416,7 +415,7 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 		up(&bkr_unit_list_lock);
 		dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
 	no_dma_buffer:
-		kfree(stream->ring);
+		ring_free(stream->ring);
 	no_stream:
 		kfree(stream);
 		printk(KERN_INFO MODULE_NAME ": %s\n", err_msg);
@@ -555,7 +554,7 @@ static void __exit bkr_isa_exit(void)
 			bkr_unit_unregister(unit);
 			dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
 			isa_free_private(private);
-			kfree(stream->ring);
+			ring_free(stream->ring);
 			kfree(stream);
 			break;
 		}

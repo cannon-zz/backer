@@ -413,7 +413,7 @@ static void do_detach(struct work_struct *work)
 	bkr_unit_unregister(unit);
 	parport_unregister_device(private->dev);
 	dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
-	kfree(stream->ring);
+	ring_free(stream->ring);
 	kfree(private);
 	kfree(stream);
 	up(&bkr_unit_list_lock);
@@ -470,12 +470,13 @@ static void attach(struct parport *port)
 	stream = kmalloc(sizeof(*stream), GFP_KERNEL);
 	if(!private || !stream)
 		goto no_stream;
-	stream->ring = kmalloc(sizeof(*stream->ring), GFP_KERNEL);
+
+	stream->ring = ring_new(NULL, DMA_BUFFER_SIZE);
 	if(!stream->ring)
 		goto no_stream;
 
 	sprintf(msg, "%s: can't allocate DMA buffer", port->name);
-	stream->ring->buffer = dma_alloc_coherent(NULL, DMA_BUFFER_SIZE, &private->dma_addr, GFP_ATOMIC);
+	stream->ring->buffer = dma_alloc_coherent(NULL, stream->ring->size, &private->dma_addr, GFP_ATOMIC);
 	if(!stream->ring->buffer)
 		goto no_dma_buffer;
 
@@ -520,7 +521,7 @@ static void attach(struct parport *port)
 	no_parport:
 		dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
 	no_dma_buffer:
-		kfree(stream->ring);
+		ring_free(stream->ring);
 	no_stream:
 		kfree(private);
 		kfree(stream);

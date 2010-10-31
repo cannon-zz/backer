@@ -18,6 +18,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #ifndef  _BACKER_UNIT_H
 #define  _BACKER_UNIT_H
 
@@ -33,13 +34,14 @@
 /*
  * ========================================================================
  *
- *                            STREAM DESCRIPTIONS
+ *                           UNIT DESCRIPTIONS
  *
  * ========================================================================
  */
 
 
 #define BKR_FILLER 0x33         /* Generic filler */
+#define  BKR_NAME_LENGTH  (sizeof("99"))        /* limits driver to 100 units */
 
 
 typedef enum {
@@ -47,37 +49,6 @@ typedef enum {
 	BKR_READING,
 	BKR_WRITING
 } bkr_direction_t;
-
-
-struct bkr_stream_t {
-	struct ring  *ring;             /* this stream's I/O ring */
-	bkr_format_info_t  fmt;         /* stream format paramters */
-	struct bkr_stream_ops_t {
-		struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
-		int  (*start)(struct bkr_stream_t *, bkr_direction_t);
-		int  (*release)(struct bkr_stream_t *);
-		int  (*read)(struct bkr_stream_t *);
-		int  (*write)(struct bkr_stream_t *);
-	} ops;                          /* stream control functions */
-	int  mode;                      /* stream settings */
-	volatile bkr_direction_t  direction;     /* stream state */
-	void  (*callback)(void *);      /* I/O activity call-back */
-	void  *callback_data;           /* call-back data */
-	unsigned int  timeout;          /* I/O activity timeout */
-	void  *private;                 /* per-stream private data */
-};
-
-
-/*
- * ========================================================================
- *
- *                           UNIT DESCRIPTIONS
- *
- * ========================================================================
- */
-
-
-#define  BKR_NAME_LENGTH  (sizeof("99"))        /* limits driver to 100 units */
 
 
 struct bkr_sysctl_table_t {
@@ -96,7 +67,23 @@ struct bkr_unit_t {
 	struct semaphore  lock;         /* down == unit is claimed */
 	struct module  *owner;          /* module owning this unit */
 	wait_queue_head_t  queue;       /* I/O event queue */
-	struct bkr_stream_t  *stream;   /* this unit's data stream */
+	struct bkr_stream_t {
+		struct ring  *ring;             /* this stream's I/O ring */
+		bkr_format_info_t  fmt;         /* stream format paramters */
+		struct bkr_stream_ops_t {
+			struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
+			int  (*start)(struct bkr_stream_t *, bkr_direction_t);
+			int  (*release)(struct bkr_stream_t *);
+			int  (*read)(struct bkr_stream_t *);
+			int  (*write)(struct bkr_stream_t *);
+		} ops;                          /* stream control functions */
+		int  mode;                      /* stream settings */
+		volatile bkr_direction_t  direction;     /* stream state */
+		void  (*callback)(void *);      /* I/O activity call-back */
+		void  *callback_data;           /* call-back data */
+		unsigned int  timeout;          /* I/O activity timeout */
+		void  *private;                 /* per-stream private data */
+	} *stream;                      /* this unit's data stream */
 	bkr_format_info_t format_tbl[BKR_NUM_FORMATS];  /* format parms */
 	struct bkr_sysctl_table_t  sysctl;     /* sysctl interface table */
 	int  last_error;                /* Pending error code if != 0 */

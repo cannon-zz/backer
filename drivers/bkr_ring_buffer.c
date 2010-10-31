@@ -39,37 +39,21 @@
 
 #include <bkr_ring_buffer.h>
 
-/*
- * ring_init()
- *
- * Initializer a ring.
- */
-
-static void ring_init(struct ring *ring)
-{
-	*ring = (struct ring) {
-		.buffer = NULL,
-		.size = 0,
-		.head = 0,
-		.tail = 0,
-	};
-	spin_lock_init(&ring->lock);
-}
-
 
 /*
- * ring_alloc()
+ * ring_new()
  *
  * Allocate a ring buffer.
  */
 
-void *ring_alloc(struct ring *ring, size_t size)
+struct ring *ring_new(void *buffer, size_t size)
 {
-	ring_init(ring);
-	ring->buffer = kmalloc((size), GFP_KERNEL);
-	if(ring->buffer)
-		ring->size = size;
-	return(ring->buffer);
+	struct ring *new = kmalloc(sizeof(*new), GFP_KERNEL);
+	new->buffer = buffer;
+	new->size = size;
+	new->head = new->tail = 0;
+	spin_lock_init(&new->lock);
+	return new;
 }
 
 
@@ -81,8 +65,7 @@ void *ring_alloc(struct ring *ring, size_t size)
 
 void ring_free(struct ring *ring)
 {
-	kfree(ring->buffer);
-	ring_init(ring);
+	kfree(ring);
 }
 
 

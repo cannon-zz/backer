@@ -235,7 +235,7 @@ static int ring_is_empty(struct ring *ring)
  * Function prototypes
  */
 
-void *ring_alloc(struct ring *, size_t);
+struct ring *ring_new(void *, size_t);
 void ring_free(struct ring *);
 size_t memset_ring(struct ring *, ring_data_t, size_t);
 size_t memcpy_to_ring(struct ring *, void *, size_t);

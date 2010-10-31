@@ -256,7 +256,7 @@ static void transmit_control_byte(struct parport *port, unsigned char byte)
 static int flush(struct bkr_stream_t *stream)
 {
 	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
-	return(bkr_stream_fill_to(stream, private->capacity, BKR_FILLER) < 0 ? -EAGAIN : bytes_in_ring(stream->ring) ? -EAGAIN : 0);
+	return ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) ? -EAGAIN : 0;
 }
 
 

@@ -72,7 +72,6 @@ EXPORT_SYMBOL_GPL(bkr_unit_list_lock);
 EXPORT_SYMBOL_GPL(memset_ring);
 EXPORT_SYMBOL_GPL(bkr_simple_stream_read);
 EXPORT_SYMBOL_GPL(bkr_simple_stream_write);
-EXPORT_SYMBOL_GPL(bkr_stream_fill_to);
 
 
 /*

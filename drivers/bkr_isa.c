@@ -208,7 +208,7 @@ static void timer_tick(unsigned long data)
 static int flush(struct bkr_stream_t *stream)
 {
 	bkr_isa_private_t  *private = (bkr_isa_private_t *) stream->private;
-	return(bkr_stream_fill_to(stream, private->capacity, BKR_FILLER) < 0 ? -EAGAIN : bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0);
+	return ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0;
 }
 
 

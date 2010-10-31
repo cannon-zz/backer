@@ -49,9 +49,3 @@ int bkr_simple_stream_write(struct bkr_stream_t *stream)
 
 	return space ? space : -EAGAIN;
 }
-
-
-int bkr_stream_fill_to(struct bkr_stream_t *stream, int interval, unsigned char data)
-{
-	return ring_fill_to(stream->ring, interval, data) ? -EAGAIN : 0;
-}

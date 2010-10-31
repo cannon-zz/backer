@@ -136,24 +136,10 @@ static void _ring_fill(struct ring *ring, size_t n)
 	ring_offset_inc(ring, ring->head, n);
 }
 
-static void ring_fill(struct ring *ring, size_t n)
-{
-	ring_lock(ring);
-	_ring_fill(ring, n);
-	ring_unlock(ring);
-}
-
 
 static void _ring_drain(struct ring *ring, size_t n)
 {
 	ring_offset_inc(ring, ring->tail, n);
-}
-
-static void ring_drain(struct ring *ring, size_t n)
-{
-	ring_lock(ring);
-	_ring_drain(ring, n);
-	ring_unlock(ring);
 }
 
 
@@ -180,32 +166,10 @@ static int _ring_is_full(struct ring *ring)
 	return(ring_offset_add(ring, ring->head, 1) == ring->tail);
 }
 
-static int ring_is_full(struct ring *ring)
-{
-	int  result;
-
-	ring_lock(ring);
-	result = _ring_is_full(ring);
-	ring_unlock(ring);
-
-	return(result);
-}
-
 
 static int _ring_is_empty(struct ring *ring)
 {
 	return(ring->head == ring->tail);
-}
-
-static int ring_is_empty(struct ring *ring)
-{
-	int  result;
-
-	ring_lock(ring);
-	result = _ring_is_empty(ring);
-	ring_unlock(ring);
-
-	return(result);
 }
 
 

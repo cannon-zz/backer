@@ -191,15 +191,15 @@ static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, s
 
 	pos += sprintf(pos, "Current State   : ");
 	switch(stream->direction) {
-		case BKR_READING:
+	case BKR_READING:
 		pos += sprintf(pos, "READING");
 		break;
 
-		case BKR_WRITING:
+	case BKR_WRITING:
 		pos += sprintf(pos, "WRITING");
 		break;
 
-		case BKR_STOPPED:
+	case BKR_STOPPED:
 		pos += sprintf(pos, "STOPPED");
 		break;
 	}
@@ -475,17 +475,17 @@ static unsigned int poll(struct file *filp, struct poll_table_struct *wait)
 
 	ring_lock(stream->ring);
 	switch(stream->direction) {
-		case BKR_READING:
+	case BKR_READING:
 		if(bytes_in_ring(stream->ring))
 			status |= POLLIN | POLLRDNORM;
 		break;
 
-		case BKR_WRITING:
+	case BKR_WRITING:
 		if(space_in_ring(stream->ring))
 			status |= POLLOUT | POLLWRNORM;
 		break;
 
-		default:
+	default:
 		break;
 	}
 	ring_unlock(stream->ring);
@@ -515,18 +515,19 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 	} arg;
 
 	switch(op) {
-		case MTIOCTOP:
-		copy_from_user(&arg.mtop, p, sizeof(arg.mtop));
+	case MTIOCTOP:
+		if(copy_from_user(&arg.mtop, p, sizeof(arg.mtop)))
+			return(-EFAULT);
 		switch(arg.mtop.mt_op) {
-			case MTNOP:
-			case MTRESET:
+		case MTNOP:
+		case MTRESET:
 			return(0);
 
-			default:
+		default:
 			return(-EINVAL);
 		}
 
-		case MTIOCGET:
+	case MTIOCGET:
 		arg.mtget = (struct mtget) {
 			.mt_type = MT_ISUNKNOWN,
 #if 0
@@ -541,10 +542,11 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 			.mt_fileno = 0,
 			.mt_blkno = 0
 		};
-		copy_to_user(p, &arg.mtget, sizeof(arg.mtget));
+		if(copy_to_user(p, &arg.mtget, sizeof(arg.mtget)))
+			return(-EFAULT);
 		return(0);
 
-		default:
+	default:
 		return(-EINVAL);
 	}
 }

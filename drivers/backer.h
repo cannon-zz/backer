@@ -242,7 +242,7 @@ typedef struct {
 } bkr_format_info_t;
 
 
-#define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t [])                        \
+#define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t []) \
 { {  4, 1012,  4, 2028, 102 },     /* nle */ \
   {  4, 1012,  4, 2028,   0 },     /* nlr */ \
   {  4, 1012,  4, 2028,   0 },     /* nls */ \

@@ -182,7 +182,7 @@ static int screen_to_sector(int offset, const struct bkr_puts_format *format)
  * boundary prior to the right-hand side of the video image.  The actual
  * number of characters placed in the video image is returned or < 0 on
  * error.  Possible errors:  the sector format does not support bit-by-bit
- * data manipulation (it is a RLL-modulated mode).
+ * data manipulation (it is an RLL-modulated mode).
  *
  * Extra Info: The font is a fixed-space 5x14 font.  In low density modes
  * there is a maximum of 6 characters across the screen while in high
@@ -198,12 +198,12 @@ static int screen_to_sector(int offset, const struct bkr_puts_format *format)
  * the minimum transition requirements of the Backer hardware.  This text,
  * therefore, must not be placed in any video field that also contains data
  * that one wishes to eventually retrieve unless the text is placed AFTER
- * that data in the sector (thus lower on the screen).
+ * that data in the sector (lower on the screen).
  *
  * Before being written to tape, the data in the sector will pass through a
  * variety of formating and conditiong stages.  Among other things, this
- * involvse randomizing the data to help ensure a bit state transitions
- * occur frequently enough.  This means that your nice text message will be
+ * involves randomizing the data to help ensure bit state transitions occur
+ * frequently enough.  This means that your nice text message will be
  * scrambled.  The randomizer function is its own inverse, however, so if
  * you apply the randomizer to your rendered text frames before sending
  * them through the data formatter, the formatter will in effect
@@ -250,12 +250,12 @@ int bkr_puts(const char *s, unsigned char *sector, int line, int bit, const stru
 	 */
 
 	for(row = 4; row < 4+BKR_FONT_HEIGHT; screen_offset += bits_per_line, row++) {
-		sector_offset = screen_to_sector(screen_offset/8, format);
+		sector_offset = screen_to_sector(screen_offset / 8, format);
 		screen_mask = 0x80 >> (screen_offset & 0x7);
 		column = ascii_to_glyph(s[0]) * BKR_FONT_WIDTH + 1;
 		for(bit = 0; 1; bit++, column++, screen_mask >>= 1) {
 			if(screen_mask == 0) {	/* move to next screen byte? */
-				sector_offset = screen_to_sector((screen_offset + bit)/8, format);
+				sector_offset = screen_to_sector((screen_offset + bit) / 8, format);
 				screen_mask = 0x80;
 			}
 			if(bit % BKR_FONT_WIDTH == 0) {	/* move to next character? */

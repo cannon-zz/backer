@@ -43,50 +43,49 @@
  */
 
 
-static guint32 *draw_bit_h(guint32 *pos, guint32 colour)
-{
-	/* 4 pixels for a high density bit (draw all four by writing a
-	 * single 32-bit number to memory) */
-	*pos++ = colour;
-	return pos;
-}
-
-
-static guint32 *draw_bit_l(guint32 *pos, guint32 colour)
-{
-	/* 8 pixels for a low density bit */
-	return draw_bit_h(draw_bit_h(pos, colour), colour);
-}
-
-
-static guint32 *draw_byte(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, guint8 byte, guint32 colour)
+static guint32 *draw_byte_h(guint32 *pos, guint8 byte)
 {
 	int i;
 
 	for(i = 0x80; i; i >>= 1)
-		pos = pixel_func(pos, byte & i ? colour : 0);
+		/* 4 pixels for a high density bit (draw all four by
+		 * writing a single 32-bit number to memory) */
+		*pos++ = byte & i ? 0xffffffff : 0;
 
 	return pos;
 }
 
 
-static guint32 *draw_line(guint32 *(*pixel_func)(guint32 *, guint32), guint32 *pos, const guint8 *data, int n, guint32 colour)
+static guint32 *draw_byte_l(guint32 *pos, guint8 byte)
 {
-	pos = draw_byte(pixel_func, pos, 0x45, colour);
+	int i;
+	guint64 *posl = (guint64 *) pos;
+
+	for(i = 0x80; i; i >>= 1)
+		/* 8 pixels for a low density bit (draw all eight by
+		 * writing 64-bit numbers to memory) */
+		*posl++ = byte & i ? 0xffffffffffffffff  : 0;
+
+	return (guint32 *) posl;
+}
+
+
+static guint32 *draw_line(guint32 *(*byte_func)(guint32 *, guint8), guint32 *pos, const guint8 *data, int n)
+{
+	pos = byte_func(pos, 0x45);
 	while(n--)
-		pos = draw_byte(pixel_func, pos, *data++, colour);
+		pos = byte_func(pos, *data++);
 
 	return pos;
 }
 
 
-static void draw_field(guint32 *(*pixel_func)(guint32 *, guint32), guint8 *dest, gint bytes_per_line, gint lines, const guint8 *data)
+static void draw_field(guint32 *(*byte_func)(guint32 *, guint8), guint8 *dest, gint bytes_per_line, gint lines, const guint8 *data)
 {
 	guint32 *pos = (guint32 *) dest;
 
 	for(; lines--; data += bytes_per_line)
-		/* colour value is 4 pixels wide */
-		pos = draw_line(pixel_func, pos, data, bytes_per_line, 0xffffffff);
+		pos = draw_line(byte_func, pos, data, bytes_per_line);
 }
 
 
@@ -105,13 +104,13 @@ static struct bkr_video_out_format compute_format(enum bkr_videomode v, enum bkr
 	case BKR_LOW:
 		format.bytes_per_line = 4;
 		format.width = 8;	/* pixels / bit */
-		format.pixel_func = draw_bit_l;
+		format.byte_func = draw_byte_l;
 		break;
 
 	case BKR_HIGH:
 		format.bytes_per_line = 10;
 		format.width = 4;	/* pixels / bit */
-		format.pixel_func = draw_bit_h;
+		format.byte_func = draw_byte_h;
 		break;
 
 	default:
@@ -392,7 +391,7 @@ static GstFlowReturn transform(GstBaseTransform *trans, GstBuffer *inbuf, GstBuf
 		 */
 
 		lines = lines_in_next_field(element);
-		draw_field(element->format.pixel_func, GST_BUFFER_DATA(buf), element->format.bytes_per_line, lines, gst_adapter_peek(element->adapter, lines * element->format.bytes_per_line));
+		draw_field(element->format.byte_func, GST_BUFFER_DATA(buf), element->format.bytes_per_line, lines, gst_adapter_peek(element->adapter, lines * element->format.bytes_per_line));
 
 		/*
 		 * set the time stamp from the field number.  field number
@@ -435,7 +434,7 @@ static GstFlowReturn transform(GstBaseTransform *trans, GstBuffer *inbuf, GstBuf
 	 * generate video field
 	 */
 
-	draw_field(element->format.pixel_func, GST_BUFFER_DATA(outbuf), element->format.bytes_per_line, lines, gst_adapter_peek(element->adapter, lines * element->format.bytes_per_line));
+	draw_field(element->format.byte_func, GST_BUFFER_DATA(outbuf), element->format.bytes_per_line, lines, gst_adapter_peek(element->adapter, lines * element->format.bytes_per_line));
 
 	GST_BUFFER_OFFSET(outbuf) = element->field_number;
 

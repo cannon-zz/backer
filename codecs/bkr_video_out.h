@@ -52,7 +52,7 @@ typedef struct {
 		gint interlace;	/* how many extra lines in odd fields */
 		gint width;	/* frame width in pixels */
 		gint height;	/* frame height in lines not including interlace */
-		guint32 *(*pixel_func)(guint32 *, guint32);
+		guint32 *(*byte_func)(guint32 *, guint8);
 	} format;
 } BkrVideoOut;
 

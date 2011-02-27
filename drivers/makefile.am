@@ -8,9 +8,9 @@ install-exec-local : modules_install
 clean-local : modules_clean
 
 modules modules_install :
-	$(MAKE) -f Makefile.modules $@
+	$(MAKE) -f Makefile $@
 modules_clean:
-	$(MAKE) -f Makefile.modules clean
+	$(MAKE) -f Makefile clean
 
 
 #

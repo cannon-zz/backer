@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 
 #
 # enum values taken from backer.h
 #
+
 
 BKR_NTSC=1
 BKR_PAL=2
@@ -14,6 +15,7 @@ BKR_HIGH=8
 # defaults
 #
 
+
 DEFAULT_VIDEOMODE=${BKR_NTSC}
 DEFAULT_BITDENSITY=${BKR_HIGH}
 
@@ -22,21 +24,24 @@ DEFAULT_BITDENSITY=${BKR_HIGH}
 # parse command line
 #
 
-function usage() {
-	echo "Usage: bkrvideo [-Vn|-Vp] [-Dh|-Dl] [-v] < input"
+
+usage () {
+	echo "Usage: bkrvideo [-V {n|p}] [-D {h|l}] [-h] [-v] < input"
 }
+
 
 VIDEOMODE=${DEFAULT_VIDEOMODE}
 BITDENSITY=${DEFAULT_BITDENSITY}
 VERBOSE=""
 
-while getopts "D:V:v" OPT ; do
+
+while getopts "D:V:vh" OPT ; do
 	case "${OPT}" in
 	D)
 		case "${OPTARG}" in
-		l)
+		l*|L*)
 			BITDENSITY=${BKR_LOW} ;;
-		h)
+		h*|H*)
 			BITDENSITY=${BKR_HIGH} ;;
 		*)
 			echo "unrecognized bit density -D${OPTARG}"
@@ -45,9 +50,9 @@ while getopts "D:V:v" OPT ; do
 		esac ;;
 	V)
 		case "${OPTARG}" in
-		n)
+		n*|N*)
 			VIDEOMODE=${BKR_NTSC} ;;
-		p)
+		p*|P*)
 			VIDEOMODE=${BKR_PAL} ;;
 		*)
 			echo "unrecognized video mode -V${OPTARG}"
@@ -56,6 +61,9 @@ while getopts "D:V:v" OPT ; do
 		esac ;;
 	v)
 		VERBOSE="-v" ;;
+	h)
+		usage
+		exit 0 ;;
 	*)
 		echo "unrecognized option -${OPT}"
 		usage
@@ -72,10 +80,13 @@ done
 
 
 FAKEFORMAT="audio/x-raw-int,channels=1,width=8,depth=8"
+
+
 PIPELINE="fdsrc fd=0 ! $FAKEFORMAT "
 if [ "${VERBOSE}" == "-v" ] ; then
 	PIPELINE="${PIPELINE} ! progressreport name=Progress"
 fi
 PIPELINE="${PIPELINE} ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ffmpegcolorspace ! queue max-size-time=1000000000 ! autovideosink"
+
 
 gst-launch ${VERBOSE} ${PIPELINE}

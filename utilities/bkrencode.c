@@ -81,18 +81,12 @@ static void sigint_handler(int num)
  */
 
 
-enum direction {
-	ENCODING,
-	DECODING
-};
-
-
 struct options {
 	gboolean verbose;
 	gboolean time_only;
 	gboolean ignore_bad;
 	gboolean inject_noise;
-	enum direction direction;
+	gboolean decode;
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
 	enum bkr_sectorformat sectorformat;
@@ -106,7 +100,7 @@ static struct options default_options(void)
 		.time_only = FALSE,
 		.ignore_bad = FALSE,
 		.inject_noise = FALSE,
-		.direction = ENCODING,
+		.decode = FALSE,
 		.videomode = BKR_NTSC,
 		.bitdensity = BKR_HIGH,
 		.sectorformat = BKR_SP
@@ -120,7 +114,6 @@ static struct options parse_command_line(int *argc, char **argv[])
 {
 	struct options options = default_options();
 	gchar *bitdensity = NULL, *sectorformat = NULL, *videomode = NULL;
-	gboolean unencode = FALSE;
 	GOptionEntry entries[] = {
 		{"bit-density", 'D', 0, G_OPTION_ARG_STRING, &bitdensity, "Set the data rate to high or low", "{h,l}"},
 		{"sector-format", 'F', 0, G_OPTION_ARG_STRING, &sectorformat, "Set the data format to EP or SP/LP", "{e,s}"},
@@ -128,7 +121,7 @@ static struct options parse_command_line(int *argc, char **argv[])
 		{"skip-bad-sectors", 's', 0, G_OPTION_ARG_NONE, &options.ignore_bad, "Skip bad sectors", NULL},
 		{"inject-noise", 'n', 0, G_OPTION_ARG_NONE, &options.inject_noise, "Inject simulated tape noise (only during encode)", NULL},
 		{"time-only", 't', 0, G_OPTION_ARG_NONE, &options.time_only, "Compute time only (do not encode or decode data)", NULL},
-		{"unencode", 'u', 0, G_OPTION_ARG_NONE, &unencode, "Unencode tape data (default is to encode)", NULL},
+		{"unencode", 'u', 0, G_OPTION_ARG_NONE, &options.decode, "Unencode tape data (default is to encode)", NULL},
 		{"verbose", 'v', 0, G_OPTION_ARG_NONE, &options.verbose, "Be verbose", NULL},
 		{NULL}
 	};
@@ -147,8 +140,6 @@ static struct options parse_command_line(int *argc, char **argv[])
 
 	g_option_context_free(context);
 
-	if(unencode)
-		options.direction = DECODING;
 	if(bitdensity)
 		switch(tolower(bitdensity[0])) {
 		case 'h':
@@ -186,8 +177,7 @@ static struct options parse_command_line(int *argc, char **argv[])
 			exit(1);
 		}
 
-	/* validation */
-	if(options.inject_noise && (options.direction != ENCODING)) {
+	if(options.inject_noise && options.decode) {
 		fprintf(stderr, PROGRAM_NAME ": error: cannot inject noise when decoding\n");
 		exit(1);
 	}
@@ -362,7 +352,7 @@ int main(int argc, char *argv[])
 	gst_init(NULL, NULL);
 
 	if(options.verbose) {
-		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", (options.direction == DECODING) ? "DECODING" : "ENCODING");
+		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", options.decode ? "DECODING" : "ENCODING");
 		bkr_display_mode(stderr, options.videomode, options.bitdensity, options.sectorformat);
 	}
 
@@ -373,10 +363,10 @@ int main(int argc, char *argv[])
 
 
 	loop = g_main_loop_new(NULL, FALSE);
-	if(options.direction == ENCODING)
-		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat, options.inject_noise);
-	else
+	if(options.decode)
 		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
+	else
+		pipeline = encoder_pipeline(options.videomode, options.bitdensity, options.sectorformat, options.inject_noise);
 	if(!pipeline) {
 		fprintf(stderr, PROGRAM_NAME ": failure building pipeline.\n");
 		exit(1);
@@ -391,7 +381,7 @@ int main(int argc, char *argv[])
 	 */
 
 
-	if(options.direction == ENCODING) {
+	if(!options.decode) {
 		gst_object_ref(pipeline);
 		sigint_data.pipeline = pipeline;
 		signal(SIGINT, sigint_handler);

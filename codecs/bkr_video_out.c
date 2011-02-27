@@ -479,6 +479,7 @@ static void set_property(GObject *object, enum property id, const GValue *value,
 	BkrVideoOut *element = BKR_VIDEO_OUT(object);
 	enum bkr_videomode videomode = element->videomode;
 	enum bkr_bitdensity bitdensity = element->bitdensity;
+	gboolean reconfigure = FALSE;
 
 	GST_OBJECT_LOCK(object);
 
@@ -500,11 +501,18 @@ static void set_property(GObject *object, enum property id, const GValue *value,
 		element->videomode = videomode;
 		element->bitdensity = bitdensity;
 		element->format = compute_format(videomode, bitdensity);
-		/* force caps negotiation */
-		gst_base_transform_reconfigure(GST_BASE_TRANSFORM(object));
+		reconfigure = TRUE;
 	}
 
 	GST_OBJECT_UNLOCK(object);
+
+	/*
+	 * force caps negotiation.  can't call function with object lock
+	 * held
+	 */
+
+	if(reconfigure)
+		gst_base_transform_reconfigure(GST_BASE_TRANSFORM(object));
 }
 
 

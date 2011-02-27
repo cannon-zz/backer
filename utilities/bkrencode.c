@@ -64,9 +64,7 @@ static struct {
 static void sigint_handler(int num)
 {
 	signal(SIGINT, SIG_IGN);
-	GST_OBJECT_LOCK(sigint_data.pipeline);
 	gst_element_send_event(sigint_data.pipeline, gst_event_new_eos());
-	GST_OBJECT_UNLOCK(sigint_data.pipeline);
 	gst_object_unref(sigint_data.pipeline);
 	sigint_data.pipeline = NULL;
 }

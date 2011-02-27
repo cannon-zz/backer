@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TESTFILE="/home/kipp/Documents/Discs/Movies/BBC - Israel Secret Weapon.avi"
+TESTFILE="/home/multimedia/To Burn/Movies/BBC - Israel Secret Weapon.avi"
 
 function test1() {
 	"du" -b "${TESTFILE}"

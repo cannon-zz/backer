@@ -177,10 +177,8 @@ static struct options parse_command_line(int *argc, char **argv[])
 			exit(1);
 		}
 
-	if(options.inject_noise && options.decode) {
-		fprintf(stderr, PROGRAM_NAME ": error: cannot inject noise when decoding\n");
-		exit(1);
-	}
+	if(options.inject_noise && options.decode)
+		fprintf(stderr, PROGRAM_NAME ": warning: ignoring --inject-noise\n");
 
 	return options;
 }

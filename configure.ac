@@ -13,6 +13,7 @@ AC_CONFIG_FILES([ \
 	docs/bkrmonitor.8 \
 	docs/Makefile \
 	drivers/Makefile \
+	drivers/Makefile.modules \
 	utilities/Makefile \
 ])
 

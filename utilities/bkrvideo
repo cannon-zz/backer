@@ -44,7 +44,7 @@ while getopts "D:V:vh" OPT ; do
 		h*|H*)
 			BITDENSITY=${BKR_HIGH} ;;
 		*)
-			echo "unrecognized bit density -D${OPTARG}"
+			echo "bkrvideo: error: unrecognized bit density -D${OPTARG}"
 			usage
 			exit 1 ;;
 		esac ;;
@@ -55,7 +55,7 @@ while getopts "D:V:vh" OPT ; do
 		p*|P*)
 			VIDEOMODE=${BKR_PAL} ;;
 		*)
-			echo "unrecognized video mode -V${OPTARG}"
+			echo "bkrvideo: error: unrecognized video mode -V${OPTARG}"
 			usage
 			exit 1 ;;
 		esac ;;
@@ -65,7 +65,7 @@ while getopts "D:V:vh" OPT ; do
 		usage
 		exit 0 ;;
 	*)
-		echo "unrecognized option -${OPT}"
+		echo "bkrvideo: error: unrecognized option -${OPT}"
 		usage
 		exit 1 ;;
 	esac
@@ -83,8 +83,8 @@ FAKEFORMAT="audio/x-raw-int,channels=1,width=8,depth=8"
 
 
 PIPELINE="fdsrc fd=0 ! $FAKEFORMAT "
-if [ "${VERBOSE}" == "-v" ] ; then
-	PIPELINE="${PIPELINE} ! progressreport name=Progress"
+if [ "${VERBOSE}" = "-v" ] ; then
+	PIPELINE="${PIPELINE} ! progressreport name=bkrvideo"
 fi
 PIPELINE="${PIPELINE} ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ffmpegcolorspace ! queue max-size-time=1000000000 ! autovideosink"
 

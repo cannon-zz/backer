@@ -90,12 +90,10 @@ enum direction {
 
 
 struct options {
-	int verbose;
-	int time_only;
-	int ignore_bad;
-	int dump_status;
-	int dump_status_async;
-	int inject_noise;
+	gboolean verbose;
+	gboolean time_only;
+	gboolean ignore_bad;
+	gboolean inject_noise;
 	enum direction direction;
 	enum bkr_videomode videomode;
 	enum bkr_bitdensity bitdensity;
@@ -106,12 +104,10 @@ struct options {
 static struct options default_options(void)
 {
 	struct options defaults = {
-		.verbose = 0,
-		.time_only = 0,
-		.ignore_bad = 0,
-		.dump_status = 0,
-		.dump_status_async = 1,
-		.inject_noise = 0,
+		.verbose = FALSE,
+		.time_only = FALSE,
+		.ignore_bad = FALSE,
+		.inject_noise = FALSE,
 		.direction = ENCODING,
 		.videomode = BKR_NTSC,
 		.bitdensity = BKR_HIGH,
@@ -122,101 +118,41 @@ static struct options default_options(void)
 }
 
 
-static void usage(void)
-{
-	fputs(
-	"Backer tape data encoder/unencoder.\n" \
-	"Usage: " PROGRAM_NAME " [options...]\n" \
-	"The following options are recognized:\n" \
-	"	--bit-density {h,l}\n" \
-	"	-D{h,l}  Set the data rate to high or low\n" \
-	"\n" \
-	"	--sector-format {e,s}\n" \
-	"	-F{e,s}  Set the data format to EP or SP/LP\n" \
-	"\n" \
-	"	--video-mode {n,p}\n" \
-	"	-V{n,p}  Set the video mode to NTSC or PAL\n" \
-	"\n" \
-	"	--dump-status [s]\n" \
-	"	-d[s]    Dump status info to stderr [synchronously]\n" \
-	"\n" \
-	"	--help\n" \
-	"	-h       Display this usage message\n" \
-	"\n" \
-	"	--skip-bad-sectors\n" \
-	"	-s       Skip bad sectors\n" \
-	"\n" \
-	"	--inject-noise\n" \
-	"	-n       Inject simulated tape noise (only during encode)\n" \
-	"\n" \
-	"	--time-only\n" \
-	"	-t       Compute time only (do not encode or decode data)\n" \
-	"\n" \
-	"	--unencode\n" \
-	"	-u       Unencode tape data (default is to encode)\n" \
-	"\n" \
-	"	--verbose\n" \
-	"	-v       Be verbose\n", stderr);
-}
-
-
 static struct options parse_command_line(int *argc, char **argv[])
 {
 	struct options options = default_options();
-	struct option long_options[] = {
-		{"bit-density",	required_argument,	NULL,	'D'},
-		{"dump-status",	optional_argument,	NULL,	'd'},
-		{"sector-format",	required_argument,	NULL,	'F'},
-		{"help",	no_argument,	NULL,	'h'},
-		{"skip-bad-sectors",	no_argument,	NULL,	's'},
-		{"inject-noise",	no_argument,	NULL,	'n'},
-		{"time-only",	no_argument,	NULL,	't'},
-		{"unencode",	no_argument,	NULL,	'u'},
-		{"video-mode",	required_argument,	NULL,	'V'},
-		{"verbose",	no_argument,	NULL,	'v'},
-		{NULL,	0,	NULL,	0}
+	gchar *bitdensity = NULL, *sectorformat = NULL, *videomode = NULL;
+	gboolean unencode = FALSE;
+	GOptionEntry entries[] = {
+		{"bit-density", 'D', 0, G_OPTION_ARG_STRING, &bitdensity, "Set the data rate to high or low", "{h,l}"},
+		{"sector-format", 'F', 0, G_OPTION_ARG_STRING, &sectorformat, "Set the data format to EP or SP/LP", "{e,s}"},
+		{"video-mode", 'V', 0, G_OPTION_ARG_STRING, &videomode, "Set the video mode to NTSC or PAL", "{n,p}"},
+		{"skip-bad-sectors", 's', 0, G_OPTION_ARG_NONE, &options.ignore_bad, "Skip bad sectors", NULL},
+		{"inject-noise", 'n', 0, G_OPTION_ARG_NONE, &options.inject_noise, "Inject simulated tape noise (only during encode)", NULL},
+		{"time-only", 't', 0, G_OPTION_ARG_NONE, &options.time_only, "Compute time only (do not encode or decode data)", NULL},
+		{"unencode", 'u', 0, G_OPTION_ARG_NONE, &unencode, "Unencode tape data (default is to encode)", NULL},
+		{"verbose", 'v', 0, G_OPTION_ARG_NONE, &options.verbose, "Be verbose", NULL},
+		{NULL}
 	};
-	int c, index;
+	GError *error = NULL;
+	GOptionContext *context;
 
-	opterr = 1;	/* enable error messages */
-	do switch(c = getopt_long(*argc, *argv, "D:d::F:hstuV:v", long_options, &index)) {
-	case 'd':
-		options.dump_status = 1;
-		if(optarg) {
-			if(tolower(optarg[0]) != 's') {
-				usage();
-				exit(1);
-			}
-			options.dump_status_async = 0;
-		}
-		break;
+	context = g_option_context_new("- Backer tape data encoder/unencoder");
 
-	case 'h':
-		usage();
+	g_option_context_add_main_entries(context, entries, NULL);
+	g_option_context_add_group(context, gst_init_get_option_group());
+
+	if(!g_option_context_parse(context, argc, argv, &error)) {
+		fprintf(stderr, PROGRAM_NAME ": error: %s\n", error->message);
 		exit(1);
+	}
 
-	case 'n':
-		options.inject_noise = 1;
-		break;
+	g_option_context_free(context);
 
-	case 's':
-		options.ignore_bad = 1;
-		break;
-
-	case 't':
-		options.time_only = 1;
-		break;
-
-	case 'u':
+	if(unencode)
 		options.direction = DECODING;
-		break;
-
-	case 'v':
-		options.verbose = 1;
-		break;
-
-	case 'D':
-		switch(tolower(optarg[0])) {
+	if(bitdensity)
+		switch(tolower(bitdensity[0])) {
 		case 'h':
 			options.bitdensity = BKR_HIGH;
 			break;
@@ -224,13 +160,11 @@ static struct options parse_command_line(int *argc, char **argv[])
 			options.bitdensity = BKR_LOW;
 			break;
 		default:
-			usage();
+			fprintf(stderr, PROGRAM_NAME ": error: Unknown bit density %s\n", bitdensity);
 			exit(1);
 		}
-		break;
-
-	case 'F':
-		switch(tolower(optarg[0])) {
+	if(sectorformat)
+		switch(tolower(sectorformat[0])) {
 		case 'e':
 			options.sectorformat = BKR_EP;
 			break;
@@ -238,13 +172,11 @@ static struct options parse_command_line(int *argc, char **argv[])
 			options.sectorformat = BKR_SP;
 			break;
 		default:
-			usage();
+			fprintf(stderr, PROGRAM_NAME ": error: Unknown sector format %s\n", sectorformat);
 			exit(1);
 		}
-		break;
-
-	case 'V':
-		switch(tolower(optarg[0])) {
+	if(videomode)
+		switch(tolower(videomode[0])) {
 		case 'n':
 			options.videomode = BKR_NTSC;
 			break;
@@ -252,46 +184,13 @@ static struct options parse_command_line(int *argc, char **argv[])
 			options.videomode = BKR_PAL;
 			break;
 		default:
-			usage();
+			fprintf(stderr, PROGRAM_NAME ": error: Unknown video mode %s\n", videomode);
 			exit(1);
 		}
-		break;
-
-	case 0:
-		/* option sets a flag */
-		break;
-
-	case -1:
-		/* end of arguments */
-		break;
-
-	case '?':
-		/* unrecognized option */
-		usage();
-		exit(1);
-
-	case ':':
-		/* missing argument for an option */
-		usage();
-		exit(1);
-
-	default:
-		/* FIXME: print bug warning */
-		break;
-	} while(c != -1);
-
-	if(options.dump_status)
-		/* verbosity interferes with status parsing */
-		options.verbose = 0;
-
-	/* remove parsed arguments */
-	*argc -= optind;
-	*argv += optind;
 
 	/* validation */
 	if(options.inject_noise && (options.direction != ENCODING)) {
-		fprintf(stderr, "%s: error: cannot inject noise when decoding\n\n", PROGRAM_NAME);
-		usage();
+		fprintf(stderr, PROGRAM_NAME ": error: cannot inject noise when decoding\n");
 		exit(1);
 	}
 
@@ -324,7 +223,7 @@ static gboolean message_handler(GstBus *bus, GstMessage *msg, gpointer data)
 		gst_message_parse_error(msg, &err, &debug);
 		g_free(debug);
 
-		fprintf(stderr, "%s: error: %s\n", PROGRAM_NAME, err->message);
+		fprintf(stderr, PROGRAM_NAME ": error: %s\n", err->message);
 		g_error_free(err);
 
 		g_main_loop_quit(loop);
@@ -459,13 +358,10 @@ int main(int argc, char *argv[])
 	 */
 
 
-	/* FIXME: gst_init() intercepts --help, how do I get my own usage
-	 * message displayed? */
-	gst_init(&argc, &argv);
+	if(!g_thread_supported())
+		g_thread_init(NULL);
 	options = parse_command_line(&argc, &argv);
-
-	if(options.dump_status && options.dump_status_async)
-		fcntl(STDERR_FILENO, F_SETFL, O_NONBLOCK);
+	gst_init(NULL, NULL);
 
 	if(options.verbose) {
 		fprintf(stderr, PROGRAM_NAME ": %s tape format selected:\n", (options.direction == DECODING) ? "DECODING" : "ENCODING");
@@ -484,7 +380,7 @@ int main(int argc, char *argv[])
 	else
 		pipeline = decoder_pipeline(options.videomode, options.bitdensity, options.sectorformat);
 	if(!pipeline) {
-		fprintf(stderr, "%s: failure building pipeline.\n", PROGRAM_NAME);
+		fprintf(stderr, PROGRAM_NAME ": failure building pipeline.\n");
 		exit(1);
 	}
 	bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));

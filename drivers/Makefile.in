@@ -1,8 +1,11 @@
 @SET_MAKE@
 
-# This is two Makefiles in one.  This stuff right here is a 2.6.x kernel
-# module Makefile with the information needed to get the kernel build
-# system to compile these modules.
+
+#
+# this stuff is a 2.6.x kernel module Makefile with the information needed
+# to get the kernel build system to compile these modules.
+#
+
 
 EXTRA_CFLAGS := -Wno-unused-function -I$(src) -I$(src)/../codecs -DBKR_VERSION=\"3.103\" -DBKR_MAJOR=60
 
@@ -13,15 +16,3 @@ backer-objs := bkr_main.o bkr_ring_buffer.o
 backer_isa-objs := bkr_isa.o bkr_ring_buffer.o
 
 backer_parport-objs := bkr_parport.o bkr_ring_buffer.o
-
-
-# The stuff inside the ifeq() is the non-kernel part of the Makefile,
-# except for modules, modules_install clean which are used to initiate the
-# kernel build system for those targets.
-
-ifeq ($(KERNELRELEASE),)
-
-modules modules_install clean :
-	$(MAKE) -C @LINUX_KERNEL_SOURCE@ SUBDIRS=$(CURDIR) $@
-
-endif	# $(KERNELRELEASE)

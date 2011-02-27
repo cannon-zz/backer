@@ -1,5 +1,5 @@
 #
-# chain some targets into the kernel modules Makefile.modules
+# chain some targets into the kernel modules Makefile
 #
 
 
@@ -8,9 +8,9 @@ install-exec-local : modules_install
 clean-local : modules_clean
 
 modules modules_install :
-	$(MAKE) -f Makefile $@
+	$(MAKE) -C @LINUX_KERNEL_SOURCE@ M=$(CURDIR) $@
 modules_clean:
-	$(MAKE) -f Makefile clean
+	$(MAKE) -C @LINUX_KERNEL_SOURCE@ M=$(CURDIR) clean
 
 
 #

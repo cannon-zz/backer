@@ -45,7 +45,7 @@
 
 static guint32 *draw_byte_h(guint32 *pos, guint8 byte)
 {
-	int i;
+	guint8 i;
 
 	for(i = 0x80; i; i >>= 1)
 		/* 4 pixels for a high density bit (draw all four by
@@ -58,7 +58,7 @@ static guint32 *draw_byte_h(guint32 *pos, guint8 byte)
 
 static guint32 *draw_byte_l(guint32 *pos, guint8 byte)
 {
-	int i;
+	guint8 i;
 	guint64 *posl = (guint64 *) pos;
 
 	for(i = 0x80; i; i >>= 1)

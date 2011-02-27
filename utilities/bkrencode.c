@@ -373,7 +373,8 @@ int main(int argc, char *argv[])
 
 
 	/*
-	 * Trap SIGINT when encoding to generate clean EOS marker
+	 * Trap SIGINT when encoding to generate clean EOS marker when
+	 * CTRL-C is pressed
 	 */
 
 

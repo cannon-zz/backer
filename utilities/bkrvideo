@@ -39,6 +39,7 @@ while getopts "D:V:v" OPT ; do
 		h)
 			BITDENSITY=${BKR_HIGH} ;;
 		*)
+			echo "unrecognized bit density -D${OPTARG}"
 			usage
 			exit 1 ;;
 		esac ;;
@@ -49,12 +50,14 @@ while getopts "D:V:v" OPT ; do
 		p)
 			VIDEOMODE=${BKR_PAL} ;;
 		*)
+			echo "unrecognized video mode -V${OPTARG}"
 			usage
 			exit 1 ;;
 		esac ;;
 	v)
 		VERBOSE="-v" ;;
 	*)
+		echo "unrecognized option -${OPT}"
 		usage
 		exit 1 ;;
 	esac
@@ -62,15 +65,17 @@ done
 
 
 #
-# construct and run pipeline
+# construct and run pipeline.  the fake data format is a hack to force a
+# specific format to get negotiated upstream of bkr_video_out, otherwise
+# the base class gets confused.
 #
 
-PIPELINE="fdsrc fd=0 ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ffmpegcolorspace ! ximagesink"
 
+FAKEFORMAT="audio/x-raw-int,channels=1,width=8,depth=8"
+PIPELINE="fdsrc fd=0 ! $FAKEFORMAT "
 if [ "${VERBOSE}" == "-v" ] ; then
-	echo "Pipeline:  ${PIPELINE}"
+	PIPELINE="${PIPELINE} ! progressreport name=Progress"
 fi
+PIPELINE="${PIPELINE} ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ffmpegcolorspace ! queue max-size-time=1000000000 ! autovideosink"
 
-#DEBUGFLAGS="--gst-debug-level=4"
-
-gst-launch ${DEBUGFLAGS} ${VERBOSE} ${PIPELINE}
+gst-launch ${VERBOSE} ${PIPELINE}

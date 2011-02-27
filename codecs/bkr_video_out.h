@@ -8,6 +8,7 @@
 
 #include <gst/gst.h>
 #include <gst/base/gstadapter.h>
+#include <gst/base/gstbasetransform.h>
 #include <backer.h>
 
 
@@ -22,18 +23,14 @@ G_BEGIN_DECLS
 
 
 typedef struct {
-	GstElementClass parent_class;
+	GstBaseTransformClass parent_class;
 } BkrVideoOutClass;
 
 
 typedef struct {
-	GstElement element;
+	GstBaseTransform parent;
 
-	GstPad *srcpad;
 	GstAdapter *adapter;
-
-	enum bkr_videomode videomode;
-	enum bkr_bitdensity bitdensity;
 
 	/*
 	 * next field number (first field is number 1, an odd field)
@@ -43,16 +40,18 @@ typedef struct {
 
 	/*
 	 * Format information.
-	 * 	width = count of pixels across each line
-	 * 	height = count of lines in even field
-	 * 	interlace = count of lines to add for odd field
 	 */
 
+	enum bkr_videomode videomode;
+	enum bkr_bitdensity bitdensity;
+
 	struct bkr_video_out_format {
-		gint bytes_per_line;
-		gint interlace;
-		gint width;
-		gint height;
+		gint gst_seconds_per_field_a;	/* numerator of GST_SECOND / (fields/second) */
+		gint gst_seconds_per_field_b;	/* denominator of GST_SECOND / (fields/second) */
+		gint bytes_per_line;	/* data consumed per video line */
+		gint interlace;	/* how many extra lines in odd fields */
+		gint width;	/* frame width in pixels */
+		gint height;	/* frame height in lines not including interlace */
 		guint32 *(*pixel_func)(guint32 *, guint32);
 	} format;
 } BkrVideoOut;

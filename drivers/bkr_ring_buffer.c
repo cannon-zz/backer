@@ -89,7 +89,7 @@ size_t memset_ring(struct ring *dst, ring_data_t val, size_t n)
 		dst->head += n;
 	}
 
-	return(n);
+	return n;
 }
 
 
@@ -113,7 +113,7 @@ size_t memcpy_to_ring(struct ring *dst, void *src, size_t n)
 		dst->head += n;
 	}
 
-	return(n);
+	return n;
 }
 
 size_t memcpy_from_ring(void *dst, struct ring *src, size_t n)
@@ -129,7 +129,7 @@ size_t memcpy_from_ring(void *dst, struct ring *src, size_t n)
 		src->tail += n;
 	}
 
-	return(n);
+	return n;
 }
 
 
@@ -152,7 +152,7 @@ size_t memcpy_to_ring_from_ring(struct ring *dst, struct ring *src, size_t n)
 		dst->head += n;
 	}
 
-	return(n);
+	return n;
 }
 
 
@@ -174,7 +174,7 @@ size_t copy_to_user_from_ring(char *dst, struct ring *src, size_t n)
 		src->tail += n;
 	}
 
-	return(n);
+	return n;
 }
 
 
@@ -191,7 +191,7 @@ size_t copy_to_ring_from_user(struct ring *dst, const char *src, size_t n)
 		dst->head += n;
 	}
 
-	return(n);
+	return n;
 }
 
 

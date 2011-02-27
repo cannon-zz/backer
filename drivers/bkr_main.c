@@ -152,12 +152,12 @@ static int __init bkr_init(void)
 	result = register_chrdev(BKR_MAJOR, MODULE_NAME, &file_ops[BKR_STOPPED]);
 	if(result < 0) {
 		WPRINTK("can't register device\n");
-		return(result);
+		return result;
 	}
 
 	init_MUTEX(&bkr_unit_list_lock);
 	request_module("backer_lowlevel");
-	return(0);
+	return 0;
 }
 
 static void __exit bkr_exit(void)
@@ -186,7 +186,7 @@ static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, s
 
 	if(!stream) {
 		*len = 0;
-		return(0);
+		return 0;
 	}
 
 	pos += sprintf(pos, "Current State   : ");
@@ -214,7 +214,7 @@ static int bkr_do_status(struct ctl_table *table, int write, void __user *buf, s
 	if(pos - message < *len)
 		*len = pos - message;
 
-	return(copy_to_user(buf, message, *len) ? -EFAULT : 0);
+	return copy_to_user(buf, message, *len) ? -EFAULT : 0;
 }
 
 
@@ -241,7 +241,7 @@ static int bkr_unit_claim(struct bkr_unit_t *unit)
 	}
 	up(&bkr_unit_list_lock);
 
-	return(result);
+	return result;
 }
 
 static void bkr_unit_release(struct bkr_unit_t *unit)
@@ -339,7 +339,7 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *stream)
 	 * Success.
 	 */
 
-	return(unit);
+	return unit;
 
 	/*
 	 * There was a problem.
@@ -349,7 +349,7 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *stream)
 		kfree(unit);
 	no_mem:
 		WPRINTK("no memory creating unit descriptor\n");
-		return(NULL);
+		return NULL;
 }
 
 
@@ -405,25 +405,25 @@ static int open(struct inode *inode, struct file *filp)
 	}
 	up(&bkr_unit_list_lock);
 	if(!unit || unit->number != number)
-		return(-ENODEV);
+		return -ENODEV;
 
 	filp->private_data = unit;
 
 	result = bkr_unit_claim(unit);
 	if(result < 0)
-		return(result);
+		return result;
 
 	/* FIXME: lock format table during copy */
 	if(!unit->stream->ops.ready(unit->stream, mode, &unit->format_tbl[bkr_mode_to_format(mode)])) {
 		bkr_unit_release(unit);
-		return(-EBUSY);
+		return -EBUSY;
 	}
 
 	unit->last_error = 0;
 	bkr_stream_set_callback(unit->stream, io_callback, &unit->queue);
 	nonseekable_open(inode, filp);
 
-	return(0);
+	return 0;
 }
 
 
@@ -457,7 +457,7 @@ static int release(struct inode *inode, struct file *filp)
 
 	bkr_unit_release(unit);
 
-	return(0);
+	return 0;
 }
 
 
@@ -493,7 +493,7 @@ static unsigned int poll(struct file *filp, struct poll_table_struct *wait)
 	if(unit->last_error)
 		status |= POLLERR;
 
-	return(status);
+	return status;
 }
 
 
@@ -517,14 +517,14 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 	switch(op) {
 	case MTIOCTOP:
 		if(copy_from_user(&arg.mtop, p, sizeof(arg.mtop)))
-			return(-EFAULT);
+			return -EFAULT;
 		switch(arg.mtop.mt_op) {
 		case MTNOP:
 		case MTRESET:
-			return(0);
+			return 0;
 
 		default:
-			return(-EINVAL);
+			return -EINVAL;
 		}
 
 	case MTIOCGET:
@@ -543,11 +543,11 @@ static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsign
 			.mt_blkno = 0
 		};
 		if(copy_to_user(p, &arg.mtget, sizeof(arg.mtget)))
-			return(-EFAULT);
-		return(0);
+			return -EFAULT;
+		return 0;
 
 	default:
-		return(-EINVAL);
+		return -EINVAL;
 	}
 }
 
@@ -568,7 +568,7 @@ static ssize_t start_read(struct file *filp, char *buff, size_t count, loff_t *p
 		result = filp->f_op->read(filp, buff, count, posp);
 	}
 
-	return(result);
+	return result;
 }
 
 static ssize_t start_write(struct file *filp, const char *buff, size_t count, loff_t *posp)
@@ -582,7 +582,7 @@ static ssize_t start_write(struct file *filp, const char *buff, size_t count, lo
 		result = filp->f_op->write(filp, buff, count, posp);
 	}
 
-	return(result);
+	return result;
 }
 
 
@@ -661,7 +661,7 @@ static ssize_t read(struct file *filp, char *buff, size_t count, loff_t *posp)
 		break;
 	}
 
-	return(result);
+	return result;
 }
 
 
@@ -734,5 +734,5 @@ static ssize_t write(struct file *filp, const char *buff, size_t count, loff_t *
 		break;
 	}
 
-	return(result);
+	return result;
 }

@@ -269,7 +269,7 @@ static int flush(struct bkr_stream_t *stream)
 /* FIXME: should we bother worrying about this? */
 static int check_for_timeout(bkr_parport_private_t *private)
 {
-	return(time_after(jiffies, private->last_io + BKR_PARPORT_TIMEOUT));
+	return time_after(jiffies, private->last_io + BKR_PARPORT_TIMEOUT);
 }
 
 
@@ -293,7 +293,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 	 */
 
 	if(parport_claim(private->dev))
-		return(-EBUSY);
+		return -EBUSY;
 	port->ops->init_state(private->dev, &private->state);
 	port->ops->save_state(port, &private->state);
 	transmit_control_byte(port, 0);
@@ -342,7 +342,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 	 */
 
 	private->last_io = jiffies;
-	return(0);
+	return 0;
 }
 
 
@@ -356,7 +356,7 @@ static int release(struct bkr_stream_t *stream)
 		if(stream->direction == BKR_WRITING) {
 			result = flush(stream);
 			if(result < 0)
-				return(result);
+				return result;
 		}
 
 		/* to stop irq handler from doing things */
@@ -370,7 +370,7 @@ static int release(struct bkr_stream_t *stream)
 		parport_release(private->dev);
 		private->dev->irq_func = bkr_parport_first_irq;
 	}
-	return(0);
+	return 0;
 }
 
 
@@ -576,19 +576,19 @@ static int __init bkr_parport_init(void)
 {
 	if(*units == '\0') {
 		printk(KERN_INFO MODULE_NAME ": no parallel ports specified!\n");
-		return(-ENODEV);
+		return -ENODEV;
 	}
 
 	detach_queue = create_singlethread_workqueue("bkrdetach");
 	if(!detach_queue)
-		return(-ENODEV);
+		return -ENODEV;
 
 	if(parport_register_driver(&bkr_parport_driver) < 0) {
 		destroy_workqueue(detach_queue);
-		return(-ENODEV);
+		return -ENODEV;
 	}
 
-	return(0);
+	return 0;
 }
 
 static void __exit bkr_parport_exit(void)

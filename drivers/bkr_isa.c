@@ -133,9 +133,9 @@ typedef struct {
 static inline int get_dma_dreq(unsigned int dmanr)
 {
 	if(dmanr <= 3)
-		return((dma_inb(DMA1_STAT_REG) >> (dmanr + 4)) & 1);
+		return (dma_inb(DMA1_STAT_REG) >> (dmanr + 4)) & 1;
 	else
-		return((dma_inb(DMA2_STAT_REG) >> dmanr) & 1);
+		return (dma_inb(DMA2_STAT_REG) >> dmanr) & 1;
 }
 
 
@@ -160,7 +160,7 @@ static size_t get_dma_offset(struct bkr_stream_t *stream)
 	residue = get_dma_residue(dma);
 	release_dma_lock(flags);
 
-	return(ring_offset_sub(stream->ring, stream->ring->size - residue, DMA_HOLD_OFF));
+	return ring_offset_sub(stream->ring, stream->ring->size - residue, DMA_HOLD_OFF);
 }
 
 
@@ -238,7 +238,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 	 */
 
 	if(request_dma(private->dma, bkr_isa_resource_name) < 0)
-		return(-EBUSY);
+		return -EBUSY;
 
 	stream->direction = direction;
 
@@ -281,7 +281,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 	private->timer.data = (unsigned long) stream;
 	timer_tick((unsigned long) stream);
 
-	return(0);
+	return 0;
 }
 
 
@@ -294,7 +294,7 @@ static int release(struct bkr_stream_t *stream)
 		if(stream->direction == BKR_WRITING) {
 			result = flush(stream);
 			if(result < 0)
-				return(result);
+				return result;
 		}
 
 		outb(0, private->ioresource.start);
@@ -304,7 +304,7 @@ static int release(struct bkr_stream_t *stream)
 		/* resize buffer after we know nobody else is listening */
 		stream->ring->size = DMA_BUFFER_SIZE;
 	}
-	return(0);
+	return 0;
 }
 
 
@@ -368,7 +368,7 @@ static bkr_isa_private_t __init *isa_alloc_private(int ioport)
 			private = NULL;
 		}
 	}
-	return(private);
+	return private;
 }
 
 static void isa_free_private(bkr_isa_private_t *private)
@@ -431,7 +431,7 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 		printk(", adjusted %+d µs", private->adjust);
 	printk("\n");
 
-	return(unit);
+	return unit;
 
 	no_unit:
 		up(&bkr_unit_list_lock);
@@ -441,7 +441,7 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 	no_stream:
 		kfree(stream);
 		printk(KERN_INFO MODULE_NAME ": %s\n", err_msg);
-		return(NULL);
+		return NULL;
 }
 
 
@@ -480,7 +480,7 @@ static int __init bkr_isa_init(void)
 			units++;
 	}
 	if(count)
-		return(0);
+		return 0;
 
 	/*
 	 * Grab and disable DMA channels
@@ -548,9 +548,9 @@ static int __init bkr_isa_init(void)
 		free_dma(dma[i]);
 
 	if(count)
-		return(0);
+		return 0;
 	printk(KERN_INFO MODULE_NAME ": no devices found.\n");
-	return(-ENODEV);
+	return -ENODEV;
 }
 
 

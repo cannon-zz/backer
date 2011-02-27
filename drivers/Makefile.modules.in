@@ -24,48 +24,4 @@ ifeq ($(KERNELRELEASE),)
 modules modules_install clean :
 	$(MAKE) -C @LINUX_KERNEL_SOURCE@ SUBDIRS=$(CURDIR) $@
 
-prefix = @prefix@
-exec_prefx = @exec_prefix@
-mandir = @mandir@
-modulesdir = @MODULES_DIR@/misc
-DESTDIR =
-
-DEVNAMES = nh nl ph pl
-
-TARGETS = $(obj-m:%.o=%.ko)
-MANPAGES = $(obj-m:%.o=%.4)
-
-all : modules
-
-install : modules_install
-	@INSTALL@ -d -m 0755 $(DESTDIR)$(mandir)/man4 && @INSTALL@ -m 0644 $(MANPAGES:%=DOCUMENTATION/%) $(DESTDIR)$(mandir)/man4 && @GZIP@ $(MANPAGES:%=$(DESTDIR)$(mandir)/man4/%)
-	@echo -e "Done.\n"
-
-install-devs :
-	for unit in 0 1 2 ; do \
-	   if [ -d $(DESTDIR)/dev/backer/$${unit} ] ; then \
-	      echo "Device inodes for Backer unit $${unit} already exist: skipping" ; \
-	      continue ; \
-	   fi ; \
-	   @INSTALL@ -d -m 0755 $(DESTDIR)/dev/backer/$${unit} ; \
-	   DEVPATHS=($(DEVNAMES:%=$(DESTDIR)/dev/backer/$${unit}/%)) ; \
-	   for minor in 0 1 2 3 ; do \
-	      mknod -m 0666 $${DEVPATHS[$${minor}]} c @BKR_MAJOR@ $$((12*$${unit}+$${minor})) ; \
-	   done ; \
-	done
-
-uninstall :
-	@echo -e "\nUninstalling device drivers..."
-	-rmmod backer_isa backer_parport backer
-	-rm -f $(TARGETS:%=$(modulesdir)/%)
-	-rm -f $(MANPAGES:%=$(mandir)/man4/%.gz)
-	-[ -d /dev/backer ] && rm -Rf /dev/backer
-	-[ -L /dev/tape ] && @READLINK@ /dev/tape | @GREP@ backer >/dev/null && rm -f /dev/tape
-	@echo -e "Done.\n"
-
-distclean : clean
-	rm -f Makefile
-
-maintainer-clean : distclean
-
 endif	# $(KERNELRELEASE)

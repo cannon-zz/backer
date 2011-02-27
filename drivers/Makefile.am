@@ -1,0 +1,61 @@
+#
+# chain some targets into the kernel modules Makefile.modules
+#
+
+
+all-local : modules
+install-exec-local : modules_install
+clean-local : modules_clean
+
+modules modules_install :
+	$(MAKE) -f Makefile.modules $@
+modules_clean:
+	$(MAKE) -f Makefile.modules clean
+
+
+#
+# script for building the /dev device inodes, mostly for the purpose of
+# documenting what needs to be done.  don't run this without reading it and
+# thinking about what it does and assuring yourself that it's what you want
+# to do.  must be run as root
+#
+# creates a series of character device inodes of the form
+#
+#	/dev/backer/${UNIT_NUMBER}/${FORMAT}
+#
+# where ${UNIT_NUMBER} is each of 0, 1 and 2, and ${FORMAT} is each of
+# "nh", "nl", "ph", and "pl".
+#
+
+
+DEVNAMES = nh nl ph pl
+
+install-devs :
+	for unit in 0 1 2 ; do \
+	   if [ -d $(DESTDIR)/dev/backer/$${unit} ] ; then \
+	      echo "Device inodes for Backer unit $${unit} already exist: skipping" ; \
+	      continue ; \
+	   fi ; \
+	   @INSTALL@ -d -m 0755 $(DESTDIR)/dev/backer/$${unit} ; \
+	   DEVPATHS=($(DEVNAMES:%=$(DESTDIR)/dev/backer/$${unit}/%)) ; \
+	   for minor in 0 1 2 3 ; do \
+	      mknod -m 0666 $${DEVPATHS[$${minor}]} c @BKR_MAJOR@ $$((12*$${unit}+$${minor})) ; \
+	   done ; \
+	done
+
+
+#
+# uninstall helper script
+#
+
+modulesdir = @MODULES_DIR@/misc
+
+MODULES = backer.ko backer_isa.ko backer_parport.ko
+
+uninstall-local :
+	@echo -e "\nUninstalling device drivers..."
+	-rmmod backer_isa backer_parport backer
+	-rm -f $(MODULES:%=$(modulesdir)/%)
+	-[ -d /dev/backer ] && rm -Rf /dev/backer
+	-[ -L /dev/tape ] && @READLINK@ /dev/tape | @GREP@ backer >/dev/null && rm -f /dev/tape
+	@echo -e "Done.\n"

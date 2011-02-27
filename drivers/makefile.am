@@ -1,4 +1,13 @@
 #
+# include source files not specifically mentioned in this makefile
+#
+
+
+EXTRA_DIST = backer.h bkr_main.c bkr_ring_buffer.c bkr_unit.h bkr_isa.c bkr_parport.c bkr_ring_buffer.h
+
+
+
+#
 # chain some targets into the kernel modules Makefile
 #
 

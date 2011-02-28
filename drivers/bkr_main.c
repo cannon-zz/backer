@@ -3,7 +3,7 @@
  *
  *                           Kernel Interface
  *
- * Copyright (C) 2000,2001,2002,2010  Kipp C. Cannon
+ * Copyright (C) 2000--2011  Kipp C. Cannon
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -345,11 +345,11 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *stream)
 	 * There was a problem.
 	 */
 
-	no_number:
-		kfree(unit);
-	no_mem:
-		WPRINTK("no memory creating unit descriptor\n");
-		return NULL;
+no_number:
+	kfree(unit);
+no_mem:
+	WPRINTK("no memory creating unit descriptor\n");
+	return NULL;
 }
 
 

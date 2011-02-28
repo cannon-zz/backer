@@ -107,13 +107,13 @@ typedef unsigned long  jiffies_t;
 
 static char bkr_isa_resource_name[] = "Danmere Technologies Inc. Backer Tape Interface";
 
-typedef struct {
+struct bkr_stream_private_t {
 	struct resource  ioresource;    /* I/O port */
 	unsigned int  dma;              /* DMA channel number */
 	dma_addr_t  dma_addr;           /* DMA buffer's bus address */
 	struct timer_list  timer;       /* data mover timer entry */
 	int  adjust;                    /* adjustment to start-up pause */
-} bkr_isa_private_t;
+};
 
 
 /*
@@ -147,7 +147,7 @@ static size_t get_dma_offset(struct bkr_stream_t *stream)
 {
 	unsigned long  flags;
 	unsigned int  microsecs;
-	int  dma = ((bkr_isa_private_t *) stream->private)->dma;
+	int  dma = stream->private->dma;
 	size_t  residue;
 
 	flags = claim_dma_lock();
@@ -172,7 +172,7 @@ static void timer_tick(unsigned long data)
 {
 	struct bkr_stream_t  *stream = (struct bkr_stream_t *) data;
 	struct ring  *ring = stream->ring;
-	struct timer_list  *timer = &((bkr_isa_private_t *) stream->private)->timer;
+	struct timer_list  *timer = &stream->private->timer;
 	size_t  offset;
 
 	switch(stream->direction) {
@@ -226,7 +226,7 @@ static int flush(struct bkr_stream_t *stream)
 
 static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 {
-	bkr_isa_private_t  *private = (bkr_isa_private_t *) stream->private;
+	struct bkr_stream_private_t  *private = stream->private;
 	unsigned long  flags;
 	int  pause;
 	unsigned char  control;         /* hardware control byte */
@@ -285,7 +285,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 
 static int release(struct bkr_stream_t *stream)
 {
-	bkr_isa_private_t  *private = (bkr_isa_private_t *) stream->private;
+	struct bkr_stream_private_t  *private = stream->private;
 	int  result;
 
 	if(stream->direction != BKR_STOPPED) {
@@ -324,7 +324,7 @@ static int write(struct bkr_stream_t *stream)
 
 static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, unsigned int frame_size)
 {
-	bkr_isa_private_t  *private = stream->private;
+	struct bkr_stream_private_t  *private = stream->private;
 	struct ring  *ring = stream->ring;
 
 	stream->mode = mode;
@@ -350,9 +350,9 @@ static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, unsigne
  * Utility wrappers for I/O port resource management.
  */
 
-static bkr_isa_private_t __init *isa_alloc_private(int ioport)
+static struct bkr_stream_private_t __init *isa_alloc_private(int ioport)
 {
-	bkr_isa_private_t  *private = kmalloc(GFP_KERNEL, sizeof(*private));
+	struct bkr_stream_private_t  *private = kmalloc(GFP_KERNEL, sizeof(*private));
 
 	if(private) {
 		private->ioresource = (struct resource) {
@@ -368,7 +368,7 @@ static bkr_isa_private_t __init *isa_alloc_private(int ioport)
 	return private;
 }
 
-static void isa_free_private(bkr_isa_private_t *private)
+static void isa_free_private(struct bkr_stream_private_t *private)
 {
 	if(private)
 		release_resource(&private->ioresource);
@@ -380,7 +380,7 @@ static void isa_free_private(bkr_isa_private_t *private)
  * Creates a new ISA Backer device.
  */
 
-static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dma, char *msg)
+static struct bkr_unit_t * __init bkr_isa_new(struct bkr_stream_private_t *private, int dma, char *msg)
 {
 	struct bkr_unit_t  *unit;
 	struct bkr_stream_t  *stream;
@@ -455,7 +455,7 @@ static int __init bkr_isa_init(void)
 	int  ioport;
 	int  i, dma[2], num_dma;
 	int  found_card;
-	bkr_isa_private_t  *private;
+	struct bkr_stream_private_t  *private;
 
 	/*
 	 * Register any user-requested devices.
@@ -559,7 +559,7 @@ static void __exit bkr_isa_exit(void)
 {
 	struct bkr_unit_t  *unit;
 	struct bkr_stream_t  *stream;
-	bkr_isa_private_t  *private;
+	struct bkr_stream_private_t  *private;
 	struct list_head  *curr;
 
 	down(&bkr_unit_list_lock);
@@ -569,7 +569,7 @@ static void __exit bkr_isa_exit(void)
 			if(unit->owner != THIS_MODULE)
 				continue;
 			stream = unit->stream;
-			private = (bkr_isa_private_t *) stream->private;
+			private = stream->private;
 			bkr_unit_unregister(unit);
 			dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
 			ring_free(stream->ring);

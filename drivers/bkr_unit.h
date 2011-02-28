@@ -60,6 +60,9 @@ struct bkr_sysctl_table_t {
 };
 
 
+struct bkr_stream_private_t;
+
+
 struct bkr_unit_t {
 	struct list_head  list;         /* next/prev in list */
 	char  name[BKR_NAME_LENGTH];    /* name */
@@ -67,9 +70,11 @@ struct bkr_unit_t {
 	struct semaphore  lock;         /* down == unit is claimed */
 	struct module  *owner;          /* module owning this unit */
 	wait_queue_head_t  queue;       /* I/O event queue */
+	struct bkr_sysctl_table_t  sysctl;     /* sysctl interface table */
+	int  last_error;                /* Pending error code if != 0 */
 	struct bkr_stream_t {
 		struct ring  *ring;             /* this stream's I/O ring */
-		unsigned int frame_size;        /* video format parameter */
+		unsigned int frame_size;        /* two video fields */
 		struct bkr_stream_ops_t {
 			struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, unsigned int);
 			int  (*start)(struct bkr_stream_t *, bkr_direction_t);
@@ -82,10 +87,8 @@ struct bkr_unit_t {
 		void  (*callback)(void *);      /* I/O activity call-back */
 		void  *callback_data;           /* call-back data */
 		unsigned int  timeout;          /* I/O activity timeout */
-		void  *private;                 /* per-stream private data */
+		struct bkr_stream_private_t  *private; /* per-stream private data */
 	} *stream;                      /* this unit's data stream */
-	struct bkr_sysctl_table_t  sysctl;     /* sysctl interface table */
-	int  last_error;                /* Pending error code if != 0 */
 };                                      /* unit information */
 
 

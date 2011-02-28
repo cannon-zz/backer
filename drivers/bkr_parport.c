@@ -150,7 +150,7 @@ typedef unsigned long  jiffies_t;
 
 static struct workqueue_struct *detach_queue;
 
-typedef struct {
+struct bkr_stream_private_t {
 	struct pardevice  *dev;         /* our parport device */
 	dma_addr_t  dma_addr;           /* DMA buffer's bus address */
 	struct bkr_unit_t *unit;        /* link back to unit for do_detach() */
@@ -158,7 +158,7 @@ typedef struct {
 	struct parport_state  state;    /* Linux parport and Backers suck */
 	jiffies_t  last_io;             /* jiffies counter at last I/O */
 	int  adjust;                    /* adjustment to start-up pause */
-} bkr_parport_private_t;
+};
 
 
 /*
@@ -188,7 +188,7 @@ static void bkr_parport_irq(void *handle)
 {
 	struct bkr_stream_t  *stream = handle;
 	struct ring  *ring = stream->ring;
-	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
+	struct bkr_stream_private_t  *private = stream->private;
 	struct parport  *port = private->dev->port;
 	unsigned long  flags;
 
@@ -223,7 +223,7 @@ static void bkr_parport_irq(void *handle)
 
 static void bkr_parport_first_irq(void *handle)
 {
-	bkr_parport_private_t  *private = (bkr_parport_private_t *) ((struct bkr_stream_t *) handle)->private;
+	struct bkr_stream_private_t  *private = ((struct bkr_stream_t *) handle)->private;
 	struct parport  *port = private->dev->port;
 
 	private->dev->irq_func = bkr_parport_irq;
@@ -265,7 +265,7 @@ static int flush(struct bkr_stream_t *stream)
 
 
 /* FIXME: should we bother worrying about this? */
-static int check_for_timeout(bkr_parport_private_t *private)
+static int check_for_timeout(struct bkr_stream_private_t *private)
 {
 	return time_after(jiffies, private->last_io + BKR_PARPORT_TIMEOUT);
 }
@@ -281,7 +281,7 @@ static int check_for_timeout(bkr_parport_private_t *private)
 
 static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 {
-	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
+	struct bkr_stream_private_t  *private = stream->private;
 	struct parport  *port = private->dev->port;
 	unsigned long  flags;
 	int  pause;
@@ -346,7 +346,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 
 static int release(struct bkr_stream_t *stream)
 {
-	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
+	struct bkr_stream_private_t  *private = stream->private;
 	struct parport  *port = private->dev->port;
 	int  result;
 
@@ -421,7 +421,7 @@ static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, unsigne
 
 static void do_detach(struct work_struct *work)
 {
-	bkr_parport_private_t  *private = container_of(work, bkr_parport_private_t, detach);
+	struct bkr_stream_private_t  *private = container_of(work, struct bkr_stream_private_t, detach);
 	struct bkr_unit_t  *unit = private->unit;
 	struct bkr_stream_t  *stream = unit->stream;
 
@@ -439,7 +439,7 @@ static void do_detach(struct work_struct *work)
 static void detach(struct parport *port)
 {
 	struct bkr_unit_t  *unit;
-	bkr_parport_private_t  *private;
+	struct bkr_stream_private_t  *private;
 	struct list_head  *curr;
 
 	down(&bkr_unit_list_lock);
@@ -447,7 +447,7 @@ static void detach(struct parport *port)
 		unit = list_entry(curr, struct bkr_unit_t, list);
 		if(unit->owner != THIS_MODULE)
 			continue;
-		private = (bkr_parport_private_t *) unit->stream->private;
+		private = unit->stream->private;
 		if(private->dev->port == port)
 			queue_work(detach_queue, &private->detach);
 	}
@@ -462,7 +462,7 @@ static void attach(struct parport *port)
 {
 	struct bkr_unit_t  *unit;
 	struct bkr_stream_t  *stream;
-	bkr_parport_private_t  *private;
+	struct bkr_stream_private_t  *private;
 	char  *option = units;
 	int  length;
 	char  msg[100];

@@ -206,7 +206,6 @@ static void timer_tick(unsigned long data)
 
 static int flush(struct bkr_stream_t *stream)
 {
-	bkr_isa_private_t  *private = (bkr_isa_private_t *) stream->private;
 	int result;
 
 	ring_lock(stream->ring);

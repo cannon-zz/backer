@@ -254,7 +254,6 @@ static void transmit_control_byte(struct parport *port, unsigned char byte)
 
 static int flush(struct bkr_stream_t *stream)
 {
-	bkr_parport_private_t  *private = (bkr_parport_private_t *) stream->private;
 	int result;
 
 	ring_lock(stream->ring);

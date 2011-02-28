@@ -279,7 +279,7 @@ static int check_for_timeout(struct bkr_stream_private_t *private)
  * ========================================================================
  */
 
-static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
+static int start(struct bkr_stream_t *stream, enum bkr_direction_t direction)
 {
 	struct bkr_stream_private_t  *private = stream->private;
 	struct parport  *port = private->dev->port;

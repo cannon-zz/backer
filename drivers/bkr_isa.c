@@ -224,7 +224,7 @@ static int flush(struct bkr_stream_t *stream)
  * ========================================================================
  */
 
-static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
+static int start(struct bkr_stream_t *stream, enum bkr_direction_t direction)
 {
 	struct bkr_stream_private_t  *private = stream->private;
 	unsigned long  flags;

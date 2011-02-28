@@ -44,11 +44,11 @@
 #define  BKR_NAME_LENGTH  (sizeof("99"))        /* limits driver to 100 units */
 
 
-typedef enum {
+enum bkr_direction_t {
 	BKR_STOPPED = 0,
 	BKR_READING,
 	BKR_WRITING
-} bkr_direction_t;
+};
 
 
 struct bkr_sysctl_table_t {
@@ -77,13 +77,13 @@ struct bkr_unit_t {
 		unsigned int frame_size;        /* two video fields */
 		struct bkr_stream_ops_t {
 			struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, unsigned int);
-			int  (*start)(struct bkr_stream_t *, bkr_direction_t);
+			int  (*start)(struct bkr_stream_t *, enum bkr_direction_t);
 			int  (*release)(struct bkr_stream_t *);
 			int  (*read)(struct bkr_stream_t *);
 			int  (*write)(struct bkr_stream_t *);
 		} ops;                          /* stream control functions */
 		int  mode;                      /* stream settings */
-		volatile bkr_direction_t  direction;     /* stream state */
+		volatile enum bkr_direction_t  direction;     /* stream state */
 		void  (*callback)(void *);      /* I/O activity call-back */
 		void  *callback_data;           /* call-back data */
 		unsigned int  timeout;          /* I/O activity timeout */
@@ -104,7 +104,7 @@ extern void bkr_unit_unregister(struct bkr_unit_t *);
  */
 
 
-static unsigned char bkr_control(int mode, bkr_direction_t direction)
+static unsigned char bkr_control(int mode, enum bkr_direction_t direction)
 {
 	unsigned char  control;
 
@@ -113,12 +113,9 @@ static unsigned char bkr_control(int mode, bkr_direction_t direction)
 		control |= BKR_BIT_HIGH_DENSITY;
 	if(BKR_VIDEOMODE(mode) == BKR_NTSC)
 		control |= BKR_BIT_NTSC_VIDEO;
-	if(direction == BKR_WRITING)
-		control |= BKR_BIT_TRANSMIT;
-	else
-		control |= BKR_BIT_RECEIVE;
+	control |= direction == BKR_WRITING ? BKR_BIT_TRANSMIT : BKR_BIT_RECEIVE;
 
-	return(control);
+	return control;
 }
 
 

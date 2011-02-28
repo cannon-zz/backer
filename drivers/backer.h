@@ -200,64 +200,6 @@ enum bkr_sectorformat {
 
 
 /*
- * Convert a mode (as above) to an index into the format array (below).
- * Return < 0 if the mode is invalid.
- */
-
-
-static int bkr_mode_to_format(int mode)
-{
-	int  format = 0;
-
-	if(BKR_DENSITY(mode) == BKR_HIGH)
-		format += 6;
-	else if(BKR_DENSITY(mode) != BKR_LOW)
-		return(-1);
-	if(BKR_VIDEOMODE(mode) == BKR_PAL)
-		format += 3;
-	else if(BKR_VIDEOMODE(mode) != BKR_NTSC)
-		return(-1);
-	if(BKR_CODEC(mode) == BKR_SP)
-		format += 2;
-	/*else if(BKR_CODEC(mode) == BKR_RAW)
-		format += 1;*/
-	else if(BKR_CODEC(mode) != BKR_EP)
-		return(-1);
-
-	return(format);
-}
-
-
-/*
- * Format information.
- */
-
-
-typedef struct {
-	unsigned int  frame_size;       /* bytes in a full video frame */
-} bkr_format_info_t;
-
-
-#define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t []) \
-{ { 2028 },     /* nle */ \
-  { 2028 },     /* nlr */ \
-  { 2028 },     /* nls */ \
-  { 2440 },     /* ple */ \
-  { 2440 },     /* plr */ \
-  { 2440 },     /* pls */ \
-  { 5070 },     /* nhe */ \
-  { 5070 },     /* nhr */ \
-  { 5070 },     /* nhs */ \
-  { 6100 },     /* phe */ \
-  { 6100 },     /* phr */ \
-  { 6100 } }    /* phs */
-
-
-#define BKR_NUM_FORMATS (sizeof(BKR_FORMAT_INFO_INITIALIZER)/sizeof(bkr_format_info_t))
-#define BKR_NUM_FORMAT_PARMS (sizeof(bkr_format_info_t)/sizeof(unsigned int))
-
-
-/*
  * _sysctl() interface
  */
 

@@ -113,7 +113,6 @@ typedef struct {
 	dma_addr_t  dma_addr;           /* DMA buffer's bus address */
 	struct timer_list  timer;       /* data mover timer entry */
 	int  adjust;                    /* adjustment to start-up pause */
-	int  capacity;                  /* sector capacity */
 } bkr_isa_private_t;
 
 
@@ -211,7 +210,7 @@ static int flush(struct bkr_stream_t *stream)
 	int result;
 
 	ring_lock(stream->ring);
-	result = ring_fill_to(stream->ring, private->capacity, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) >= 2 * private->capacity ? -EAGAIN : 0;
+	result = ring_fill_to(stream->ring, stream->frame_size, BKR_FILLER) ? -EAGAIN : bytes_in_ring(stream->ring) >= 2 * stream->frame_size ? -EAGAIN : 0;
 	ring_unlock(stream->ring);
 
 	return result;
@@ -246,7 +245,7 @@ static int start(struct bkr_stream_t *stream, bkr_direction_t direction)
 	disable_dma(private->dma);
 	clear_dma_ff(private->dma);
 	if(direction == BKR_WRITING) {
-		stream->ring->size -= DMA_BUFFER_SIZE % private->capacity;
+		stream->ring->size -= DMA_BUFFER_SIZE % stream->frame_size;
 		set_dma_mode(private->dma, DMA_MEM_TO_IO);
 	} else
 		set_dma_mode(private->dma, DMA_IO_TO_MEM);
@@ -324,7 +323,7 @@ static int write(struct bkr_stream_t *stream)
 }
 
 
-static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, const bkr_format_info_t *fmt)
+static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, unsigned int frame_size)
 {
 	bkr_isa_private_t  *private = stream->private;
 	struct ring  *ring = stream->ring;
@@ -332,8 +331,7 @@ static struct bkr_stream_t *ready(struct bkr_stream_t *stream, int mode, const b
 	stream->mode = mode;
 	outb(0, private->ioresource.start);
 	stream->direction = BKR_STOPPED;
-	stream->fmt = *fmt;
-	private->capacity = fmt->frame_size;
+	stream->frame_size = frame_size;
 	ring_reset(ring);
 	memset_ring(ring, 0, ring->size);
 

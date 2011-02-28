@@ -69,9 +69,9 @@ struct bkr_unit_t {
 	wait_queue_head_t  queue;       /* I/O event queue */
 	struct bkr_stream_t {
 		struct ring  *ring;             /* this stream's I/O ring */
-		bkr_format_info_t  fmt;         /* stream format paramters */
+		unsigned int frame_size;        /* video format parameter */
 		struct bkr_stream_ops_t {
-			struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, const bkr_format_info_t *);
+			struct bkr_stream_t  *(*ready)(struct bkr_stream_t *, int, unsigned int);
 			int  (*start)(struct bkr_stream_t *, bkr_direction_t);
 			int  (*release)(struct bkr_stream_t *);
 			int  (*read)(struct bkr_stream_t *);
@@ -84,7 +84,6 @@ struct bkr_unit_t {
 		unsigned int  timeout;          /* I/O activity timeout */
 		void  *private;                 /* per-stream private data */
 	} *stream;                      /* this unit's data stream */
-	bkr_format_info_t format_tbl[BKR_NUM_FORMATS];  /* format parms */
 	struct bkr_sysctl_table_t  sysctl;     /* sysctl interface table */
 	int  last_error;                /* Pending error code if != 0 */
 };                                      /* unit information */

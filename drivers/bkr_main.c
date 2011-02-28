@@ -139,6 +139,43 @@ static struct file_operations file_ops[] = {
 
 /*
  * ========================================================================
+ *                                 UTILITIES
+ * ========================================================================
+ */
+
+
+/*
+ * Convert a mode (see the format enums in backer.h) to a video frame size
+ * (count of bytes in two full video fields).  Return < 0 if the mode is
+ * invalid.
+ */
+
+
+static int bkr_mode_to_frame_size(int mode)
+{
+	static unsigned int frame_size[] = {
+		2028,	/* nl */
+		2440,	/* pl */
+		5070,	/* nh */
+		6100    /* ph */
+	};
+	unsigned int *result = frame_size;
+
+	if(BKR_DENSITY(mode) == BKR_HIGH)
+		result += 2;
+	else if(BKR_DENSITY(mode) != BKR_LOW)
+		return -1;
+	if(BKR_VIDEOMODE(mode) == BKR_PAL)
+		result += 1;
+	else if(BKR_VIDEOMODE(mode) != BKR_NTSC)
+		return -1;
+
+	return *result;
+}
+
+
+/*
+ * ========================================================================
  *                            ENTRY/EXIT CODE
  * ========================================================================
  */
@@ -280,7 +317,7 @@ static void bkr_unit_sysctl_init(struct bkr_unit_t *unit)
 		},
 		.entries = {
 			{.procname = "status", .mode = 0444, .proc_handler = bkr_do_status},
-			{.procname = "format_table", .mode = 0644, .data = unit->format_tbl, .maxlen = sizeof(unit->format_tbl), .proc_handler = proc_dointvec},
+			{.procname = "frame_size", .mode = 0444, .data = &unit->stream->frame_size, .maxlen = 1, .proc_handler = proc_dointvec},
 			{0}
 		}
 	};
@@ -330,7 +367,6 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *stream)
 
 	init_MUTEX(&unit->lock);
 	init_waitqueue_head(&unit->queue);
-	memcpy(unit->format_tbl, BKR_FORMAT_INFO_INITIALIZER, sizeof(BKR_FORMAT_INFO_INITIALIZER));
 	unit->stream = stream;
 	bkr_unit_sysctl_init(unit);
 	unit->sysctl.header = register_sysctl_table(unit->sysctl.dev_dir);
@@ -385,15 +421,15 @@ static void io_callback(void *data)
 static int open(struct inode *inode, struct file *filp)
 {
 	/* FIXME: put minor numbers in the same order as the format table */
-	static const int minor_to_mode[BKR_NUM_FORMATS] = {
+	static const int minor_to_mode[] = {
 		BKR_NTSC | BKR_HIGH,
 		BKR_NTSC | BKR_LOW,
 		BKR_PAL  | BKR_HIGH,
 		BKR_PAL  | BKR_LOW
 	};
 	struct bkr_unit_t  *unit = NULL;
-	int  number = iminor(inode) / BKR_NUM_FORMATS;
-	int  mode = minor_to_mode[iminor(inode) % BKR_NUM_FORMATS];
+	int  number = iminor(inode) / 4;	/* 4 = length of minor_to_mode[] */
+	int  mode = minor_to_mode[iminor(inode) % 4];	/* 4 = length of minor_to_mode[] */
 	int  result;
 	struct list_head  *curr;
 
@@ -414,7 +450,7 @@ static int open(struct inode *inode, struct file *filp)
 		return result;
 
 	/* FIXME: lock format table during copy */
-	if(!unit->stream->ops.ready(unit->stream, mode, &unit->format_tbl[bkr_mode_to_format(mode)])) {
+	if(!unit->stream->ops.ready(unit->stream, mode, bkr_mode_to_frame_size(mode))) {
 		bkr_unit_release(unit);
 		return -EBUSY;
 	}

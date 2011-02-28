@@ -196,17 +196,17 @@ static void bkr_parport_irq(void *handle)
 	ring_lock(ring);	/* FIXME:  ok in an interrupt? */
 	clear_dma_ff(port->dma);
 	switch(stream->direction) {
-		case BKR_READING:
+	case BKR_READING:
 		ring_fill(ring, stream->frame_size);
 		set_dma_addr(port->dma, private->dma_addr + ring->head);
 		break;
 
-		case BKR_WRITING:
+	case BKR_WRITING:
 		ring_drain(ring, stream->frame_size);
 		set_dma_addr(port->dma, private->dma_addr + ring->tail);
 		break;
 
-		default:
+	default:
 		ring_unlock(ring);	/* FIXME:  ok in an interrupt? */
 		release_dma_lock(flags);
 		return;
@@ -532,20 +532,20 @@ static void attach(struct parport *port)
 
 	return;
 
-	no_unit:
-		up(&bkr_unit_list_lock);
-		parport_unregister_device(private->dev);
-	no_parport:
-		dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
-	no_dma_buffer:
-		ring_free(stream->ring);
-	no_stream:
-		kfree(private);
-		kfree(stream);
-	port_not_suitable:
-		printk(KERN_INFO MODULE_NAME ": %s\n", msg);
-	wrong_port:
-		return;
+no_unit:
+	up(&bkr_unit_list_lock);
+	parport_unregister_device(private->dev);
+no_parport:
+	dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
+no_dma_buffer:
+	ring_free(stream->ring);
+no_stream:
+	kfree(private);
+	kfree(stream);
+port_not_suitable:
+	printk(KERN_INFO MODULE_NAME ": %s\n", msg);
+wrong_port:
+	return;
 }
 
 

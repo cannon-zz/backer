@@ -176,21 +176,21 @@ static void timer_tick(unsigned long data)
 	size_t  offset;
 
 	switch(stream->direction) {
-		case BKR_READING:
+	case BKR_READING:
 		offset = get_dma_offset(stream);
 		ring_lock(ring);
 		ring->head = offset;
 		ring_unlock(ring);
 		break;
 
-		case BKR_WRITING:
+	case BKR_WRITING:
 		offset = get_dma_offset(stream);
 		ring_lock(ring);
 		ring->tail = offset;
 		ring_unlock(ring);
 		break;
 
-		default:
+	default:
 		return;
 	}
 	timer->expires = jiffies + BKR_FRAME_TIME;
@@ -431,15 +431,15 @@ static struct bkr_unit_t * __init bkr_isa_new(bkr_isa_private_t *private, int dm
 
 	return unit;
 
-	no_unit:
-		up(&bkr_unit_list_lock);
-		dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
-	no_dma_buffer:
-		ring_free(stream->ring);
-	no_stream:
-		kfree(stream);
-		printk(KERN_INFO MODULE_NAME ": %s\n", err_msg);
-		return NULL;
+no_unit:
+	up(&bkr_unit_list_lock);
+	dma_free_coherent(NULL, DMA_BUFFER_SIZE, stream->ring->buffer, private->dma_addr);
+no_dma_buffer:
+	ring_free(stream->ring);
+no_stream:
+	kfree(stream);
+	printk(KERN_INFO MODULE_NAME ": %s\n", err_msg);
+	return NULL;
 }
 
 

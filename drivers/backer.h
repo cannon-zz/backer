@@ -234,26 +234,23 @@ static int bkr_mode_to_format(int mode)
 
 
 typedef struct {
-	unsigned int  bytes_per_line;   /* width of one line of video */
-	unsigned int  field_size;       /* bytes in an even video field */
-	unsigned int  interlace;        /* difference between odd/even fields */
 	unsigned int  frame_size;       /* bytes in a full video frame */
 } bkr_format_info_t;
 
 
 #define BKR_FORMAT_INFO_INITIALIZER   (bkr_format_info_t []) \
-{ {  4, 1012,  4, 2028 },     /* nle */ \
-  {  4, 1012,  4, 2028 },     /* nlr */ \
-  {  4, 1012,  4, 2028 },     /* nls */ \
-  {  4, 1220,  0, 2440 },     /* ple */ \
-  {  4, 1220,  0, 2440 },     /* plr */ \
-  {  4, 1220,  0, 2440 },     /* pls */ \
-  { 10, 2530, 10, 5070 },     /* nhe */ \
-  { 10, 2530, 10, 5070 },     /* nhr */ \
-  { 10, 2530, 10, 5070 },     /* nhs */ \
-  { 10, 3050,  0, 6100 },     /* phe */ \
-  { 10, 3050,  0, 6100 },     /* phr */ \
-  { 10, 3050,  0, 6100 } }    /* phs */
+{ { 2028 },     /* nle */ \
+  { 2028 },     /* nlr */ \
+  { 2028 },     /* nls */ \
+  { 2440 },     /* ple */ \
+  { 2440 },     /* plr */ \
+  { 2440 },     /* pls */ \
+  { 5070 },     /* nhe */ \
+  { 5070 },     /* nhr */ \
+  { 5070 },     /* nhs */ \
+  { 6100 },     /* phe */ \
+  { 6100 },     /* phr */ \
+  { 6100 } }    /* phs */
 
 
 #define BKR_NUM_FORMATS (sizeof(BKR_FORMAT_INFO_INITIALIZER)/sizeof(bkr_format_info_t))

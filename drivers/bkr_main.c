@@ -449,7 +449,6 @@ static int open(struct inode *inode, struct file *filp)
 	if(result < 0)
 		return result;
 
-	/* FIXME: lock format table during copy */
 	if(!unit->stream->ops.ready(unit->stream, mode, bkr_mode_to_frame_size(mode))) {
 		bkr_unit_release(unit);
 		return -EBUSY;

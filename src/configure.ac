@@ -46,12 +46,9 @@ AM_CONDITIONAL([COND_GTK], [test "${HAVE_GTK}" == "yes"])
 
 # Check for GStreamer 0.10
 AC_SUBST([GST_VERSION], [0.10])
-PKG_CHECK_MODULES([GST], [gstreamer-${GST_VERSION}], , [echo "Not Found!" ; exit 1])
-PKG_CHECK_MODULES([GST_BASE], [gstreamer-base-${GST_VERSION}], , [echo "Not Found!" ; exit 1])
-AC_SUBST([GST_CFLAGS])
-AC_SUBST([GST_LIBS])
-AC_SUBST([GST_BASE_CFLAGS])
-AC_SUBST([GST_BASE_LIBS])
+PKG_CHECK_MODULES([gstreamer], [gstreamer-${GST_VERSION} gstreamer-base-${GST_VERSION}], , [echo "Not Found!" ; exit 1])
+AC_SUBST([gstreamer_CFLAGS])
+AC_SUBST([gstreamer_LIBS])
 AC_SUBST([plugindir], [${libdir}/gstreamer-${GST_VERSION}])
 AC_SUBST([GST_PLUGIN_LDFLAGS], ["-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*"])
 

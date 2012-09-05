@@ -134,29 +134,6 @@ size_t memcpy_from_ring(void *dst, struct ring *src, size_t n)
 
 
 /*
- * memcpy_to_ring_from_ring()
- *
- * Copy data from one ring to another.
- */
-
-size_t memcpy_to_ring_from_ring(struct ring *dst, struct ring *src, size_t n)
-{
-	size_t  remainder;
-
-	remainder = dst->size - dst->head;
-	if(remainder <= n) {
-		memcpy_from_ring(dst->buffer + dst->head, src, remainder);
-		memcpy_from_ring(dst->buffer, src, dst->head = n - remainder);
-	} else {
-		memcpy_from_ring(dst->buffer + dst->head, src, n);
-		dst->head += n;
-	}
-
-	return n;
-}
-
-
-/*
  * Two additional functions for use in the kernel
  */
 
@@ -164,13 +141,14 @@ size_t memcpy_to_ring_from_ring(struct ring *dst, struct ring *src, size_t n)
 size_t copy_to_user_from_ring(char *dst, struct ring *src, size_t n)
 {
 	size_t  remainder;
+	int success = 1;
 
 	remainder = src->size - src->tail;
 	if(remainder <= n) {
-		copy_to_user(dst, src->buffer + src->tail, remainder);
-		copy_to_user(dst + remainder, src->buffer, src->tail = n - remainder);
+		success &= copy_to_user(dst, src->buffer + src->tail, remainder) == 0;
+		success &= copy_to_user(dst + remainder, src->buffer, src->tail = n - remainder) == 0;
 	} else {
-		copy_to_user(dst, src->buffer + src->tail, n);
+		success &= copy_to_user(dst, src->buffer + src->tail, n) == 0;
 		src->tail += n;
 	}
 
@@ -181,13 +159,14 @@ size_t copy_to_user_from_ring(char *dst, struct ring *src, size_t n)
 size_t copy_to_ring_from_user(struct ring *dst, const char *src, size_t n)
 {
 	size_t  remainder;
+	int success = 1;
 
 	remainder = dst->size - dst->head;
 	if(remainder <= n) {
-		copy_from_user(dst->buffer + dst->head, src, remainder);
-		copy_from_user(dst->buffer, src + remainder, dst->head = n - remainder);
+		success &= copy_from_user(dst->buffer + dst->head, src, remainder) == 0;
+		success &= copy_from_user(dst->buffer, src + remainder, dst->head = n - remainder) == 0;
 	} else {
-		copy_from_user(dst->buffer + dst->head, src, n);
+		success &= copy_from_user(dst->buffer + dst->head, src, n) == 0;
 		dst->head += n;
 	}
 

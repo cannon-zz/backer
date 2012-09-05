@@ -182,7 +182,6 @@ void ring_free(struct ring *);
 size_t memset_ring(struct ring *, ring_data_t, size_t);
 size_t memcpy_to_ring(struct ring *, void *, size_t);
 size_t memcpy_from_ring(void *, struct ring *, size_t);
-size_t memcpy_to_ring_from_ring(struct ring *, struct ring *, size_t);
 size_t copy_to_user_from_ring(char *, struct ring *, size_t);
 size_t copy_to_ring_from_user(struct ring *, const char *, size_t);
 int ring_fill_to(struct ring *, int, unsigned char);

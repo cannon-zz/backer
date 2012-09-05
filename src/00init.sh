@@ -6,6 +6,7 @@ read -p "Press CTRL-C to abort, or RETURN to continue... " RESPONSE
 
 # Get it done
 {
+	{ echo "running libtoolize..." ; libtoolize -c -f ; } &&
 	{ echo "running aclocal..." ; aclocal -I gnuscripts ; } &&
 	#{ echo "running autoheader..." ; autoheader ; } &&
 	{ echo "running automake..." ; automake -a -c ; } &&

@@ -83,7 +83,7 @@ FAKEFORMAT="audio/x-raw-int,channels=1,width=8,depth=8"
 
 
 PIPELINE="fdsrc fd=0 ! $FAKEFORMAT "
-if [ "${VERBOSE}" = "-v" ] ; then
+if [ "x${VERBOSE}" = "x-v" ] ; then
 	PIPELINE="${PIPELINE} ! progressreport name=bkrvideo"
 fi
 PIPELINE="${PIPELINE} ! bkr_video_out videomode=${VIDEOMODE} bitdensity=${BITDENSITY} ! ffmpegcolorspace ! queue max-size-time=1000000000 ! autovideosink"

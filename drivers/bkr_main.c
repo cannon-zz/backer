@@ -84,7 +84,7 @@ static ssize_t start_write(struct file *, const char *, size_t, loff_t *);
 static ssize_t read(struct file *, char *, size_t, loff_t *);
 static ssize_t write(struct file *, const char *, size_t, loff_t *);
 static unsigned int poll(struct file *, struct poll_table_struct *);
-static int ioctl(struct inode *, struct file *, unsigned int, unsigned long);
+static long ioctl(struct file *, unsigned int, unsigned long);
 
 
 /*
@@ -105,7 +105,7 @@ struct semaphore  bkr_unit_list_lock;   /* unit list locking semaphore */
 	.read = start_read,   \
 	.write = start_write, \
 	.poll = poll,         \
-	.ioctl = ioctl,       \
+	.compat_ioctl = ioctl,       \
 	.open = open,         \
 	.release = release    \
 }
@@ -115,7 +115,7 @@ struct semaphore  bkr_unit_list_lock;   /* unit list locking semaphore */
 	.read = read,         \
 	.write = start_write, \
 	.poll = poll,         \
-	.ioctl = ioctl,       \
+	.compat_ioctl = ioctl,       \
 	.open = open,         \
 	.release = release    \
 }
@@ -125,7 +125,7 @@ struct semaphore  bkr_unit_list_lock;   /* unit list locking semaphore */
 	.read = start_read,   \
 	.write = write,       \
 	.poll = poll,         \
-	.ioctl = ioctl,       \
+	.compat_ioctl = ioctl,       \
 	.open = open,         \
 	.release = release    \
 }
@@ -192,7 +192,11 @@ static int __init bkr_init(void)
 		return result;
 	}
 
+#ifndef init_MUTEX
+	sema_init(&bkr_unit_list_lock, 1);
+#else
 	init_MUTEX(&bkr_unit_list_lock);
+#endif
 	request_module("backer_lowlevel");
 	return 0;
 }
@@ -365,7 +369,11 @@ struct bkr_unit_t *bkr_unit_register(struct bkr_stream_t *stream)
 	 * Initialize unit.
 	 */
 
+#ifndef init_MUTEX
+	sema_init(&unit->lock, 1);
+#else
 	init_MUTEX(&unit->lock);
+#endif
 	init_waitqueue_head(&unit->queue);
 	unit->stream = stream;
 	bkr_unit_sysctl_init(unit);
@@ -538,7 +546,7 @@ static unsigned int poll(struct file *filp, struct poll_table_struct *wait)
  * mtio.h ioctl's as make sense for this device.
  */
 
-static int ioctl(struct inode *inode, struct file *filp, unsigned int op, unsigned long argument)
+static long ioctl(struct file *filp, unsigned int op, unsigned long argument)
 {
 	struct bkr_unit_t  *unit = filp->private_data;
 	struct bkr_stream_t  *stream = unit->stream;

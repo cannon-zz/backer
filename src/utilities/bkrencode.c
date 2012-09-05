@@ -225,7 +225,6 @@ static gboolean message_handler(GstBus *bus, GstMessage *msg, gpointer data)
 static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat, gboolean inject_noise)
 {
 	GstElement *pipeline = gst_pipeline_new("pipeline");
-	GstElement *head;
 	GstElement *source = gst_element_factory_make("fdsrc", NULL);
 	GstElement *splp = gst_element_factory_make("bkr_splpenc", NULL);
 	GstElement *frame = gst_element_factory_make("bkr_frameenc", NULL);
@@ -246,11 +245,12 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 	if(!pipeline || !source || !splp || !frame || !sink || !caps)
 		return NULL;
 
-	g_object_set(G_OBJECT(source), "fd", STDIN_FILENO, NULL);
-	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
-	g_object_set(G_OBJECT(frame), "inject_noise", inject_noise, NULL);
-
 	gst_bin_add_many(GST_BIN(pipeline), source, splp, frame, sink, NULL);
+
+	g_object_set(G_OBJECT(source), "fd", STDIN_FILENO, NULL);
+	g_object_set(G_OBJECT(frame), "inject_noise", inject_noise, NULL);
+	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
+
 	if(sectorformat == BKR_EP) {
 		GstElement *ecc2 = gst_element_factory_make("bkr_ecc2enc", NULL);
 		GstElement *rll = gst_element_factory_make("bkr_rllenc", NULL);
@@ -258,14 +258,11 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 			return NULL;
 		gst_bin_add_many(GST_BIN(pipeline), ecc2, rll, NULL);
 		gst_element_link_filtered(source, ecc2, caps);
-		gst_element_link_many(ecc2, splp, rll, frame, NULL);
-		head = frame;
+		gst_element_link_many(ecc2, splp, rll, frame, sink, NULL);
 	} else {
 		gst_element_link_filtered(source, splp, caps);
-		gst_element_link_many(splp, frame, NULL);
-		head = frame;
+		gst_element_link_many(splp, frame, sink, NULL);
 	}
-	gst_element_link_many(head, sink, NULL);
 
 	gst_caps_unref(caps);
 	return pipeline;
@@ -275,7 +272,6 @@ static GstElement *encoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitdensity bitdensity, enum bkr_sectorformat sectorformat)
 {
 	GstElement *pipeline = gst_pipeline_new("pipeline");
-	GstElement *head;
 	GstElement *source = gst_element_factory_make("fdsrc", NULL);
 	GstElement *frame = gst_element_factory_make("bkr_framedec", NULL);
 	GstElement *splp = gst_element_factory_make("bkr_splpdec", NULL);
@@ -288,11 +284,13 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 		NULL
 	);
 
-	if(!pipeline || !source || !frame || !splp || !sink || !caps) {
-		/* don't bother unref()ing things, because we're going to
-		 * exit now anyway */
+	/*
+	 * in error paths, we don't bother unref()ing things, because we're
+	 * going to exit the program anyway
+	 */
+
+	if(!pipeline || !source || !frame || !splp || !sink || !caps)
 		return NULL;
-	}
 
 	g_object_set(G_OBJECT(source), "fd", STDIN_FILENO, NULL);
 	g_object_set(G_OBJECT(sink), "fd", STDOUT_FILENO, NULL);
@@ -307,13 +305,9 @@ static GstElement *decoder_pipeline(enum bkr_videomode videomode, enum bkr_bitde
 			 * going to exit now anyway */
 			return NULL;
 		}
-		gst_element_link_many(frame, rll, splp, ecc2, NULL);
-		head = ecc2;
-	} else {
-		gst_element_link_many(frame, splp, NULL);
-		head = splp;
-	}
-	gst_element_link_many(head, sink, NULL);
+		gst_element_link_many(frame, rll, splp, ecc2, sink, NULL);
+	} else
+		gst_element_link_many(frame, splp, sink, NULL);
 
 	gst_caps_unref(caps);
 	return pipeline;

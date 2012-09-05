@@ -1,0 +1,131 @@
+<!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="GENERATOR" content="Mozilla/4.7 [en] (X11; U; Linux 2.0.36 i686) [Netscape]">
+   <meta name="Author" content="Kipp Cannon">
+   <title>Backer For Linux --- Screen Shots</title>
+</head>
+<body text="#000000" bgcolor="#FFFFFF" link="#3333FF" vlink="#3333FF" alink="#3333FF">
+
+<A href="http://sourceforge.net"><IMG src="http://sourceforge.net/sflogo.php?group_id=12360" width="88" height="31" border="0" ALT="SourceForge Logo"></A>
+<center><b><font size=+4>Screen Shots!&nbsp; Beauty, eh?</font></b>
+<p>Last update:&nbsp; 2001/12/30
+<p><b><font size=+1><a href="index.html">Back to Main Page</a></font></b></center>
+
+<h2>Here's what you see on your television</h2>
+
+<h3>Stable 3.x Versions</h3>
+
+<p>
+These images are for NTSC video.&nbsp; Most televisions can't display some
+number of the top and bottom lines of video so they won't actually be
+visible on your set.&nbsp; These pictures were obtained by piping the
+output of <font face="Courier New,Courier">bkrencode</font> into a program
+I've written for analyzing tape data streams and then doing a screen
+capture with the <a href="http://www.gimp.org"><font face="Courier
+New,Courier">GIMP</font></a>.
+
+<p>
+<center><table COLS=2 WIDTH="100%" BORDER=0 CELLSPACING=10 CELLPADDING=10>
+<tr NOSAVE>
+<td ALIGN=LEFT VALIGN=TOP NOSAVE>
+This first shot is of a data sector (one video field) and it's not too
+helpful unless you know what you're looking at.&nbsp;  The same output can
+be generated on your television by typing
+
+<p><font face="Courier New,Courier">cat /dev/zero > /dev/backer/0/nhs</font>
+
+<p>The version 3.x format is not as much of an improvement over 2.x as 2.x
+was over 1.x but it is not without its merits.&nbsp; The error control code
+is now used to only correct errors in actual data, it is not wasted
+correcting errors in unused portions of the sector.&nbsp; Also, the key
+bytes are spread more uniformly throughout the sector.&nbsp; This last
+improvement combined with a new, more robust, algorithm for identifying the
+key bytes means that it is practically impossible for noise to cause a
+sector to be lost --- the software can accurately identify sectors even on
+tapes which have been badly physically damaged.
+
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_dat_nh.png" height=253 width=352>
+
+<tr NOSAVE>
+<td ALIGN=LEFT VALIGN=TOP NOSAVE>
+This image is more informative.&nbsp; This is a sector from the BOR mark
+and it allows you to make out the structure of the format.&nbsp; First, the
+vertical lines down the left side of the image are not part of the tape
+data.&nbsp; They are produced by the Backer hardware which prefixes each
+line of video with the byte 0x45.&nbsp;  This presumably provides the means
+by which the hardware's bit clock is synchronized on playback.&nbsp; The
+top few lines contain the sector leader which is just filled with 0xe2 and
+is used to pad out the first few, unusable, lines of video.&nbsp; Likewise
+the bottom few lines contain the sector trailer which also pads out
+unusable lines but with 0x33.&nbsp; The key bytes can be seen scattered
+diagonally through the sector and are used to find sectors in the data
+stream.&nbsp; The vertical bars filling the bulk of the image are the
+filler bytes (0x33) used in BOR and EOR sectors and would contain data if
+this were a normal data sector.&nbsp; The parity bytes are at the bottom,
+filling several lines immediately above the trailer.&nbsp; Finally the
+sector header can be made out as four bytes, here all 0, appearing just
+above the parity bytes towards the right side of the video frame.
+
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_bor_nh.png" height=253 width=352>
+
+<tr NOSAVE>
+<td ALIGN=LEFT VALIGN=TOP NOSAVE>
+Here's what a low density data sector looks like.  You can get output like
+this by typing
+
+<p><font face="Courier New,Courier">cat /dev/zero > /dev/backer/0/nls</font>
+
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_dat_nl.png" height=253 width=320>
+
+
+<tr NOSAVE>
+<td ALIGN=LEFT VALIGN=TOP NOSAVE>
+And here's a sector from the low density BOR mark.
+
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_bor_nl.png" height=253 width=320>
+
+</table></center>
+
+
+<h2>
+Here's what <font face="Courier New,Courier">bkrmonitor</font> looks like</h2>
+
+<h3>Version 3.2</h3>
+
+<center><table COLS=2 NOSAVE >
+<tr NOSAVE>
+<td ALIGN=LEFT VALIGN=TOP NOSAVE>This shows <font face="Courier
+New,Courier">bkrmonitor</font> after a 545 million byte recording that had
+been made in EP mode was recovered from tape.&nbsp; As you can see, the raw
+recording could not be recovered from tape completely error-free as there
+were 108 uncorrectable data blocks.&nbsp;  However, this recording was made
+using the new <font face="Courier New,Courier">bkrenhanced</font> utility
+which had no trouble filling in the lost sectors as can be seen from it's
+output below
+
+<p>
+<font face="Courier New,Courier">
+bkrenhanced: DECODING at 92.2% efficiency<br>
+bkrenhanced: Number of lost sectors detected:  108 of 321045<br>
+bkrenhanced: Number of errors in worst block:  3 (20 allowed)<br>
+</font>
+
+<p>
+This shows that 108 sectors of the 321045 data sectors in the recording
+needed to be corrected which is a mean error rate of about
+3*10<sup>-4</sup>.&nbsp; We also see that no sector group required more
+than 3 of its 255 sectors to be replaced.&nbsp; <font face="Courier
+New,Courier">bkrenhanced</font>'s error control code can replace up to 20
+sectors in each group so there appears to be plenty of headroom as one would
+expect given the mean error rate and the code rate.
+
+<td ALIGN=CENTER VALIGN=TOP NOSAVE><img SRC="bkrmonitor_nhe.png" ALT="bkrmonitor screen shot" width=262 height=344>
+
+</table></center>
+
+<p>
+<hr NOSHADE WIDTH=100%>
+</body>
+</html>

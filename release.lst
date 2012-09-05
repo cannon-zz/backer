@@ -1,0 +1,10 @@
+Before:
+	-update release.html
+	-insert release date in HISTORY files
+	-insert release date in man page files
+	-update history sections of man pages
+	-insert release date in web pages
+After:
+	-udpate name of directory
+	-update version number in configure.ac and re-run autoconf
+	-add new entries in the HISTORY files

@@ -1,0 +1,236 @@
+Bit stream modulation schemes used
+==================================
+
+In standard operation, the bytes being written to tape are simply dumped
+as-is into the video stream (msb first) with each bit that is a 1 being
+written as a high state (white dash) and each 0 as a low state (black
+dash).  This is called non-return-to-zero (NRZ) modulation.
+
+In order to remain locked during playback, the Backer's on board PLL does
+have a minimum frequency at which it must see state transitions but this is
+readily achieved in a purely statistical manner by randomizing the data
+before writing it to tape.  This does not "guarantee" a minimum frequency
+but in practice it does not fail to provide one.  The advantage of merely
+randomizing the data is that the resulting modulation scheme has a 1:1 code
+rate so each byte of data maps to 8 state transitions and no
+splitting/shifting/recombining of data is required.
+
+In EP modes, because of the lower signal to noise ratio, the Backer's on
+board PLL needs a little help synchronizing with the bit stream during the
+playback of high density data.  This is accomplished by using a more
+elaborate modulation scheme.  The goals are two-fold:  (i) spread the state
+transitions out a little bit and (ii) ensure the state transitions are not
+too far apart.  In other words, impose minimum and maximum state transition
+frequencies that are matched to the tape noise level and requirements of
+the Backer's PLL.
+
+Backer's hardware is not unique in needing some help.  In fact, Backer is
+somewhat unique in not particularly requiring help when used with SP or LP
+recordings since I know of no modern (electronic) storage technology which
+does not make use of a modulation scheme for the purpose of imposing
+restrictions on state transition frequency:  tapes, discs, CDs, DVDs, etc.,
+all use some form of non-trivial bit modulation.
+
+The modulation of the bit stream is performed AFTER the Reed-Solomon error
+control coding is applied in order that the modulation regulate the
+transition properties of the parity symbols as well as the file data.
+These means that demodulation must be done before error correction which
+means that it is subject to corruption from tape noise.
+
+In the descriptions that follow, the input data is in NRZ form as it would
+be used by the standard modulation:  1 == high state, 0 == low state.  The
+GCR/RLL data is given in NRZI format where a 1 means a change of state and
+a 0 means no change.  The limits on the spacing of transitions are
+therefore limits on how many adjacent 0's can be in the encoded data.  It
+also means that the modulator/demodulator must have memory of the last
+state so that it can determine if a transition has occured.
+
+
+4/5 (0,2) GCR Modulation:
+
+This modulation scheme has a 4/5 code rate (every 4 bits require 5 state
+transitions to encode).  Its maximum transition frequency is equal to the
+modulation frequency (a transition is allowd to occur in every bit cell)
+and it guarantees that no more than 3 bit cells will elapse without a
+transition.
+
+The advantage of this scheme is its low memory overhead as it requires a
+total of only 48 bytes for the encoder and decoder look-up tables.
+
+Data nibble GCR code Data nibble GCR code
+
+   0000      11001      1000      11010
+   0001      11011      1001      01001
+   0010      10010      1010      01010
+   0011      10011      1011      01011
+   0100      11101      1100      11110
+   0101      10101      1101      01101
+   0110      10110      1110      01110
+   0111      10111      1111      01111
+
+          Coding/Decoding Table
+
+
+
+8/9 (0,4/4) GCR Modulation:
+
+This modulation uses 9 transitions to encode every 8 bits of data which
+gives it a higher code rate than the (0,2) GCR modulation and makes it the
+easiest modulation to implement for byte oriented data.  Its maximum
+transition frequency is equal to the modulation frequency and it guarantees
+that no more than 4 bit cells will occur in a row without a transition and
+also that no more than 4 transitions will occur in row.  The encoding and
+decoding tables require a total of 1024 bytes which is significantly more
+than either the (0,2) GCR or the (1,7) RLL modulations but is not an
+unbearable size.
+
+  NRZ       GCR       NRZ       GCR       NRZ       GCR       NRZ       GCR   
+00000000 001000010  01000000 010011110  10000000 011110110  11000000 101011110
+00000001 001000011  01000001 010100001  10000001 100001001  11000001 101100001
+00000010 001000100  01000010 010100010  10000010 100001010  11000010 101100010
+00000011 001000101  01000011 010100011  10000011 100001011  11000011 101100011
+00000100 001000110  01000100 010100100  10000100 100001100  11000100 101100100
+00000101 001001001  01000101 010100101  10000101 100001101  11000101 101100101
+00000110 001001010  01000110 010100110  10000110 100001110  11000110 101100110
+00000111 001001011  01000111 010101001  10000111 100010001  11000111 101101001
+00001000 001001100  01001000 010101010  10001000 100010010  11001000 101101010
+00001001 001001101  01001001 010101011  10001001 100010011  11001001 101101011
+00001010 001001110  01001010 010101100  10001010 100010100  11001010 101101100
+00001011 001010001  01001011 010101101  10001011 100010101  11001011 101101101
+00001100 001010010  01001100 010101110  10001100 100010110  11001100 101101110
+00001101 001010011  01001101 010110001  10001101 100011001  11001101 101110001
+00001110 001010100  01001110 010110010  10001110 100011010  11001110 101110010
+00001111 001010101  01001111 010110011  10001111 100011011  11001111 101110011
+00010000 001010110  01010000 010110100  10010000 100011100  11010000 101110100
+00010001 001011001  01010001 010110101  10010001 100011101  11010001 101110101
+00010010 001011010  01010010 010110110  10010010 100011110  11010010 101110110
+00010011 001011011  01010011 010111001  10010011 100100001  11010011 101111001
+00010100 001011100  01010100 010111010  10010100 100100010  11010100 101111010
+00010101 001011101  01010101 010111011  10010101 100100011  11010101 101111011
+00010110 001011110  01010110 010111100  10010110 100100100  11010110 110000100
+00010111 001100001  01010111 010111101  10010111 100100101  11010111 110000101
+00011000 001100010  01011000 011000010  10011000 100100110  11011000 110000110
+00011001 001100011  01011001 011000011  10011001 100101001  11011001 110001001
+00011010 001100100  01011010 011000100  10011010 100101010  11011010 110001010
+00011011 001100101  01011011 011000101  10011011 100101011  11011011 110001011
+00011100 001100110  01011100 011000110  10011100 100101100  11011100 110001100
+00011101 001101001  01011101 011001001  10011101 100101101  11011101 110001101
+00011110 001101010  01011110 011001010  10011110 100101110  11011110 110001110
+00011111 001101011  01011111 011001011  10011111 100110001  11011111 110010001
+00100000 001101100  01100000 011001100  10100000 100110010  11100000 110010010
+00100001 001101101  01100001 011001101  10100001 100110011  11100001 110010011
+00100010 001101110  01100010 011001110  10100010 100110100  11100010 110010100
+00100011 001110001  01100011 011010001  10100011 100110101  11100011 110010101
+00100100 001110010  01100100 011010010  10100100 100110110  11100100 110010110
+00100101 001110011  01100101 011010011  10100101 100111001  11100101 110011001
+00100110 001110100  01100110 011010100  10100110 100111010  11100110 110011010
+00100111 001110101  01100111 011010101  10100111 100111011  11100111 110011011
+00101000 001110110  01101000 011010110  10101000 100111100  11101000 110011100
+00101001 001111001  01101001 011011001  10101001 100111101  11101001 110011101
+00101010 001111010  01101010 011011010  10101010 101000010  11101010 110011110
+00101011 001111011  01101011 011011011  10101011 101000011  11101011 110100001
+00101100 010000100  01101100 011011100  10101100 101000100  11101100 110100010
+00101101 010000101  01101101 011011101  10101101 101000101  11101101 110100011
+00101110 010000110  01101110 011011110  10101110 101000110  11101110 110100100
+00101111 010001001  01101111 011100001  10101111 101001001  11101111 110100101
+00110000 010001010  01110000 011100010  10110000 101001010  11110000 110100110
+00110001 010001011  01110001 011100011  10110001 101001011  11110001 110101001
+00110010 010001100  01110010 011100100  10110010 101001100  11110010 110101010
+00110011 010001101  01110011 011100101  10110011 101001101  11110011 110101011
+00110100 010001110  01110100 011100110  10110100 101001110  11110100 110101100
+00110101 010010001  01110101 011101001  10110101 101010001  11110101 110101101
+00110110 010010010  01110110 011101010  10110110 101010010  11110110 110101110
+00110111 010010011  01110111 011101011  10110111 101010011  11110111 110110001
+00111000 010010100  01111000 011101100  10111000 101010100  11111000 110110010
+00111001 010010101  01111001 011101101  10111001 101010101  11111001 110110011
+00111010 010010110  01111010 011101110  10111010 101010110  11111010 110110100
+00111011 010011001  01111011 011110001  10111011 101011001  11111011 110110101
+00111100 010011010  01111100 011110010  10111100 101011010  11111100 110110110
+00111101 010011011  01111101 011110011  10111101 101011011  11111101 110111001
+00111110 010011100  01111110 011110100  10111110 101011100  11111110 110111010
+00111111 010011101  01111111 011110101  10111111 101011101  11111111 110111011
+
+                             Coding/Decoding Table
+
+
+
+2/3 (1,7) RLL Modulation:
+
+This modulation uses 3 transitions to encode every 2 bits which makes it
+the least efficient of the modulations described so far.  Its one and very
+significant advantage is that its maximum transition frequency is 1/2 the
+modulation frequency.  This is the reason for its popularity in the field
+of magnetic recording since it lets one double the modulation frequency
+(pack twice as many bit cells onto one's medium) without decreasing the
+physical space between transitions on the medium.  With this modulation's
+2:3 code rate, doubling the bit cell frequency increases the data capacity
+50%.
+
+With Backers we don't control the modulation frequency so the transition
+frequency limiting properties of this modulation don't help us in that
+regard but by spreading transitions out we cut down on the ringing in the
+signal which helps Backer's maintain PLL lock.
+
+The disadvantage of this system is its more complex encoding and decoding
+algorithm which involves more bit shifting and logical operations than
+either the (0,2) or (0,4) GCR modulations.  The encoding and decoding
+tables require a total of 144 bytes.
+
+The particular (1,7) RLL code described below is that used by the National
+Semiconductor DP84900 1,7 Encoder/Decoder circuit.  Their documentation
+says that "The (1,7) code used is based on US patent #4,413,251 via
+cross-licensing with International Business Machines Corporation (IBM)." So
+I don't know if that means I'm allowed to use it or not.  Since I am not
+charging any money for my work I don't see how using the code could upset
+IBM.  On the other hand, my work will be distributed under the terms of the
+GPL which would allow everyone and their dog to make use of it.  IBM might
+not like that...
+
+
+    NRZ IN    |     RLL Out
+Current | M L |  1,7  | Next State
+ State  | S S |       |
+        | B B |       |
+--------+-----+-------+------------
+   0    | 0 0 | 0 1 0 |     0
+   0    | 0 1 | 0 1 0 |     2
+   0    | 1 0 | 0 1 0 |     4
+   0    | 1 1 | 0 1 0 |     3
+--------+-----+-------+------------
+   1    | 0 0 | 0 0 0 |     0
+   1    | 0 1 | 0 0 0 |     2
+   1    | 1 0 | 0 0 0 |     4
+   1    | 1 1 | 0 0 0 |     3
+--------+-----+-------+------------
+   2    | 0 0 | 1 0 0 |     0
+   2    | 0 1 | 1 0 0 |     2
+   2    | 1 0 | 1 0 0 |     4
+   2    | 1 1 | 1 0 0 |     3
+--------+-----+-------+------------
+   3    | 0 0 | 1 0 1 |     0
+   3    | 0 1 | 1 0 1 |     1
+   3    | 1 0 | 1 0 1 |     4
+   3    | 1 1 | 1 0 0 |     1
+--------+-----+-------+------------
+   4    | 0 0 | 0 0 1 |     0
+   4    | 0 1 | 0 0 1 |     1
+   4    | 1 0 | 0 0 1 |     4
+   4    | 1 1 | 0 1 0 |     1
+
+          Encoding Table
+
+
+
+    RLL Bits (8==msb) | NRZ Bit
+    8 7 6 5 4 3 2 1 0 |
+    ------------------+--------
+    X X X 1 X X X X X | LSB = 1
+    X X X X 0 0 X X X | LSB = 1
+    ------------------+--------
+    X X X 0 X 1 X X X | MSB = 1
+    X X X 1 X 1 X X X | MSB = 1
+    X X 0 0 0 X X X X | MSB = 1
+    X X X X 1 X 0 0 0 | MSB = 1
+    X X X 1 X X 0 0 0 | MSB = 1
+
+          Decoding table

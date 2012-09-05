@@ -1,0 +1,35 @@
+<p>
+It's been nearly a year since a version has been released so lots has
+changed.&nbsp; A great deal of progress has been made toward supporting the
+external version but some issues remain to be resolved before these can be
+used reliably.
+</p>
+
+<p>
+Here are some of the user-visible changes:
+<ul>
+<li>Performance-motivated changes to the native tape format and to the
+format used by <font face="Courier New,Courier">bkrenhanced</font> have
+reduced CPU overhead significantly (nearly 20%).
+
+<li>Some bugs have been fixed in the tape data processing code that could
+have reduced the effectiveness of <font face="Courier
+New,Courier">bkrenhanced</font> in the event of an unlikely co-incidence of
+conditions.
+
+<li>Homogenized the command-line parameters and responses of several of the
+utilities.
+
+<li><font face="Courier New,Courier">bkrcheck</font> now generates a nicer
+test pattern than just random noise.
+
+<li><font face="Courier New,Courier">bkrmonitor</font> now monitors all
+installed units simultaneously and has been migrated to GTK+ 2.0.
+
+<li>The drivers and utilities have been returned to a single source tree
+and the configuration mechanism has been migrated to GNU autoconf.&nbsp;
+You should now be able to get a working install by doing the standard <font
+face="Courier New,Courier">./configure ; make ; make install</font>.
+
+</ul>
+</p>

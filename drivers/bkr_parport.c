@@ -87,6 +87,7 @@
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 
+#include <asm/delay.h>
 #include <asm/dma.h>
 
 #include <backer.h>

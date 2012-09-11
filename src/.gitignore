@@ -3,6 +3,7 @@
 .libs
 aclocal.m4
 autom4te.cache
+backer.spec
 codecs/*.la
 codecs/*.lo
 config.log
@@ -11,6 +12,8 @@ configure
 docs/*.8
 docs/*.aux
 docs/*.log
+docs/backer-driv.pdf
+drivers/.tmp_versions
 drivers/*.cmd
 drivers/*.ko
 drivers/*.mod.*

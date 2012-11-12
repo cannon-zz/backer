@@ -21,6 +21,11 @@ drivers/makefile
 drivers/makefile.in
 drivers/Module.symvers
 drivers/modules.order
+gnuscripts/libtool.m4
+gnuscripts/ltoptions.m4
+gnuscripts/ltsugar.m4
+gnuscripts/ltversion.m4
+gnuscripts/lt~obsolete.m4
 gnuscripts/ltmain.sh
 libtool
 Makefile

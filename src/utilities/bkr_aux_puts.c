@@ -127,5 +127,5 @@ int bkr_aux_puts(const char *s, char *aux, struct bkrformat *format)
 
 	for(i = total_lines*format->bytes_per_line - skipped; i < format->aux_length; aux[i++] = BKR_FILLER);
 
-	return(bit/5);
+	return bit/5;
 }

@@ -77,7 +77,7 @@ gint update_status(gpointer data)
 	char  text[20];
 
 	if(bkr_proc_read_status(unit->file, &proc_status) < 0)
-		return(TRUE);
+		return TRUE;
 
 	gtk_label_set_text(GTK_LABEL(unit->widget.state), proc_status.state);
 
@@ -176,7 +176,7 @@ gint update_status(gpointer data)
 	sprintf(text, "%u", proc_status.largest_field);
 	gtk_label_set_text(GTK_LABEL(unit->widget.largest), text);
 
-	return(TRUE);
+	return TRUE;
 }
 
 
@@ -313,7 +313,7 @@ GtkWidget *create_unit_page(struct unit_t *unit)
 	unit->widget.buffer_status = gtk_progress_bar_new();
 	gtk_table_attach_defaults(GTK_TABLE(table), unit->widget.buffer_status, 1, 2, 1, 2);
 
-	return(vbox);
+	return vbox;
 }
 
 
@@ -331,7 +331,7 @@ gint switch_page(GtkNotebook *notebook, GtkNotebookPage *page, gint page_num, gp
 
 	handle = gtk_timeout_add(update_interval, update_status, &unit[page_num]);
 
-	return(TRUE);
+	return TRUE;
 }
 
 

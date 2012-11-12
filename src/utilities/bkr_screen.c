@@ -20,13 +20,13 @@ static guint *draw_bit_h(guint *buff, guint colour)
 	*buff++ = colour;
 	*buff++ = colour;
 	*buff++ = colour;
-	return(buff);
+	return buff;
 }
 
 
 static guint *draw_bit_l(guint *buff, guint colour)
 {
-	return(draw_bit_h(draw_bit_h(buff, colour), colour));
+	return draw_bit_h(draw_bit_h(buff, colour), colour);
 }
 
 
@@ -41,7 +41,7 @@ static guint *draw_byte(guint *(*draw_bit)(guint *, guint), guint *buff, unsigne
 			buff = draw_bit(buff, 0);
 	}
 
-	return(buff);
+	return buff;
 }
 
 
@@ -91,7 +91,7 @@ guint bkr_screen_get_type(void)
 	if(!type)
 		type = g_type_register_static(GTK_TYPE_DRAWING_AREA, "BkrScreen", &info, 0);
 
-	return(type);
+	return type;
 }
 
 
@@ -189,5 +189,5 @@ GtkWidget *bkr_screen_new(gint mode)
 	}
 	g_signal_connect(G_OBJECT(widget), "expose_event", G_CALLBACK(expose), NULL);
 
-	return(widget);
+	return widget;
 }

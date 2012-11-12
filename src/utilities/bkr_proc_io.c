@@ -48,17 +48,17 @@ static int ready_for(FILE *file, int events)
 		.events = events
 	};
 
-	return(poll(&pollfd, 1, 0) > 0);
+	return poll(&pollfd, 1, 0) > 0;
 }
 
 static int ready_for_read(FILE *file)
 {
-	return(ready_for(file, POLLIN));
+	return ready_for(file, POLLIN);
 }
 
 static int ready_for_write(FILE *file)
 {
-	return(ready_for(file, POLLOUT));
+	return ready_for(file, POLLOUT);
 }
 
 
@@ -77,7 +77,7 @@ int bkr_proc_read_status(FILE *file, struct bkr_proc_status_t *status)
 	do {
 		seek_to_start(file);
 		if(!ready_for_read(file))
-			return(-1);
+			return -1;
 		result = fscanf(file,
 		                "Current State   : %s\n" \
 		                "%*17c%u\n" \
@@ -110,10 +110,10 @@ int bkr_proc_read_status(FILE *file, struct bkr_proc_status_t *status)
 		                &status->smallest_field,
 		                &status->largest_field);
 		if(result == EOF)
-			return(-1);
+			return -1;
 	} while(result < 18);
 
-	return(0);
+	return 0;
 }
 
 
@@ -165,7 +165,7 @@ int bkr_proc_write_status(FILE *file, struct bkr_proc_status_t *status)
 	        status->best_nonkey,
 	        status->smallest_field,
 	        status->largest_field);
-	return(0);
+	return 0;
 }
 
 
@@ -185,12 +185,12 @@ int bkr_proc_read_format_table(FILE *file, bkr_format_info_t *format)
 	seek_to_start(file);
 
 	if(!ready_for_read(file))
-		return(-1);
+		return -1;
 
 	for(i = 0; i < BKR_NUM_FORMATS*BKR_NUM_FORMAT_PARMS; i++)
 		if(fscanf(file, "%d", &format_as_ints[i]) != 1)
-			return(-1);
-	return(0);
+			return -1;
+	return 0;
 }
 
 
@@ -212,8 +212,8 @@ int bkr_proc_write_format_table(FILE *file, bkr_format_info_t *format)
 
 	for(i = 0; i < BKR_NUM_FORMATS*BKR_NUM_FORMAT_PARMS - 1; i++)
 		if(fprintf(file, "%d\t", format_as_ints[i]) < 0)
-			return(-1);
+			return -1;
 	if(fprintf(file, "%d", format_as_ints[i]) < 0)
-		return(-1);
-	return(0);
+		return -1;
+	return 0;
 }

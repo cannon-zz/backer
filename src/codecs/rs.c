@@ -44,7 +44,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-static void *malloc(size_t size)  { return(kmalloc(size, GFP_KERNEL)); }
+static void *malloc(size_t size)  { return kmalloc(size, GFP_KERNEL); }
 static void free(void *ptr) { kfree(ptr); }
 
 #else
@@ -99,7 +99,7 @@ static gf modNN(int x)
 		x -= NN;
 		x = (x >> MM) + (x & NN);
 	}
-	return(x);
+	return x;
 }
 
 
@@ -164,7 +164,7 @@ static int polynomial_to_alpha(gf *poly, int deg)
 	for(deg = x - poly; x >= poly; x--)
 		*x = Log_alpha[*x];
 
-	return(deg);
+	return deg;
 }
 
 
@@ -184,7 +184,7 @@ static gf polynomial_evaluate(const gf *poly, int deg, gf log_x)
 		result ^= poly[deg];
 	}
 
-	return(result);
+	return result;
 }
 
 static gf log_polynomial_evaluate(const gf *log_poly, int deg, gf log_x)
@@ -197,7 +197,7 @@ static gf log_polynomial_evaluate(const gf *log_poly, int deg, gf log_x)
 		n_log_x = modNN(n_log_x + log_x);
 	}
 
-	return(result);
+	return result;
 }
 
 
@@ -215,7 +215,7 @@ static int polynomial_differentiate(gf *poly, int deg)
 	for(poly++, i = 0; i < deg; poly += 2, i += 2)
 		*poly = INFINITY;
 
-	return(--deg & ~1);
+	return --deg & ~1;
 }
 
 
@@ -240,7 +240,7 @@ static int polynomial_multiply(gf *dst, int deg_dst, const gf *src1, int deg_src
 
 	while(!dst[deg_dst])
 		deg_dst--;
-	return(deg_dst);
+	return deg_dst;
 }
 
 
@@ -325,7 +325,7 @@ rs_format_t *reed_solomon_codec_new(unsigned int n, unsigned int k, int interlea
 
 	if((n > NN) || (k > n) || (interleave < 1) || !format) {
 		free(format);
-		return(NULL);
+		return NULL;
 	}
 
 	format->n = n;
@@ -343,12 +343,12 @@ rs_format_t *reed_solomon_codec_new(unsigned int n, unsigned int k, int interlea
 
 	if(!format->g || !format->erasure || !format->log_beta) {
 		reed_solomon_codec_free(format);
-		return(NULL);
+		return NULL;
 	}
 
 	generator_polynomial_init(format->g, format->log_beta, format->parity);
 
-	return(format);
+	return format;
 }
 
 
@@ -487,7 +487,7 @@ static int compute_syndromes(gf *s, const rs_symbol_t *parity, const rs_symbol_t
 	for(i = 0; i < num_parity; i++)
 		s[i] = polynomial_evaluate(block, n, modNN(LOG_BETA*(J0+i)));
 
-	return(num_parity ? polynomial_to_alpha(s, num_parity - 1) : -1);
+	return num_parity ? polynomial_to_alpha(s, num_parity - 1) : -1;
 }
 
 
@@ -507,7 +507,7 @@ static gf compute_discrepancy(int r, const gf *lambda, int deg_lambda, const gf 
 		if(*lambda && (*s != INFINITY))
 			discrepancy ^= Alpha_exp[Log_alpha[*lambda] + *s];
 
-	return(discrepancy);
+	return discrepancy;
 }
 
 
@@ -583,7 +583,7 @@ static int compute_lambda(gf *lambda, int num_parity, const gf *erasure, int num
 		add_poly_times_const(b, lambda, deg_lambda, NN - discr);
 	}
 
-	return(polynomial_to_alpha(lambda, num_parity));
+	return polynomial_to_alpha(lambda, num_parity);
 }
 
 static int find_roots(gf *lambda, int deg_lambda, gf *log_root, gf *erasure, const gf *log_beta)
@@ -634,7 +634,7 @@ static int find_roots(gf *lambda, int deg_lambda, gf *log_root, gf *erasure, con
 			break;
 	}
 
-	return(num_roots);
+	return num_roots;
 }
 
 
@@ -655,13 +655,13 @@ int reed_solomon_decode(rs_symbol_t *parity, rs_symbol_t *data, int num_erase, r
 
 	deg_s = compute_syndromes(s, parity, data, format.n, format.parity, format.interleave);
 	if(deg_s < 0)
-		return(0);	/* all syndromes are 0 == code word is valid */
+		return 0;	/* all syndromes are 0 == code word is valid */
 
 	deg_lambda = compute_lambda(lambda, format.parity, format.erasure, num_erase, s, deg_s);
 
 	num_roots = find_roots(lambda, deg_lambda, root, format.erasure, format.log_beta);
 	if(num_roots != deg_lambda)
-		return(-RS_EDEGENERATEROOTS);	/* lambda(x) has degenerate roots == code word is uncorrectable */
+		return -RS_EDEGENERATEROOTS;	/* lambda(x) has degenerate roots == code word is uncorrectable */
 
 	/*
 	 * Compute error & erasure evaluator polynomial:
@@ -700,7 +700,7 @@ int reed_solomon_decode(rs_symbol_t *parity, rs_symbol_t *data, int num_erase, r
 
 		denominator = log_polynomial_evaluate(lambda, deg_lambda, root[i]);
 		if(!denominator)
-			return(-RS_EFORNEY);
+			return -RS_EFORNEY;
 
 		magnitude = Alpha_exp[magnitude + NN - Log_alpha[denominator]];
 
@@ -709,8 +709,8 @@ int reed_solomon_decode(rs_symbol_t *parity, rs_symbol_t *data, int num_erase, r
 		else if(format.erasure[i] < format.n)
 			data[(format.erasure[i] - format.parity)*format.interleave] ^= magnitude;
 		else
-			return(-RS_EINVALIDROOT);
+			return -RS_EINVALIDROOT;
 	}
 
-	return(num_roots);
+	return num_roots;
 }

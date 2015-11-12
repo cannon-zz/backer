@@ -1,6 +1,6 @@
 # Preamble
-AC_INIT([backer],[3.103],[kcannon@users.sf.net],[backer])
-AC_COPYRIGHT([Copyright (C) 2002 Kipp C. Cannon])
+AC_INIT([backer],[3.104],[kcannon@users.sf.net],[backer])
+AC_COPYRIGHT([Copyright (C) 2002--2015 Kipp C. Cannon])
 AC_CONFIG_SRCDIR([drivers/backer.h])
 AC_CONFIG_AUX_DIR([gnuscripts])
 AC_CONFIG_MACRO_DIR([gnuscripts])

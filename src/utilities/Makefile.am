@@ -1,4 +1,4 @@
-INCLUDES = -I$(top_srcdir)/drivers -I$(top_srcdir)/codecs
+AM_CPPFLAGS = -I$(top_srcdir)/drivers -I$(top_srcdir)/codecs
 
 dist_bin_SCRIPTS = bkrvideo
 

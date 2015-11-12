@@ -51,13 +51,14 @@ dnl
 AC_DEFUN([AX_CHECK_LINUX_KERNEL_SOURCE],
 	[AC_REQUIRE([AX_LINUX_KERNEL_VERSION])
 	LINUX_KERNEL_SOURCE="${MODULES_DIR}/build"
+	LINUX_KERNEL_HEADERS="${LINUX_KERNEL_SOURCE}/include/generated/uapi"
 	AC_ARG_WITH(
 		[kernel-source],
 		AC_HELP_STRING([--with-kernel-source=dir], [path to Linux kernel source (default=<modulesdir>/build)]),
 		[LINUX_KERNEL_SOURCE=${withval}]
 	)
-	AC_MSG_CHECKING([for linux/version.h in ${LINUX_KERNEL_SOURCE}/include])
-	if test -f "${LINUX_KERNEL_SOURCE}/include/linux/version.h" ; then
+	AC_MSG_CHECKING([for linux/version.h in ${LINUX_KERNEL_HEADERS}])
+	if test -f "${LINUX_KERNEL_HEADERS}/linux/version.h" ; then
 		AC_MSG_RESULT([yes])
 	else
 		AC_MSG_RESULT([no])

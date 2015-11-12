@@ -64,7 +64,7 @@ static guint32 *draw_byte_l(guint32 *pos, guint8 byte)
 	for(i = 0x80; i; i >>= 1)
 		/* 8 pixels for a low density bit (draw all eight by
 		 * writing 64-bit numbers to memory) */
-		*posl++ = byte & i ? 0xffffffffffffffff  : 0;
+		*posl++ = byte & i ? 0xffffffffffffffff : 0;
 
 	return (guint32 *) posl;
 }

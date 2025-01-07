@@ -22,13 +22,13 @@ The driver version numbering works as follows.  The version major number (the n
 
 ### Data Formats
     
-    The driver has two native data formats and a pass-through mode.  One of the formats is optimized for SP and LP recordings and the other for EP recordings.  The pass-through mode provides applications with access to the raw tape data stream.
+The driver has two native data formats and a pass-through mode.  One of the formats is optimized for SP and LP recordings and the other for EP recordings.  The pass-through mode provides applications with access to the raw tape data stream.
     
-    The data formats used by this driver are not compatible with the data formats used by Danmere's Windows software.  The driver's pass-through modes can be used to read and write non-native formats through the use of helper applications but I have not written such a utility for Danmere's format and have no plans to do so.
+The data formats used by this driver are not compatible with the data formats used by Danmere's Windows software.  The driver's pass-through modes can be used to read and write non-native formats through the use of helper applications but I have not written such a utility for Danmere's format and have no plans to do so.
     
 ### Data Transfer Rates
     
-    These are calculated assuming 60 fields per second for NTSC and 50 fields per second for PAL.
+These are calculated assuming 60 fields per second for NTSC and 50 fields per second for PAL.
 
     | SP/LP | NTSC       | PAL        |
     |-------|------------|------------|
@@ -42,11 +42,11 @@ The driver version numbering works as follows.  The version major number (the n
 
 ### Tape Capacities
     
-    Multiply the numbers above by your tape length and compression ratio.  For example, for NTSC video a T-120 in SP mode at high density can hold 888 MiB uncompressed (120 minutes \* 129360 bytes/second).  Danmere's best figures are obtained assuming a high density recording (probably PAL) on a T-180 in LP mode with 2:1 compression for which they claim either a 2.8 GiB or 3.7 GiB tape capacity depending on which web page you read.  Under the same conditions, this software's tape capacity would be 5.3 GiB.  Why \`\`would be''?  Because my VCR (along with every other VCR sold these days it seems) does not have an LP mode and 2:1 compression is probably a bit optimistic if your disks are full of .mp3s and other pre-compressed data.
+Multiply the numbers above by your tape length and compression ratio.  For example, for NTSC video a T-120 in SP mode at high density can hold 888 MiB uncompressed (120 minutes \* 129360 bytes/second).  Danmere's best figures are obtained assuming a high density recording (probably PAL) on a T-180 in LP mode with 2:1 compression for which they claim either a 2.8 GiB or 3.7 GiB tape capacity depending on which web page you read.  Under the same conditions, this software's tape capacity would be 5.3 GiB.  Why \`\`would be''?  Because my VCR (along with every other VCR sold these days it seems) does not have an LP mode and 2:1 compression is probably a bit optimistic if your disks are full of .mp3s and other pre-compressed data.
     
-    For a real-world benchmark, my system partition has 2.6 GiB of data on it (excluding /tmp, etc.) which compresses to 552 MiB using bzip2, or about 2/3 of a T-120.
+For a real-world benchmark, my system partition has 2.6 GiB of data on it (excluding /tmp, etc.) which compresses to 552 MiB using bzip2, or about 2/3 of a T-120.
     
-    The highest capacity one could _hope_ to achieve is with an EP recording on a T-200 with 2:1 compression.  Such a recording can hold 6.8 GiB in NTSC format and 7.1 GiB in PAL format.
+The highest capacity one could _hope_ to achieve is with an EP recording on a T-200 with 2:1 compression.  Such a recording can hold 6.8 GiB in NTSC format and 7.1 GiB in PAL format.
     
 
 ## System Requirements
@@ -88,54 +88,54 @@ A Backer \`\`draws'' the data being saved by turning each bit of the data stream
 
 Here is an example of one line of video from the Backer's low density mode.
 
-<center><table cols=40 width=80% border=2 cellspacing=0 cellpadding=1>
-<tr height=5 NOSAVE>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
-<td bgcolor=#FFFFFF width=2.5% NOSAVE></td>
-<td bgcolor=#000000 width=2.5% NOSAVE></td>
+<table cols=40 width=80% border=2 cellspacing=0 cellpadding=1>
+<tr height=5>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
+<td bgcolor=#FFFFFF width=2.5%></td>
+<td bgcolor=#000000 width=2.5%></td>
 </tr><tr>
 <td align=center>0</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>0</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>1</td><td align=center>1</td><td align=center>1</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>0</td><td align=center>1</td><td align=center>1</td><td align=center>1</td><td align=center>0</td><td align=center>0</td><td align=center>0</td><td align=center>1</td><td align=center>0</td>
 </tr><tr>
 <td colspan=8 align=center>0x45</td><td COLSPAN=8 align=center>0x33</td><td COLSPAN=8 align=center>0x33</td><td COLSPAN=8 align=center>0xE2</td><td COLSPAN=8 align=center>0xE2</td>
 </tr>
-</table></center>
+</table>
 
 Beneath the black and white dashes is shown the bit pattern they are equivalent to and below that is shown how the bits are divided into bytes.  The bits are written and read in left-to-right order (the same direction, of course, as a television's scanning).  That's all there is to a Backer:  put it in \`\`transmit'' mode and send it the bytes you want written to tape;  put it in \`\`receive'' mode and read bytes from tape.
 
@@ -145,7 +145,7 @@ Of course, turning this into a useful data storage and retrieval system requires
 
 #### Stable 3.x Versions
 
-These images are for NTSC video.  Most televisions can't display some number of the top and bottom lines of video so they won't actually be visible on your set.  These pictures were obtained by piping the output of bkrencode into a program I've written for analyzing tape data streams and then doing a screen capture with the [GIMP](http://www.gimp.org).
+These images are for NTSC video.  Most televisions can't display some number of the top and bottom lines of video so they won't actually be visible on your set.
 
 This first image is of a data sector (one video field) and it's not too helpful unless you know what you're looking at.  The same output can be generated on your television by typing
 

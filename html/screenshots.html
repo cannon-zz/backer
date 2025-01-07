@@ -9,32 +9,133 @@
 <body text="#000000" bgcolor="#FFFFFF" link="#3333FF" vlink="#3333FF" alink="#3333FF">
 
 <A href="http://sourceforge.net"><IMG src="http://sourceforge.net/sflogo.php?group_id=12360" width="88" height="31" border="0" ALT="SourceForge Logo"></A>
-<center><b><font size=+4>Screen Shots!&nbsp; Beauty, eh?</font></b>
-<p>Last update:&nbsp; 2001/12/30
-<p><b><font size=+1><a href="index.html">Back to Main Page</a></font></b></center>
 
-<h2>Here's what you see on your television</h2>
+<center><b><font size=+4>Screen Shots!&nbsp; Beauty, eh?</font></b>
+
+<p>Last update:&nbsp; 2003/04/24</p>
+
+<p><b><font size=+1><a href="index.html">Back to Main
+Page</a></font></b></center></p>
+
+<h2>How a Backer works</h2>
+
+<p>A Backer ``draws'' the data being saved by turning each bit of the data
+stream, 0 or 1, into a horizontal black or white dash in its video
+output.&nbsp; In high density mode there are 80 of these dashes across each
+line of video and in low density mode there are 32.&nbsp; Each video line
+also begins with 8 additional dashes in the pattern <font face="Courier
+New,Courier">01000101</font>, equivalent to the byte <font face="Courier
+New,Courier">0x45</font>.&nbsp; These additional bits are added by the
+Backer hardware during data output and are automatically stripped from the
+signal during data retrieval.</p>
+
+<p>Here is an example of one line of video from the Backer's low density
+mode.</p>
+
+<p><center><table cols=40 width=80% border=2 cellspacing=0
+cellpadding=1>
+<tr height=5 NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<td bgcolor=#FFFFFF width=2.5% NOSAVE>
+<td bgcolor=#000000 width=2.5% NOSAVE>
+<tr>
+<td align=center>0<td align=center>1<td align=center>0<td align=center>0<td align=center>0<td align=center>1<td align=center>0<td align=center>1<td align=center>0<td align=center>0<td align=center>1<td align=center>1<td align=center>0<td align=center>0<td align=center>1<td align=center>1<td align=center>0<td align=center>0<td align=center>1<td align=center>1<td align=center>0<td align=center>0<td align=center>1<td align=center>1<td align=center>1<td align=center>1<td align=center>1<td align=center>0<td align=center>0<td align=center>0<td align=center>1<td align=center>0<td align=center>1<td align=center>1<td align=center>1<td align=center>0<td align=center>0<td align=center>0<td align=center>1<td align=center>0
+<tr>
+<td colspan=8 align=center>0x45<td COLSPAN=8 align=center>0x33<td COLSPAN=8 align=center>0x33<td COLSPAN=8 align=center>0xE2<td COLSPAN=8 align=center>0xE2
+</table></center></p>
+
+<p>Beneath the black and white dashes is shown the bit pattern they are
+equivalent to and below that is shown how the bits are divided into
+bytes.&nbsp; The bits are written and read in left-to-right order (the same
+direction, of course, as a television's scanning).&nbsp; That's all there
+is to a Backer:&nbsp; put it in ``transmit'' mode and send it the bytes you
+want written to tape;&nbsp; put it in ``receive'' mode and read bytes from
+tape.</p>
+
+<p>Of course, turning this into a useful data storage and retrieval system
+requires a lot more work on the software side.&nbsp; The first problem to
+overcome is that Backer's do not retrieve a fixed number of bytes from each
+video field, rather a Backer may skip over the first and/or last few
+lines.&nbsp; On the one hand this means that one should not use these lines
+for data storage and on the other hand means the read-out software needs to
+be able to identify, asynchronously, the start and end of each video
+field.&nbsp; Once a solution to this framing problem has been acheived, the
+next obstacle to data storage and retrieval is tape noise.&nbsp; A VCR and
+VHS tape is not a data-grade recording medium by any stretch of the
+imagination so a fairly robust forward error-correcting code must be
+applied to the data stream to allow its accurate recovery.&nbsp; Finally,
+during playback Backers rely on the data stream being ``self clocking''
+meaning that the Backer circuitry uses the black-white transitions in the
+video signal to find the bits.&nbsp; If a long stretch of the line has no
+transitions in it, the Backer circuitry can loose track of where it is and
+stop reading out bytes.&nbsp; The solution is to introduce a run-length
+limiting bit modulation technique to ensure a minimum transition
+frequency.&nbsp; In practice, however, it proves effective to simply mix
+the data being written to tape with noise from a simple random number
+generator and this has the advantage of maximizing tape data
+capacity.&nbsp; The software included in the <font face="Courier
+New,Courier">linbacker</font> driver package is capable of performing all
+of the encoding and decoding tasks above.</p>
+
+<h2>What you see on your television</h2>
 
 <h3>Stable 3.x Versions</h3>
 
-<p>
-These images are for NTSC video.&nbsp; Most televisions can't display some
-number of the top and bottom lines of video so they won't actually be
+<p>These images are for NTSC video.&nbsp; Most televisions can't display
+some number of the top and bottom lines of video so they won't actually be
 visible on your set.&nbsp; These pictures were obtained by piping the
 output of <font face="Courier New,Courier">bkrencode</font> into a program
 I've written for analyzing tape data streams and then doing a screen
 capture with the <a href="http://www.gimp.org"><font face="Courier
-New,Courier">GIMP</font></a>.
+New,Courier">GIMP</font></a>.</p>
 
-<p>
-<center><table COLS=2 WIDTH="100%" BORDER=0 CELLSPACING=10 CELLPADDING=10>
+<center><table COLS=2 WIDTH="100%" BORDER=0 CELLSPACING=10
+CELLPADDING=10>
 <tr NOSAVE>
 <td ALIGN=LEFT VALIGN=TOP NOSAVE>
-This first shot is of a data sector (one video field) and it's not too
+<p>This first image is of a data sector (one video field) and it's not too
 helpful unless you know what you're looking at.&nbsp;  The same output can
-be generated on your television by typing
+be generated on your television by typing</p>
 
-<p><font face="Courier New,Courier">cat /dev/zero > /dev/backer/0/nhs</font>
+<p><font face="Courier New,Courier">cat /dev/zero >
+/dev/backer/0/nhs</font></p>
 
 <p>The version 3.x format is not as much of an improvement over 2.x as 2.x
 was over 1.x but it is not without its merits.&nbsp; The error control code
@@ -44,88 +145,93 @@ bytes are spread more uniformly throughout the sector.&nbsp; This last
 improvement combined with a new, more robust, algorithm for identifying the
 key bytes means that it is practically impossible for noise to cause a
 sector to be lost --- the software can accurately identify sectors even on
-tapes which have been badly physically damaged.
+tapes which have been badly physically damaged.</p>
 
-<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_dat_nh.png" height=253 width=352>
-
-<tr NOSAVE>
-<td ALIGN=LEFT VALIGN=TOP NOSAVE>
-This image is more informative.&nbsp; This is a sector from the BOR mark
-and it allows you to make out the structure of the format.&nbsp; First, the
-vertical lines down the left side of the image are not part of the tape
-data.&nbsp; They are produced by the Backer hardware which prefixes each
-line of video with the byte 0x45.&nbsp;  This presumably provides the means
-by which the hardware's bit clock is synchronized on playback.&nbsp; The
-top few lines contain the sector leader which is just filled with 0xe2 and
-is used to pad out the first few, unusable, lines of video.&nbsp; Likewise
-the bottom few lines contain the sector trailer which also pads out
-unusable lines but with 0x33.&nbsp; The key bytes can be seen scattered
-diagonally through the sector and are used to find sectors in the data
-stream.&nbsp; The vertical bars filling the bulk of the image are the
-filler bytes (0x33) used in BOR and EOR sectors and would contain data if
-this were a normal data sector.&nbsp; The parity bytes are at the bottom,
-filling several lines immediately above the trailer.&nbsp; Finally the
-sector header can be made out as four bytes, here all 0, appearing just
-above the parity bytes towards the right side of the video frame.
-
-<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_bor_nh.png" height=253 width=352>
+<td WIDTH=380 ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#8080A0>
+<img SRC="3_0_dat_nh.png" height=253 width=352>
 
 <tr NOSAVE>
 <td ALIGN=LEFT VALIGN=TOP NOSAVE>
-Here's what a low density data sector looks like.  You can get output like
-this by typing
+<p>This image is more informative.&nbsp; This is a sector from the
+beginning of record (BOR) mark and it allows you to make out the structure
+of the format.&nbsp; First, the vertical lines down the left side of the
+image are not part of the tape data.&nbsp; They are produced by the Backer
+hardware which prefixes each line of video with the byte 0x45.&nbsp;  This
+presumably provides the means by which the hardware's bit clock is
+synchronized on playback.&nbsp; The top few lines contain the sector leader
+which is just filled with 0xe2 and is used to pad out the first few,
+unusable, lines of video.&nbsp; Likewise the bottom few lines contain the
+sector trailer which also pads out unusable lines but with 0x33.&nbsp; The
+key bytes can be seen scattered diagonally through the sector and are used
+to identify the location of sectors in the data stream.&nbsp; The vertical
+bars filling the bulk of the image are the filler bytes (0x33) used in BOR
+and EOR sectors and would contain data if this were a normal data sector
+(see above).&nbsp; The parity bytes for the error control code are at the
+bottom, filling several lines immediately above the trailer.&nbsp; Finally
+the sector header can be made out as four bytes, here all 0, appearing just
+above the parity bytes towards the right side of the video frame.</p>
 
-<p><font face="Courier New,Courier">cat /dev/zero > /dev/backer/0/nls</font>
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#8080A0>
+<img SRC="3_0_bor_nh.png" height=253 width=352>
 
-<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_dat_nl.png" height=253 width=320>
+<tr NOSAVE>
+<td ALIGN=LEFT VALIGN=TOP NOSAVE>
+<p>Here's what a low density data sector looks like.  You can get output
+like this by typing</p>
+
+<p><font face="Courier New,Courier">cat /dev/zero >
+/dev/backer/0/nls</font></p>
+
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#8080A0>
+<img SRC="3_0_dat_nl.png" height=253 width=320>
 
 
 <tr NOSAVE>
 <td ALIGN=LEFT VALIGN=TOP NOSAVE>
-And here's a sector from the low density BOR mark.
+<p>And here's a sector from the low density BOR mark.</p>
 
-<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#808090><img SRC="3_0_bor_nl.png" height=253 width=320>
+<td ALIGN=CENTER VALIGN=CENTER NOSAVE BGCOLOR=#8080A0>
+<img SRC="3_0_bor_nl.png" height=253 width=320>
 
 </table></center>
 
 
-<h2>
-Here's what <font face="Courier New,Courier">bkrmonitor</font> looks like</h2>
+<h2><font face="Courier New,Courier">bkrmonitor</font></h2>
 
 <h3>Version 3.2</h3>
 
-<center><table COLS=2 NOSAVE >
+<center><table COLS=2 WIDTH=100% NOSAVE >
 <tr NOSAVE>
-<td ALIGN=LEFT VALIGN=TOP NOSAVE>This shows <font face="Courier
+<td ALIGN=LEFT VALIGN=TOP WIDTH=60% NOSAVE>
+<p>The image at right shows <font face="Courier
 New,Courier">bkrmonitor</font> after a 545 million byte recording that had
 been made in EP mode was recovered from tape.&nbsp; As you can see, the raw
 recording could not be recovered from tape completely error-free as there
 were 108 uncorrectable data blocks.&nbsp;  However, this recording was made
 using the new <font face="Courier New,Courier">bkrenhanced</font> utility
 which had no trouble filling in the lost sectors as can be seen from it's
-output below
+output below.</p>
 
-<p>
-<font face="Courier New,Courier">
+<p><font face="Courier New,Courier">
 bkrenhanced: DECODING at 92.2% efficiency<br>
 bkrenhanced: Number of lost sectors detected:  108 of 321045<br>
 bkrenhanced: Number of errors in worst block:  3 (20 allowed)<br>
-</font>
+</font></p>
 
-<p>
-This shows that 108 sectors of the 321045 data sectors in the recording
+<p>This shows that 108 sectors of the 321045 data sectors in the recording
 needed to be corrected which is a mean error rate of about
 3*10<sup>-4</sup>.&nbsp; We also see that no sector group required more
 than 3 of its 255 sectors to be replaced.&nbsp; <font face="Courier
 New,Courier">bkrenhanced</font>'s error control code can replace up to 20
-sectors in each group so there appears to be plenty of headroom as one would
-expect given the mean error rate and the code rate.
+sectors in each group so there appears to be plenty of headroom as one
+would expect given the mean error rate and the code rate.</p>
 
-<td ALIGN=CENTER VALIGN=TOP NOSAVE><img SRC="bkrmonitor_nhe.png" ALT="bkrmonitor screen shot" width=262 height=344>
+<td ALIGN=CENTER VALIGN=TOP NOSAVE>
+<img SRC="bkrmonitor_nhe.png" ALT="bkrmonitor screen shot" width=262
+height=344>
 
 </table></center>
 
-<p>
 <hr NOSHADE WIDTH=100%>
 </body>
 </html>

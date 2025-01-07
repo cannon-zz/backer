@@ -11,11 +11,11 @@
 <center>
 <img SRC="title.png" ALT="Backer For Linux" height=128 width=512>
 <p><b>The Backer for Linux project:&nbsp; a project to develop a Linux
-device driver for Danmere's Backer video tape backup devices.</b>
+device driver for Danmere's Backer video tape backup devices.</b></p>
 
-<p>Last update:&nbsp; 2002/12/1</center>
+<p>Last update:&nbsp; 2003/05/07</p></center>
 
-<p><br>
+<br><p>
 <center><table COLS=2 WIDTH="50%" NOSAVE NOSHADE >
 <tr NOSAVE>
 <td ALIGN=CENTER VALIGN=TOP NOSAVE><b><font size=+1><a href="screenshots.html">Screen
@@ -23,57 +23,51 @@ Shots</a></font></b></td>
 
 <td ALIGN=CENTER VALIGN=TOP NOSAVE><b><font size=+1><a
 href="http://sourceforge.net/projects/linbacker">SourceForge Project
-Page</a></font></b></td>
+Page</a></font></b></td></p>
 
 </tr>
 </table></center>
 
 <h3>What is a Backer?</h3>
 
-<p>
-A company in England named <a href="http://www.danmere.com">Danmere Technologies Ltd.</a> (now <a
+<p>A company in England named Danmere Technologies Ltd. (now <a
 href="http://www.4-tv.net">4TV Ltd.</a>) used to sell a line of devices
 that allow you to save data on regular video tape.&nbsp; They called them
 Backers and they came in three flavours:&nbsp; an external version that
 plugs into an ECP parallel port and two internal versions that sit in ISA
 bus slots.&nbsp; If you remember the days of using audio cassettes to store
 programs and data then the operation of a Backer device should be familiar
-to you.
+to you.</p>
 
-<p>
-Unfortunately, Danmere would neither provide Linux drivers for their
+<p>Unfortunately, Danmere would neither provide Linux drivers for their
 products nor were they willing to release programming information to
 developers who were willing to do so for them.&nbsp; The last e-mails I
-sent to them on the subject were not responded to.&nbsp; Finally, as of the
-fall of 2002, their web site has disappeared.&nbsp; Oh well...
+sent to them on the subject were ignored.&nbsp; Finally, as of the fall of
+2002, their web site has disappeared.&nbsp; Oh well...</p>
 
-<p>
-It turns out the Backer hardware is extremely simple and contains virtually
+<p>It turns out the Backer hardware is extremely simple and contains virtually
 no data processing intelligence whatsoever.&nbsp; It plays the role of a
 modem, blindly modulating a byte stream into and demodulating it out of a
 video signal.&nbsp; External software is required to perform all data
-framing, error correction, etc. .&nbsp; The advantage of this design is
-that it reduces the cost of the hardware and permits a great deal of
-flexibility in matching the tape format to the video equipment in use.
+framing, error correction, etc..&nbsp; The advantage of this design is that
+it reduces the cost of the hardware and permits a great deal of flexibility
+in matching the tape format to the video equipment in use.</p>
 
 
 <h3>What is this software?</h3>
 
-<p>
-The software discussed on this page is a Linux device driver for Backers
+<p>The software discussed on this page is a Linux device driver for Backers
 that allows you to use them as though they were standard magnetic tape
 devices.&nbsp; With this driver, you can perform backups of your system
 using, for example, <a href="http://www.gnu.org/software/tar/tar.html">GNU
 <font face="Courier New,Courier">tar</font></a> or the archive software of
-your choice.
+your choice.</p>
 
-<p>
-You can download the latest stable and unstable versions of the driver from
-<a
-href="http://sourceforge.net/project/showfiles.php?group_id=12360">here</a>.
+<p>You can download the latest stable and unstable versions of the driver
+from <a
+href="http://sourceforge.net/project/showfiles.php?group_id=12360">here</a>.</p>
 
-<p>
-The driver version numbering works as follows.&nbsp; The version major
+<p>The driver version numbering works as follows.&nbsp; The version major
 number (the number to the left of the decimal place) indicates the native
 tape format.&nbsp; This number is increased when the driver's tape format
 changes in a way that makes it incompatible with previous versions.&nbsp;
@@ -81,34 +75,30 @@ The minor number (the number to the right of the decimal place) indicates
 the release number.&nbsp; Minor numbers less than 100 are stable releases
 and will all use the same, well tested, tape format.&nbsp; Minor numbers
 greater than or equal to 100 are unstable, developmental, releases leading
-up to the next major release.&nbsp;  Developmental releases might not be
-well tested and might not use the same format from release to release.
+up to the next major release.&nbsp; Developmental releases might not be
+well tested and might not use the same format from release to release.</p>
 
 
 <h3>Capabilities (stable 3.x drivers)</h3>
 
 <ul>
-<li>
-<h4>Data Formats</h4>
-The driver has two native data formats and a pass-through mode.&nbsp; One
-of the formats is optimized for SP and LP recordings and the other for EP
-recordings.&nbsp; The pass-through mode provides applications with access
-to the raw tape data stream.
+<li><h4>Data Formats</h4>
+<p>The driver has two native data formats and a pass-through mode.&nbsp;
+One of the formats is optimized for SP and LP recordings and the other for
+EP recordings.&nbsp; The pass-through mode provides applications with
+access to the raw tape data stream.</p>
 
-<p>
-The data formats used by this driver are not compatible with the data
+<p>The data formats used by this driver are not compatible with the data
 formats used by Danmere's Windows software.&nbsp; The driver's pass-through
 modes can be used to read and write non-native formats through the use of
 helper applications but I have not written such a utility for Danmere's
-format and have no plans to do so.
+format and have no plans to do so.</p>
 
-<p><li>
-<h4>Data Transfer Rates</h4>
-These are calculated assuming 60 fields per second for NTSC and 50 fields
-per second for PAL.
-<p>
-<center>
-<table border=1 cellspacing=0 cellpadding=10>
+<li><h4>Data Transfer Rates</h4>
+<p>These are calculated assuming 60 fields per second for NTSC and 50
+fields per second for PAL.</p>
+<center><p>
+<table width=50% border=1 cellspacing=0 cellpadding=10>
 <tr align=center valign=center>
 <td width=90>
 SP/LP
@@ -130,9 +120,9 @@ High
 129360 B/s
 <td width=90>
 130700 B/s
-</table>
-<p>
-<table border=1 cellspacing=0 cellpadding=10>
+</table></p>
+
+<p><table width=50% border=1 cellspacing=0 cellpadding=10>
 <tr align=center valign=center>
 <td width=90>
 EP with <font face="Courier New,Courier">bkrenhanced</font>
@@ -154,82 +144,71 @@ High
 102010 B/s
 <td width=90>
 105292 B/s
-</table>
-</center>
+</table></p></center>
 
-<p><li>
-<h4>Tape Capacities</h4>
-Multiply the numbers above by your tape length and compression ratio.&nbsp;
-For example, for NTSC video a T-120 in SP mode at high density can hold 888
-MiB uncompressed (120 minutes * 129360 bytes/second).&nbsp; Danmere's best
-figures are obtained assuming a high density recording (probably PAL) on a
-T-180 in LP mode with 2:1 compression for which they claim either a <a
-href="http://www.danmere.com/backer/internaltechspec.htm">2.8 GiB</a> or <a
-href="http://www.danmere.com/backerindex.htm">3.7 GiB</a> tape capacity
-depending on which web page you read.&nbsp; Under the same conditions, this
-software's tape capacity would be 5.3 GiB.&nbsp; Why ``would be''?&nbsp;
-Because my VCR (along with every other VCR sold these days it seems) does
-not have an LP mode and 2:1 compression is probably a bit optimistic if
-your disks are full of <font face="Courier New,Courier">.mp3</font>s and
-other pre-compressed data.
+<li><h4>Tape Capacities</h4>
+<p>Multiply the numbers above by your tape length and compression
+ratio.&nbsp; For example, for NTSC video a T-120 in SP mode at high density
+can hold 888 MiB uncompressed (120 minutes * 129360 bytes/second).&nbsp;
+Danmere's best figures are obtained assuming a high density recording
+(probably PAL) on a T-180 in LP mode with 2:1 compression for which they
+claim either a 2.8 GiB or 3.7 GiB tape capacity depending on which web page
+you read.&nbsp; Under the same conditions, this software's tape capacity
+would be 5.3 GiB.&nbsp; Why ``would be''?&nbsp; Because my VCR (along with
+every other VCR sold these days it seems) does not have an LP mode and 2:1
+compression is probably a bit optimistic if your disks are full of <font
+face="Courier New,Courier">.mp3</font>s and other pre-compressed data.</p>
 
-<p>
-For a real-world benchmark, my system partition has 2.6 GiB of data on it
-(excluding <font face="Courier New,Courier">/tmp</font>, etc.) which
+<p>For a real-world benchmark, my system partition has 2.6 GiB of data on
+it (excluding <font face="Courier New,Courier">/tmp</font>, etc.) which
 compresses to 552 MiB using <a href="http://sources.redhat.com/bzip2"><font
-face="Courier New,Courier">bzip2</font></a>, or about 2/3 of a T-120.
+face="Courier New,Courier">bzip2</font></a>, or about 2/3 of a T-120.</p>
 
-<p>
-The highest capacity one could <i>hope</i> to achieve is with an EP
+<p>The highest capacity one could <i>hope</i> to achieve is with an EP
 recording on a T-200 with 2:1 compression.&nbsp; Such a recording can hold
-6.8 GiB in NTSC format and 7.1 GiB in PAL format.
+6.8 GiB in NTSC format and 7.1 GiB in PAL format.</p>
 
 </ul>
 
 
 <h3>System Requirements</h3>
-These are the system requirements that I am aware of.&nbsp; Most of them
+<p>These are the system requirements that I am aware of.&nbsp; Most of them
 are not fundamental and could be relaxed if people with the appropriate
-systems could help test and debug the code.
+systems could help test and debug the code.</p>
 <ul>
-<li>
-<h4>Backer hardware</h4>
-Internal, ISA, version of the device.&nbsp; Support for the external
+<li><h4>Backer hardware</h4>
+<p>Internal, ISA, version of the device.&nbsp; Support for the external
 version is currently in development&nbsp; The latest unstable release of
 the driver includes a module, <font face="Courier
 New,Courier">backer_parport</font>, that you can go ahead and try but more
-than likely it will not work for you.
+than likely it will not work for you.</p>
 
-<p><li>
-<h4>Video equipment</h4>
-The driver is known to work with NTSC video equipment.&nbsp; I do not have
-access to PAL video equipment so I cannot test the software's
+<li><h4>Video equipment</h4>
+<p>The driver is known to work with NTSC video equipment.&nbsp; I do not
+have access to PAL video equipment so I cannot test the software's
 operation in this video mode but it should work.&nbsp; If it doesn't work
 then getting it to work is just a matter of adjusting a few numbers.&nbsp;
 If you have PAL equipment and know that the driver works with it, please
 let me know so I can update this page.&nbsp; If you have PAL equipment,
 know that the driver does not work with it and would like that to change
-then drop me a line.
+then drop me a line.</p>
 
-<p><li>
-<h4>System architecture</h4>
-Verions prior to 3.0 required i386-like system architecture:&nbsp; a little
-endian system capable of unaligned memory reads and writes.&nbsp; Since
-version 3.0, the software should work on any system supported by
+<li><h4>System architecture</h4>
+<p>Verions prior to 3.0 required i386-like system architecture:&nbsp; a
+little endian system capable of unaligned memory reads and writes.&nbsp;
+Since version 3.0, the software should work on any system supported by
 Linux.&nbsp; I can only test the driver itself on an x86 system but I have
 compiled and run <font face="Courier New,Courier">bkrencode</font> on an
 IBM RS-6000 running AIX (big endian, unaligned OK) and it worked perfectly
-so I believe the portability issues have been addressed.
+so I believe the portability issues have been addressed.</p>
 
-<p><li>
-<h4>Linux kernel</h4>
-The following table indicates the kernel version I had installed on my own
+<li><h4>Linux kernel</h4>
+<p>The following table indicates the kernel version I had installed on my own
 system while developing various versions of the driver.  Thus, this table
 does not represent absolute requirements but rather combinations that are
-known to work.
-<p>
-<center>
-<table border=1 cellspacing=0 cellpadding=10>
+known to work.</p>
+
+<center><p><table width=50% border=1 cellspacing=0 cellpadding=10>
 <tr align=center valign=center>
 <td width=180>
 Device Driver Versions
@@ -255,69 +234,61 @@ Kernel Versions
 < 1.104
 <td>
 2.0.36
-</table>
-</center>
+</table></p></center>
 
-<p><li> <h4>Minimum CPU</h4>
-I do not know the minimum CPU required.&nbsp; What I do know is that my
+<li><h4>Minimum CPU</h4>
+<p>I do not know the minimum CPU required.&nbsp; What I do know is that my
 PII-400 system can process tape data approximately 27 times faster than the
 actual tape data rate.  If we assume, then, that a computer 27 times slower
 than a PII-400 would still (just) be able to process a data stream in real
 time, then a 486DX-33 is probably the bottom end of what's workable.&nbsp;
 Unlike Danmere's software, however, this driver does not require the data
 to be processed in real time.&nbsp; Using offline processing, I suspect
-that even a 386SX-16 would work just fine.
+that even a 386SX-16 would work just fine.</p>
 
 </ul>
 
 
 <h3>Related Links</h3>
-
 <ul>
-<li>
-<h4><a href="http://www.lirc.org/">Linux Infrared Remote Control</a></h4>
-A software package that, together with some hardware, allows your PC to act
-as an infrared remote control.&nbsp; I haven't actually downloaded and
+<li><h4><a href="http://www.lirc.org/">Linux Infrared Remote Control</a></h4>
+<p>A software package that, together with some hardware, allows your PC to
+act as an infrared remote control.&nbsp; I haven't actually downloaded and
 checked this software out but it looks like combining it with tape
 operations in a script could allow you to fully automate your Backer/VCR
-combination allowing you to do unattended backups.
+combination allowing you to do unattended backups.</p>
 
 </ul>
 
 
 <h3>Support Information</h3>
-My name is Kipp Cannon and I can be contact by e-mail at SourceForge:&nbsp;
-<a
-href="mailto:kcannon@users.sourceforge.net">kcannon@users.sourceforge.net</a>
+<p>My name is Kipp Cannon and I can be contact by e-mail at
+SourceForge:&nbsp; <a href="mailto:kcannon@users.sourceforge.net">kcannon
+at users.sourceforge.net</a></p>
 
 
-<p><hr NOSHADE WIDTH="100%">
+<hr NOSHADE WIDTH="100%"><br>
 <center><b><font size=+1>Miscellaneous</font></b></center>
-<p>
-This document uses the new <a
+<p>This document uses the new <a
 href="http://physics.nist.gov/cuu/Units/binary.html">binary units</a>
 recommended by the International Electrotechnical Commision.&nbsp; So 1 MB
 is 10<sup>6</sup> bytes while 1 MiB is 2<sup>20</sup> bytes;&nbsp; 1 GB is
-10<sup>12</sup> bytes while 1 GiB is 2<sup>30</sup> bytes; etc..
+10<sup>9</sup> bytes while 1 GiB is 2<sup>30</sup> bytes; etc..</p>
 
 
-<p><hr NOSHADE WIDTH="100%">
+<hr NOSHADE WIDTH="100%"><br>
 <center><b><font size=+1>Disclaimer</font></b></center>
-
 <p>This project has been conducted entirely without the support,
 participation or even interest of Danmere, Ltd. (now 4-TV).&nbsp; Please
-consider the following:
+consider the following:</p>
 <ul>
-<li>
-Direct all support requests to me.&nbsp; Please do not bother
+<li>Direct all support requests to me.&nbsp; Please do not bother
 Danmere/4-TV.
 
-<li>
-``Backer'' is probably some sort of trademark or whatever or
+<li>``Backer'' is probably some sort of trademark or whatever of
 Danmere/4-TV.
 
-<li>
-This software is free, <a
+<li>This software is free, <a
 href="http://www.gnu.org/philosophy/free-sw.html">Free</a> and HAS NO
 WARRANTY OF ANY KIND.
 </ul>

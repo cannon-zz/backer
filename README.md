@@ -1,12 +1,7 @@
-   Backer for Linux
-
 ![Backer For Linux](html/title.png)
 
 **The Backer for Linux project:  a project to develop a Linux device driver for Danmere's Backer video tape backup devices.**
 
-Last update:  2002/12/1
-
-  
 
 **[Screen Shots](html/screenshots.html)**
 
@@ -38,41 +33,17 @@ The driver version numbering works as follows.  The version major number (the n
     
     These are calculated assuming 60 fields per second for NTSC and 50 fields per second for PAL.
     
-    SP/LP
+    | SP/LP | NTSC       | PAL        |
+    |-------|------------|------------|
+    | Low   | 49560 B/s  | 48800 B/s  |
+    |-------|------------|------------|
+    | High  | 129360 B/s | 130700 B/s |
     
-    NTSC
-    
-    PAL
-    
-    Low
-    
-    49560 B/s
-    
-    48800 B/s
-    
-    High
-    
-    129360 B/s
-    
-    130700 B/s
-    
-    EP with bkrenhanced
-    
-    NTSC
-    
-    PAL
-    
-    Low
-    
-    39609 B/s
-    
-    40752 B/s
-    
-    High
-    
-    102010 B/s
-    
-    105292 B/s
+    | EP with bkrenhanced | NTSC       | PAL        |
+    |---------------------|------------|------------|
+    | Low                 | 39609 B/s  | 40752 B/s  |
+    |---------------------|------------|------------|
+    | High                | 102010 B/s | 105292 B/s |
     
 *   #### Tape Capacities
     
@@ -103,25 +74,15 @@ These are the system requirements that I am aware of.  Most of them are not fun
     
     The following table indicates the kernel version I had installed on my own system while developing various versions of the driver. Thus, this table does not represent absolute requirements but rather combinations that are known to work.
     
-    Device Driver Versions
-    
-    Kernel Versions
-    
-    3.102
-    
-    2.4.19
-    
-    3.100, 3.101
-    
-    2.4.15, 2.4.16
-    
-    1.104 <= x < 3.100
-    
-    2.4.3
-    
-    < 1.104
-    
-    2.0.36
+    | Device Driver Versions | Kernel Versions |
+    |------------------------|-----------------|
+    | 3.102                  | 2.4.19          |
+    |------------------------|-----------------|
+    | 3.100, 3.101           | 2.4.15, 2.4.16  |
+    |------------------------|-----------------|
+    | 1.104 <= x < 3.100     | 2.4.3           |
+    |------------------------|-----------------|
+    | < 1.104                | 2.0.36          |
     
 *   #### Minimum CPU
     
@@ -137,7 +98,7 @@ These are the system requirements that I am aware of.  Most of them are not fun
 
 **Miscellaneous**
 
-This document uses [binary units](http://physics.nist.gov/cuu/Units/binary.html) recommended by the International Electrotechnical Commision.  So 1 MB is 106 bytes while 1 MiB is 220 bytes;  1 GB is 1012 bytes while 1 GiB is 230 bytes; etc..
+This document uses [binary units](http://physics.nist.gov/cuu/Units/binary.html) recommended by the International Electrotechnical Commision.  So 1 MB is 10^6^ bytes while 1 MiB is 2^20^ bytes;  1 GB is 10^12^ bytes while 1 GiB is 2^30^ bytes; etc..
 
 * * *
 

@@ -30,15 +30,15 @@ The data formats used by this driver are not compatible with the data formats us
     
 These are calculated assuming 60 fields per second for NTSC and 50 fields per second for PAL.
 
-    | SP/LP | NTSC       | PAL        |
-    |-------|------------|------------|
-    | Low   | 49560 B/s  | 48800 B/s  |
-    | High  | 129360 B/s | 130700 B/s |
+| SP/LP | NTSC       | PAL        |
+|-------|------------|------------|
+| Low   | 49560 B/s  | 48800 B/s  |
+| High  | 129360 B/s | 130700 B/s |
 
-    | EP with bkrenhanced | NTSC       | PAL        |
-    |---------------------|------------|------------|
-    | Low                 | 39609 B/s  | 40752 B/s  |
-    | High                | 102010 B/s | 105292 B/s |
+| EP with bkrenhanced | NTSC       | PAL        |
+|---------------------|------------|------------|
+| Low                 | 39609 B/s  | 40752 B/s  |
+| High                | 102010 B/s | 105292 B/s |
 
 ### Tape Capacities
     

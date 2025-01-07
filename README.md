@@ -36,13 +36,11 @@ The driver version numbering works as follows.  The version major number (the n
     | SP/LP | NTSC       | PAL        |
     |-------|------------|------------|
     | Low   | 49560 B/s  | 48800 B/s  |
-    |-------|------------|------------|
     | High  | 129360 B/s | 130700 B/s |
     
     | EP with bkrenhanced | NTSC       | PAL        |
     |---------------------|------------|------------|
     | Low                 | 39609 B/s  | 40752 B/s  |
-    |---------------------|------------|------------|
     | High                | 102010 B/s | 105292 B/s |
     
 *   #### Tape Capacities
@@ -77,11 +75,8 @@ These are the system requirements that I am aware of.  Most of them are not fun
     | Device Driver Versions | Kernel Versions |
     |------------------------|-----------------|
     | 3.102                  | 2.4.19          |
-    |------------------------|-----------------|
     | 3.100, 3.101           | 2.4.15, 2.4.16  |
-    |------------------------|-----------------|
     | 1.104 <= x < 3.100     | 2.4.3           |
-    |------------------------|-----------------|
     | < 1.104                | 2.0.36          |
     
 *   #### Minimum CPU
@@ -98,7 +93,7 @@ These are the system requirements that I am aware of.  Most of them are not fun
 
 **Miscellaneous**
 
-This document uses [binary units](http://physics.nist.gov/cuu/Units/binary.html) recommended by the International Electrotechnical Commision.  So 1 MB is 10^6^ bytes while 1 MiB is 2^20^ bytes;  1 GB is 10^12^ bytes while 1 GiB is 2^30^ bytes; etc..
+This document uses [binary units](http://physics.nist.gov/cuu/Units/binary.html) recommended by the International Electrotechnical Commision.  So 1 MB is 10<sup>6</sup> bytes while 1 MiB is 2<sup>20</sup> bytes;  1 GB is 10<sup>12</sup> bytes while 1 GiB is 2<sup>30</sup> bytes; etc..
 
 * * *
 

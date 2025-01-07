@@ -49,7 +49,7 @@ The driver version numbering works as follows.  The version major number (the n
     The highest capacity one could _hope_ to achieve is with an EP recording on a T-200 with 2:1 compression.  Such a recording can hold 6.8 GiB in NTSC format and 7.1 GiB in PAL format.
     
 
-### System Requirements
+## System Requirements
 
 These are the system requirements that I am aware of.  Most of them are not fundamental and could be relaxed if people with the appropriate systems could help test and debug the code.
 
@@ -80,16 +80,11 @@ These are the system requirements that I am aware of.  Most of them are not fun
     
     I do not know the minimum CPU required.  What I do know is that my PII-400 system can process tape data approximately 27 times faster than the actual tape data rate. If we assume, then, that a computer 27 times slower than a PII-400 would still (just) be able to process a data stream in real time, then a 486DX-33 is probably the bottom end of what's workable.  Unlike Danmere's software, however, this driver does not require the data to be processed in real time.  Using offline processing, I suspect that even a 386SX-16 would work just fine.
 
-## Related Links
+## Screenshots
 
-*   **[Linux Infrared Remote Control](http://www.lirc.org/)**
-    
-    A software package that, together with some hardware, allows your PC to act as an infrared remote control.  I haven't actually downloaded and checked this software out but it looks like combining it with tape operations in a script could allow you to fully automate your Backer/VCR combination allowing you to do unattended backups.
+### What You See On Your Television
 
-
-## Here's what you see on your television
-
-### Stable 3.x Versions
+#### Stable 3.x Versions
 
 These images are for NTSC video.  Most televisions can't display some number of the top and bottom lines of video so they won't actually be visible on your set.  These pictures were obtained by piping the output of bkrencode into a program I've written for analyzing tape data streams and then doing a screen capture with the [GIMP](http://www.gimp.org).
 
@@ -115,10 +110,9 @@ And here's a sector from the low density BOR mark.
 
 ![](html/3_0_bor_nl.png)
 
-Here's what bkrmonitor looks like
----------------------------------
+### bkrmonitor
 
-### Version 3.2
+#### Version 3.2
 
 This shows bkrmonitor after a 545 million byte recording that had been made in EP mode was recovered from tape.  As you can see, the raw recording could not be recovered from tape completely error-free as there were 108 uncorrectable data blocks.  However, this recording was made using the new bkrenhanced utility which had no trouble filling in the lost sectors as can be seen from it's output below
 
@@ -126,9 +120,16 @@ bkrenhanced: DECODING at 92.2% efficiency
 bkrenhanced: Number of lost sectors detected: 108 of 321045  
 bkrenhanced: Number of errors in worst block: 3 (20 allowed)  
 
-This shows that 108 sectors of the 321045 data sectors in the recording needed to be corrected which is a mean error rate of about 3\*10\-4.  We also see that no sector group required more than 3 of its 255 sectors to be replaced.  bkrenhanced's error control code can replace up to 20 sectors in each group so there appears to be plenty of headroom as one would expect given the mean error rate and the code rate.
+This shows that 108 sectors of the 321045 data sectors in the recording needed to be corrected which is a mean error rate of about 3\*10<sup>-4</sup>.  We also see that no sector group required more than 3 of its 255 sectors to be replaced.  bkrenhanced's error control code can replace up to 20 sectors in each group so there appears to be plenty of headroom as one would expect given the mean error rate and the code rate.
 
 ![bkrmonitor screen shot](html/bkrmonitor_nhe.png)
+
+## Related Links
+
+*   **[Linux Infrared Remote Control](http://www.lirc.org/)**
+    
+    A software package that, together with some hardware, allows your PC to act as an infrared remote control.  I haven't actually downloaded and checked this software out but it looks like combining it with tape operations in a script could allow you to fully automate your Backer/VCR combination allowing you to do unattended backups.
+
 
 * * *
 
